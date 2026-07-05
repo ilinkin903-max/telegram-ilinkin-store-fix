@@ -1,1 +1,1 @@
-Admin UI v6 - Edit produk non-stok, stok tambah/kelola varian, stok default hilang saat varian aktif
+Admin UI v7 - Edit product form follows Add Product layout, variant editor uses column cards, stock stays in Stok/Kelola.
