@@ -1,8 +1,0 @@
-module.exports = async function handler(req, res) {
-  res.status(200).json({
-    ok: true,
-    name: 'Telegram Store Bot',
-    endpoints: ['/api/telegram', '/api/set-webhook', '/reseller'],
-    message: 'Project aktif. Pasang webhook lewat /api/set-webhook?secret=WEBHOOK_SECRET.'
-  });
-};
