@@ -147,8 +147,12 @@ module.exports = async function handler(req, res) {
       const category = String(body.category || body.kategori || '').trim();
       const bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
       const variants = parseVariants(body.variants_text || body.variant_text || body.variants);
-      if (!nama || !kode || !harga || !deskripsi || !snk) return json(res, 400, { ok: false, error: 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga, deskripsi, snk, image_url, category, bulk_prices, variants, data: splitStock(body.stock_text || '') });
+      const hasVariants = variants.length > 0;
+      const finalHarga = harga || (hasVariants ? numberOf(variants[0].price) : 0);
+      const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
+      const finalSnk = snk || (hasVariants ? (variants[0].snk || 'Syarat mengikuti varian yang dipilih.') : '');
+      if (!nama || !kode || !finalHarga || !finalDeskripsi || !finalSnk) return json(res, 400, { ok: false, error: hasVariants ? 'Nama, kode, dan minimal satu varian dengan harga wajib diisi.' : 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
+      const product = await db.addProduct({ nama, kode, harga: finalHarga, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, bulk_prices, variants, data: splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 

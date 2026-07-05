@@ -1,1 +1,1 @@
-Admin UI v4 - add product labels, variant switch, green add page, purple menu, blue chart, stock no product code
+Admin UI v5 - Variant compact add form + horizontal scroll menu
