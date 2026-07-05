@@ -1,0 +1,90 @@
+[
+   {
+      "kode": "AM4K",
+      "produk": [
+         "AM1T"
+      ],
+      "potongan": 3500,
+      "limit": 1,
+      "user": []
+   },
+   {
+      "kode": "RAGPT24J",
+      "produk": [
+         "GPT24J"
+      ],
+      "potongan": 3300,
+      "limit": 16,
+      "user": [
+         2023841888,
+         7055952427,
+         2023841888,
+         2023841888
+      ]
+   },
+   {
+      "kode": "RAGPTGO",
+      "produk": [
+         "GPTGO"
+      ],
+      "potongan": 7000,
+      "limit": 20,
+      "user": []
+   },
+   {
+      "kode": "RAGR2H",
+      "produk": [
+         "GR2H"
+      ],
+      "potongan": 2500,
+      "limit": 20,
+      "user": []
+   },
+   {
+      "kode": "RACC35",
+      "produk": [
+         "CC35RN"
+      ],
+      "potongan": 9900,
+      "limit": 20,
+      "user": []
+   },
+   {
+      "kode": "RAAM1T",
+      "produk": [
+         "AM1T"
+      ],
+      "potongan": 3500,
+      "limit": 20,
+      "user": []
+   },
+   {
+      "kode": "RAV1T",
+      "produk": [
+         "VIU1T"
+      ],
+      "potongan": 4000,
+      "limit": 20,
+      "user": []
+   },
+   {
+      "kode": "SLCC42",
+      "produk": [
+         "CC42RN"
+      ],
+      "potongan": 3200,
+      "limit": 5,
+      "user": []
+   },
+   {
+      "kode": "RAL85",
+      "produk": [
+         "LEO85"
+      ],
+      "potongan": 2900,
+      "limit": 19,
+      "user": [
+         2023841888
+      ]
+   }
+]
