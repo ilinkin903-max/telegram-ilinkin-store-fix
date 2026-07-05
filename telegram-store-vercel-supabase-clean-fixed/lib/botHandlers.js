@@ -97,11 +97,74 @@ async function sendHome(chatId, from, req) {
   });
 }
 
+function variantKey(variant, index = 0) {
+  return String(variant?.sku || variant?.kode || variant?.key || variant?.name || variant?.nama || `VAR${index + 1}`)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-');
+}
+
+function stockOfVariant(variant) {
+  return Array.isArray(variant?.stock) ? variant.stock : [];
+}
+
+function productStockTotal(product) {
+  const variantTotal = (product.variants || []).reduce((sum, variant) => sum + stockOfVariant(variant).length, 0);
+  return variantTotal > 0 ? variantTotal : (Array.isArray(product.data) ? product.data.length : 0);
+}
+
+function variantPrice(product, variant) {
+  return Number(variant?.price || product?.harga || 0);
+}
+
+function bulkRows(product, variant) {
+  const rows = (variant?.bulk_prices && variant.bulk_prices.length) ? variant.bulk_prices : (product.bulk_prices || []);
+  return rows
+    .map((x) => ({ min_qty: Number(x.min_qty || x.qty || 0), price: Number(x.price || x.harga || 0) }))
+    .filter((x) => x.min_qty > 0 && x.price > 0)
+    .sort((a, b) => a.min_qty - b.min_qty);
+}
+
+function formatBulkText(product, variant) {
+  const rows = bulkRows(product, variant);
+  if (!rows.length) return '-';
+  return rows.map((x) => `Mulai ${x.min_qty} pcs: ${formatRupiah(x.price)} / pcs`).join('\n');
+}
+
+function selectedVariant(product, order = {}) {
+  const key = String(order.variant_key || '').trim().toUpperCase();
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  if (!key) return null;
+  return variants.find((variant, index) => variantKey(variant, index) === key) || null;
+}
+
+function orderUnitPrice(product, order = {}) {
+  const variant = selectedVariant(product, order);
+  const quantity = Math.max(1, Number(order.quantity || 1));
+  let unit = Number(order.unit_price || variantPrice(product, variant));
+  bulkRows(product, variant).forEach((row) => {
+    if (quantity >= row.min_qty) unit = row.price;
+  });
+  return unit;
+}
+
+function availableStockForOrder(product, order = {}) {
+  const variant = selectedVariant(product, order);
+  if (variant) return stockOfVariant(variant).length;
+  return Array.isArray(product.data) ? product.data.length : 0;
+}
+
 function productButtons(products) {
-  const rows = products.slice(0, 80).map((p) => ([{
-    text: `${p.nama} | ${formatRupiah(p.harga)} | Stok ${p.data.length}`,
-    callback_data: `item:${p.kode}`
-  }]));
+  const rows = products.slice(0, 80).map((p) => {
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    const prices = variants.length ? variants.map((v) => variantPrice(p, v)).filter(Boolean) : [Number(p.harga || 0)];
+    const minPrice = prices.length ? Math.min(...prices) : Number(p.harga || 0);
+    const suffix = variants.length ? ` | ${variants.length} varian` : '';
+    return [{
+      text: `${p.nama} | mulai ${formatRupiah(minPrice)} | Stok ${productStockTotal(p)}${suffix}`,
+      callback_data: `item:${p.kode}`
+    }];
+  });
   rows.push([{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]);
   return { inline_keyboard: rows };
 }
@@ -109,7 +172,7 @@ function productButtons(products) {
 async function sendProductList(chatId) {
   const products = await db.listProducts();
   if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk.');
-  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk yang ingin dibeli:';
+  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk terlebih dahulu. Setelah itu pilih varian, lalu jumlah belinya.';
   return tg.sendMessage(chatId, text, {
     parse_mode: 'Markdown',
     reply_markup: productButtons(products)
@@ -119,9 +182,10 @@ async function sendProductList(chatId) {
 async function sendStock(chatId) {
   const products = await db.listProducts();
   if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk.');
-  const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => (
-    `${i + 1}. *${p.nama}* \`${p.kode}\`\n   Stok: *${p.data.length}* | Terjual: *${p.terjual}*`
-  )).join('\n\n');
+  const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
+    const variantLines = (p.variants || []).map((v) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
+    return `${i + 1}. *${p.nama}* \`${p.kode}\`\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
+  }).join('\n\n');
   return tg.sendMessage(chatId, text, { parse_mode: 'Markdown' });
 }
 
@@ -129,7 +193,7 @@ async function sendHistory(chatId, userId) {
   const rows = await db.listTransactionsByUser(userId, 8);
   if (!rows.length) return tg.sendMessage(chatId, '📭 Kamu belum memiliki riwayat transaksi.');
   const text = '*RIWAYAT TRANSAKSI*\n=======================\n' + rows.map((item, idx) => (
-    `${idx + 1}. *${item.product_name}*\n` +
+    `${idx + 1}. *${item.product_name}*${item.variant_name ? ' - ' + item.variant_name : ''}\n` +
     `   Kode: \`${item.product_code}\`\n` +
     `   Jumlah: *${item.quantity}*\n` +
     `   Harga: *${formatRupiah(item.total_price)}*\n` +
@@ -139,16 +203,34 @@ async function sendHistory(chatId, userId) {
 }
 
 function confirmationText(product, order) {
-  const total = Number(order.quantity || 1) * Number(product.harga || 0);
-  return `*KONFIRMASI PESANAN*\n` +
-    `=======================\n` +
-    `Produk: *${product.nama}*\n` +
-    `Harga: *${formatRupiah(product.harga)}*\n` +
-    `Stok Tersedia: *${product.data.length}*\n` +
-    `-----------------------\n` +
-    `Jumlah Pesanan: *${order.quantity}*\n` +
-    `Total Dibayar: *${formatRupiah(total)}*\n` +
-    `=======================\n` +
+  const variant = selectedVariant(product, order);
+  const unit = orderUnitPrice(product, order);
+  const quantity = Number(order.quantity || 1);
+  const total = quantity * unit;
+  const bulk = formatBulkText(product, variant);
+  return `*KONFIRMASI PESANAN*
+` +
+    `=======================
+` +
+    `Produk: *${product.nama}*
+` +
+    `Varian: *${variant ? variant.name : (order.variant_name || 'Default')}*
+` +
+    `Harga Satuan: *${formatRupiah(unit)}*
+` +
+    `Harga Grosir:
+${bulk}
+` +
+    `Stok Tersedia: *${availableStockForOrder(product, order)}*
+` +
+    `-----------------------
+` +
+    `Jumlah Pesanan: *${quantity}*
+` +
+    `Total Dibayar: *${formatRupiah(total)}*
+` +
+    `=======================
+` +
     `Klik ✅ Konfirmasi untuk melakukan pembayaran`;
 }
 
@@ -422,19 +504,70 @@ async function handleProductSelection(query, code) {
   const userId = query.from.id;
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
-  await db.upsertPendingOrder({ telegram_id: userId, product_code: product.kode, quantity: 1, status: 'draft' });
-  await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-  return tg.sendMessage(userId, `📦 *${product.nama}*\n` +
-    `=======================\n` +
-    `Harga: *${formatRupiah(product.harga)}*\n` +
-    `Stok Tersedia: *${product.data.length}*\n` +
-    `Stok Terjual: *${product.terjual}*\n` +
-    `Deskripsi: *${product.deskripsi}*\n` +
-    `=======================\n` +
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  if (variants.length) {
+    await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+    const rows = variants.map((variant, index) => ([{
+      text: `${variant.name} | ${formatRupiah(variantPrice(product, variant))} | Stok ${stockOfVariant(variant).length}`,
+      callback_data: `variant:${product.kode}:${index}`
+    }]));
+    rows.push([{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]);
+    return tg.sendMessage(userId, `📦 *${product.nama}*
+=======================
+Pilih varian produk yang ingin dibeli:`, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: rows }
+    });
+  }
+  return startOrderWithSelection(query, product, null, -1);
+}
+
+async function startOrderWithSelection(query, product, variant, index = -1) {
+  const userId = query.from.id;
+  const variantName = variant ? variant.name : 'Default';
+  const unitPrice = variantPrice(product, variant);
+  const vKey = variant ? variantKey(variant, index) : '';
+  await db.upsertPendingOrder({
+    telegram_id: userId,
+    product_code: product.kode,
+    variant_key: vKey,
+    variant_name: variant ? variantName : '',
+    unit_price: unitPrice,
+    quantity: 1,
+    status: 'draft'
+  });
+  await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+  return tg.sendMessage(userId, `📦 *${product.nama}*
+` +
+    `=======================
+` +
+    `Varian: *${variantName}*
+` +
+    `Harga Satuan: *${formatRupiah(unitPrice)}*
+` +
+    `Harga Grosir:
+${formatBulkText(product, variant)}
+` +
+    `Stok Tersedia: *${variant ? stockOfVariant(variant).length : product.data.length}*
+` +
+    `Deskripsi: *${product.deskripsi || '-'}*
+` +
+    `=======================
+` +
     `Klik tombol dibawah untuk melanjutkan!`, {
       parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: [[{ text: '➡️ Lanjut', callback_data: 'lanjut' }], [{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]] }
+      reply_markup: { inline_keyboard: [[{ text: '➡️ Lanjut', callback_data: 'lanjut' }], [{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]] }
     });
+}
+
+async function handleVariantSelection(query, code, indexText) {
+  const product = await db.getProductByCode(code);
+  if (!product) return tg.sendMessage(query.from.id, '⚠️ Produk tidak ditemukan.');
+  const index = Number(indexText);
+  const variant = (product.variants || [])[index];
+  if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
+  if (stockOfVariant(variant).length < 1) return tg.answerCallbackQuery(query.id, { text: 'Stok varian kosong.', show_alert: true });
+  return startOrderWithSelection(query, product, variant, index);
 }
 
 async function showConfirmation(query, edit = false) {
@@ -458,8 +591,8 @@ async function changeQuantity(query, delta, reset = false) {
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
   let quantity = reset ? 1 : Number(order.quantity || 1) + Number(delta || 0);
   if (quantity < 1) quantity = 1;
-  if (quantity > product.data.length) {
-    return tg.answerCallbackQuery(query.id, { text: '⚠️ Stok produk tidak mencukupi', show_alert: true });
+  if (quantity > availableStockForOrder(product, order)) {
+    return tg.answerCallbackQuery(query.id, { text: '⚠️ Stok produk/varian tidak mencukupi', show_alert: true });
   }
   await db.upsertPendingOrder({ ...order, quantity, status: order.status || 'draft' });
   return showConfirmation(query, true);
@@ -475,9 +608,10 @@ async function createPayment(query) {
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
-  if (product.data.length < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk tidak mencukupi!');
+  if (availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
-  let harga = Number(order.quantity || 1) * Number(product.harga || 0);
+  const unit = orderUnitPrice(product, order);
+  let harga = Number(order.quantity || 1) * unit;
   const voucher = order.voucher_code ? await db.getVoucher(order.voucher_code) : null;
   if (db.voucherIsValid(voucher, product.kode, userId)) harga -= Number(voucher.discount || 0);
   if (harga < 0) harga = 0;
@@ -502,8 +636,8 @@ async function createPayment(query) {
   const caption = `💸 *PEMBAYARAN OTOMATIS*\n` +
     `=======================\n` +
     `Invoice: *${invoiceRef}*\n` +
-    `Produk: *${product.nama}*\n` +
-    `Harga: *${formatRupiah(product.harga)}*\n` +
+    `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
+    `Harga Satuan: *${formatRupiah(unit)}*\n` +
     `Jumlah Beli: *${order.quantity}*\n` +
     `Fee: *${formatRupiah(fee)}*\n` +
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
@@ -555,7 +689,7 @@ async function checkPayment(query, invoiceFromButton) {
   const product = await db.getProductByCode(order.product_code);
   const result = await db.completeOrder(order, product, order.amount, query.from);
   const dataProduk = result.delivered.join('\n');
-  const filename = `${userId}-${product.kode}-${order.quantity}.txt`;
+  const filename = `${userId}-${product.kode}${order.variant_key ? '-' + order.variant_key : ''}-${order.quantity}.txt`;
   const fileText = `<|==== SYARAT DAN KETENTUAN ====|>\n${product.snk}\n\n<|==== PRODUK ====|>\n${dataProduk}\n\n//Terimakasih telah percaya kepada ${config.botName}.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
@@ -563,7 +697,7 @@ async function checkPayment(query, invoiceFromButton) {
     caption: `✅ PESANAN SELESAI\n` +
       `=======================\n` +
       `Invoice: ${order.invoice_ref}\n` +
-      `Produk: ${product.nama}\n` +
+      `Produk: ${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}\n` +
       `Jumlah Beli: ${order.quantity}\n` +
       `Total Harga: ${formatRupiah(order.amount)}\n` +
       `Tanggal: ${formatWIB(new Date())}\n` +
@@ -576,7 +710,7 @@ async function checkPayment(query, invoiceFromButton) {
       `=======================\n` +
       `User: @${query.from.username || '-'}\n` +
       `Invoice: *${order.invoice_ref}*\n` +
-      `Produk: *${product.nama}*\n` +
+      `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
       `Jumlah Beli: *${order.quantity}*\n` +
       `Total Harga: *${formatRupiah(order.amount)}*\n` +
       `Tanggal: *${formatWIB(new Date())}*\n` +
@@ -602,6 +736,7 @@ async function handleCallbackQuery(query, req) {
     return sendHome(query.message.chat.id, query.from, req);
   }
   if (cmd.startsWith('item:')) return handleProductSelection(query, cmd.slice(5));
+  if (cmd.startsWith('variant:')) { const parts = cmd.split(':'); return handleVariantSelection(query, parts[1], parts[2]); }
   if (cmd === 'lanjut') return showConfirmation(query, false);
   if (cmd === 'reset') return changeQuantity(query, 0, true);
   if (cmd.startsWith('plus:')) return changeQuantity(query, Number(cmd.split(':')[1] || 1), false);

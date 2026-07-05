@@ -26,31 +26,44 @@ function parseBulkPrices(value) {
   if (Array.isArray(value)) return value.map((item) => ({
     min_qty: numberOf(item.min_qty || item.qty || item.jumlah),
     price: numberOf(item.price || item.harga)
-  })).filter((item) => item.min_qty > 0 && item.price > 0);
+  })).filter((item) => item.min_qty > 0 && item.price > 0).sort((a, b) => a.min_qty - b.min_qty);
   const raw = String(value || '').trim();
   if (!raw) return [];
-  return raw.split(/\n+/).map((line) => {
-    const parts = line.split(/[=|,;]/).map((x) => x.trim()).filter(Boolean);
+  return raw.split(/[\n,]+/).map((line) => {
+    const parts = line.split(/[=|:;]/).map((x) => x.trim()).filter(Boolean);
     return { min_qty: numberOf(parts[0]), price: numberOf(parts[1]) };
-  }).filter((item) => item.min_qty > 0 && item.price > 0);
+  }).filter((item) => item.min_qty > 0 && item.price > 0).sort((a, b) => a.min_qty - b.min_qty);
+}
+
+function parseStockList(value) {
+  if (Array.isArray(value)) return value.map((x) => String(x).trim()).filter(Boolean);
+  return String(value || '')
+    .split(/[\n,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 function parseVariants(value) {
-  if (Array.isArray(value)) return value.map((item) => ({
+  if (Array.isArray(value)) return value.map((item, index) => ({
     name: String(item.name || item.nama || '').trim(),
     price: numberOf(item.price || item.harga),
-    sku: String(item.sku || item.kode || '').trim().toUpperCase(),
-    note: String(item.note || item.catatan || '').trim()
+    sku: String(item.sku || item.kode || `VAR${index + 1}`).trim().toUpperCase(),
+    note: String(item.note || item.catatan || '').trim(),
+    stock: parseStockList(item.stock || item.stok || item.data || []),
+    bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
   })).filter((item) => item.name);
   const raw = String(value || '').trim();
   if (!raw) return [];
-  return raw.split(/\n+/).map((line) => {
+  return raw.split(/\n+/).map((line, index) => {
     const parts = line.split('|').map((x) => x.trim());
+    const sku = String(parts[2] || `VAR${index + 1}`).trim().toUpperCase();
     return {
       name: parts[0] || '',
       price: numberOf(parts[1]),
-      sku: String(parts[2] || '').trim().toUpperCase(),
-      note: parts.slice(3).join(' | ')
+      sku,
+      stock: parseStockList(parts[3] || ''),
+      bulk_prices: parseBulkPrices(parts[4] || ''),
+      note: parts.slice(5).join(' | ')
     };
   }).filter((item) => item.name);
 }

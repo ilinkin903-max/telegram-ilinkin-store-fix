@@ -14,3 +14,11 @@ create table if not exists public.shop_settings (
   value jsonb not null default '""'::jsonb,
   updated_at timestamptz not null default now()
 );
+
+-- Update varian produk dan harga grosir untuk bot Telegram.
+alter table public.pending_orders add column if not exists variant_key text not null default '';
+alter table public.pending_orders add column if not exists variant_name text not null default '';
+alter table public.pending_orders add column if not exists unit_price integer not null default 0;
+alter table public.transactions add column if not exists variant_key text not null default '';
+alter table public.transactions add column if not exists variant_name text not null default '';
+alter table public.transactions add column if not exists unit_price integer not null default 0;

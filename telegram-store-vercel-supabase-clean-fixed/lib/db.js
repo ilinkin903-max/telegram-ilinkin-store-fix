@@ -5,24 +5,93 @@ function sb() {
   return getSupabase();
 }
 
+function normalizeBulkPrices(value) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.map((item) => ({
+    min_qty: Number(item.min_qty || item.qty || item.jumlah || 0),
+    price: Number(item.price || item.harga || 0)
+  })).filter((item) => item.min_qty > 0 && item.price > 0).sort((a, b) => a.min_qty - b.min_qty);
+}
+
+function variantKey(variant, index = 0) {
+  return String(variant?.sku || variant?.kode || variant?.key || variant?.name || variant?.nama || `VAR${index + 1}`)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-');
+}
+
+function normalizeVariant(item, index = 0) {
+  const name = String(item?.name || item?.nama || `Varian ${index + 1}`).trim();
+  const stockValue = item?.stock ?? item?.stok ?? item?.data ?? [];
+  return {
+    name,
+    price: Number(item?.price || item?.harga || 0),
+    sku: variantKey(item, index),
+    note: String(item?.note || item?.catatan || '').trim(),
+    stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '').replace(/,/g, '\n')),
+    bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
+  };
+}
+
+function normalizeVariants(value) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.map(normalizeVariant).filter((item) => item.name);
+}
+
 function normalizeProduct(row) {
   if (!row) return null;
   return {
     id: row.id,
     nama: row.name,
     kode: row.code,
-    harga: row.price,
+    harga: Number(row.price || 0),
     deskripsi: row.description || '',
     snk: row.terms || '',
     image_url: row.image_url || '',
     category: row.category || '',
-    bulk_prices: Array.isArray(row.bulk_prices) ? row.bulk_prices : [],
-    variants: Array.isArray(row.variants) ? row.variants : [],
-    data: Array.isArray(row.stock) ? row.stock : [],
+    bulk_prices: normalizeBulkPrices(row.bulk_prices),
+    variants: normalizeVariants(row.variants),
+    data: Array.isArray(row.stock) ? row.stock.map((x) => String(x).trim()).filter(Boolean) : [],
     terjual: row.sold || 0,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
+}
+
+function findVariant(product, key) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const target = String(key || '').trim().toUpperCase();
+  if (!target) return { variant: null, index: -1 };
+  const index = variants.findIndex((v, i) => variantKey(v, i) === target || String(i) === target);
+  return { variant: index >= 0 ? variants[index] : null, index };
+}
+
+function variantStockCount(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  return variants.reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
+}
+
+function productAvailableStock(product, variantKeyValue = '') {
+  const variantsTotal = variantStockCount(product);
+  if (variantKeyValue) {
+    const found = findVariant(product, variantKeyValue);
+    return Array.isArray(found.variant?.stock) ? found.variant.stock.length : 0;
+  }
+  if (variantsTotal > 0) return variantsTotal;
+  return Array.isArray(product?.data) ? product.data.length : 0;
+}
+
+function orderUnitPrice(product, order = {}) {
+  const quantity = Math.max(1, Number(order.quantity || 1));
+  const found = findVariant(product, order.variant_key);
+  const variant = found.variant;
+  const basePrice = Number(order.unit_price || variant?.price || product?.harga || 0);
+  const bulkRows = normalizeBulkPrices(variant?.bulk_prices && variant.bulk_prices.length ? variant.bulk_prices : product?.bulk_prices || []);
+  let unit = basePrice;
+  bulkRows.forEach((row) => {
+    if (quantity >= row.min_qty) unit = Number(row.price || unit);
+  });
+  return unit;
 }
 
 async function upsertUser(from) {
@@ -40,11 +109,11 @@ async function upsertUser(from) {
 async function getStats() {
   const [{ count: usersCount }, { data: products }, { data: transactions, count: ordersCount }] = await Promise.all([
     sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }),
-    sb().from('products').select('stock,sold,price'),
+    sb().from('products').select('stock,sold,price,variants'),
     sb().from('transactions').select('total_price,quantity', { count: 'exact' })
   ]);
 
-  const stokTersedia = (products || []).reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
+  const stokTersedia = (products || []).reduce((sum, row) => sum + productAvailableStock(normalizeProduct(row)), 0);
   const stokTerjual = (products || []).reduce((sum, item) => sum + Number(item.sold || 0), 0);
   const omzet = (transactions || []).reduce((sum, item) => sum + Number(item.total_price || 0), 0);
 
@@ -80,8 +149,8 @@ async function addProduct(input) {
     terms: String(input.snk || input.terms || ''),
     image_url: String(input.image_url || input.imageUrl || '').trim(),
     category: String(input.category || input.kategori || '').trim(),
-    bulk_prices: Array.isArray(input.bulk_prices || input.bulkPrices) ? (input.bulk_prices || input.bulkPrices) : [],
-    variants: Array.isArray(input.variants) ? input.variants : [],
+    bulk_prices: normalizeBulkPrices(input.bulk_prices || input.bulkPrices || []),
+    variants: normalizeVariants(input.variants || []),
     stock: Array.isArray(input.data || input.stock) ? (input.data || input.stock) : splitStock(input.stock_text || ''),
     sold: Number(input.terjual || input.sold || 0),
     updated_at: new Date().toISOString()
@@ -111,7 +180,6 @@ async function appendStock(code, text) {
   return { product: normalizeProduct(data), added: lines.length };
 }
 
-
 async function updateProductByCode(code, updates = {}) {
   const currentCode = String(code || '').trim().toUpperCase();
   if (!currentCode) return null;
@@ -123,11 +191,8 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
   if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
-  if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) {
-    const bulkValue = updates.bulk_prices ?? updates.bulkPrices;
-    payload.bulk_prices = Array.isArray(bulkValue) ? bulkValue : [];
-  }
-  if (updates.variants !== undefined) payload.variants = Array.isArray(updates.variants) ? updates.variants : [];
+  if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) payload.bulk_prices = normalizeBulkPrices(updates.bulk_prices ?? updates.bulkPrices);
+  if (updates.variants !== undefined) payload.variants = normalizeVariants(updates.variants);
   if (updates.data !== undefined || updates.stock !== undefined) {
     const stockValue = updates.data ?? updates.stock;
     payload.stock = Array.isArray(stockValue) ? stockValue : splitStock(String(stockValue || ''));
@@ -171,6 +236,13 @@ function parseVoucherProducts(value) {
   return raw.split(/[|,\n]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
 }
 
+async function getVoucher(code) {
+  if (!code) return null;
+  const { data, error } = await sb().from('vouchers').select('*').ilike('code', String(code).trim()).limit(1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function addVoucher(input) {
   const code = String(input.kode || input.code || '').trim().toUpperCase();
   const existing = code ? await getVoucher(code).catch(() => null) : null;
@@ -185,11 +257,7 @@ async function addVoucher(input) {
     expires_at: input.expires_at || input.expired_at || existing?.expires_at || null,
     updated_at: new Date().toISOString()
   };
-  const { data, error } = await sb()
-    .from('vouchers')
-    .upsert(payload, { onConflict: 'code' })
-    .select('*')
-    .single();
+  const { data, error } = await sb().from('vouchers').upsert(payload, { onConflict: 'code' }).select('*').single();
   if (error) throw error;
   return data;
 }
@@ -250,23 +318,14 @@ async function getMonthlyRekap(month, year) {
   const quantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
   const byProduct = new Map();
   rows.forEach((row) => {
-    const key = row.product_code || row.product_name || '-';
-    const current = byProduct.get(key) || { code: row.product_code || '-', name: row.product_name || '-', quantity: 0, total_price: 0 };
+    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
+    const current = byProduct.get(key) || { code: row.product_code || '-', name: row.product_name || '-', variant: row.variant_name || '', quantity: 0, total_price: 0 };
     current.quantity += Number(row.quantity || 0);
     current.total_price += Number(row.total_price || 0);
     byProduct.set(key, current);
   });
-  return {
-    month: m,
-    year: y,
-    orders: rows.length,
-    quantity,
-    total_price,
-    by_product: Array.from(byProduct.values()).sort((a, b) => b.total_price - a.total_price),
-    rows
-  };
+  return { month: m, year: y, orders: rows.length, quantity, total_price, by_product: Array.from(byProduct.values()).sort((a, b) => b.total_price - a.total_price), rows };
 }
-
 
 async function getShopSettings() {
   const { data, error } = await sb().from('shop_settings').select('key,value');
@@ -286,41 +345,45 @@ async function saveShopSettings(input = {}) {
   return getShopSettings();
 }
 
-async function getAnalytics(month, year) {
+async function getAnalytics() {
   const now = new Date();
-  const targetMonth = Number(month || (now.getMonth() + 1));
-  const targetYear = Number(year || now.getFullYear());
-  const start = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
-  const end = new Date(Date.UTC(targetYear, targetMonth, 1));
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - 6);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
     .gte('created_at', start.toISOString())
-    .lt('created_at', end.toISOString())
+    .lte('created_at', end.toISOString())
     .order('created_at', { ascending: true });
   if (error) throw error;
   const rows = data || [];
-  const daysInMonth = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
-  const daily = Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, orders: 0, revenue: 0, quantity: 0 }));
+  const daily = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    return { date: key, label: d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }), orders: 0, revenue: 0, quantity: 0 };
+  });
   const topMap = new Map();
   rows.forEach((row) => {
-    const d = new Date(row.created_at).getUTCDate();
-    const bucket = daily[d - 1];
+    const keyDate = new Date(row.created_at).toISOString().slice(0, 10);
+    const bucket = daily.find((d) => d.date === keyDate);
     if (bucket) {
       bucket.orders += 1;
       bucket.revenue += Number(row.total_price || 0);
       bucket.quantity += Number(row.quantity || 0);
     }
-    const key = row.product_code || row.product_name || '-';
-    const item = topMap.get(key) || { code: row.product_code || '-', name: row.product_name || '-', orders: 0, quantity: 0, revenue: 0 };
+    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
+    const item = topMap.get(key) || { code: row.product_code || '-', name: row.product_name || '-', variant: row.variant_name || '', orders: 0, quantity: 0, revenue: 0 };
     item.orders += 1;
     item.quantity += Number(row.quantity || 0);
     item.revenue += Number(row.total_price || 0);
     topMap.set(key, item);
   });
   return {
-    month: targetMonth,
-    year: targetYear,
+    period: '7d',
     daily,
     top_products: Array.from(topMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10),
     total_orders: rows.length,
@@ -333,6 +396,9 @@ async function upsertPendingOrder(input) {
   const payload = {
     telegram_id: Number(input.telegram_id),
     product_code: String(input.product_code).toUpperCase(),
+    variant_key: String(input.variant_key || '').trim().toUpperCase(),
+    variant_name: String(input.variant_name || '').trim(),
+    unit_price: Number(input.unit_price || 0),
     quantity: Number(input.quantity || 1),
     voucher_code: input.voucher_code || '',
     invoice_ref: input.invoice_ref || null,
@@ -342,21 +408,13 @@ async function upsertPendingOrder(input) {
     expires_at: input.expires_at || null,
     updated_at: new Date().toISOString()
   };
-  const { data, error } = await sb()
-    .from('pending_orders')
-    .upsert(payload, { onConflict: 'telegram_id' })
-    .select('*')
-    .single();
+  const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
   if (error) throw error;
   return data;
 }
 
 async function getPendingOrder(telegramId) {
-  const { data, error } = await sb()
-    .from('pending_orders')
-    .select('*')
-    .eq('telegram_id', Number(telegramId))
-    .maybeSingle();
+  const { data, error } = await sb().from('pending_orders').select('*').eq('telegram_id', Number(telegramId)).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -364,13 +422,6 @@ async function getPendingOrder(telegramId) {
 async function deletePendingOrder(telegramId) {
   const { error } = await sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
   if (error) throw error;
-}
-
-async function getVoucher(code) {
-  if (!code) return null;
-  const { data, error } = await sb().from('vouchers').select('*').ilike('code', String(code).trim()).limit(1).maybeSingle();
-  if (error) throw error;
-  return data;
 }
 
 async function applyVoucherUsage(code, telegramId) {
@@ -398,42 +449,39 @@ function voucherIsValid(voucher, productCode, telegramId) {
 }
 
 async function listTransactions(limit = 50) {
-  const { data, error } = await sb()
-    .from('transactions')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const { data, error } = await sb().from('transactions').select('*').order('created_at', { ascending: false }).limit(limit);
   if (error) throw error;
   return data || [];
 }
 
 async function listTransactionsByUser(telegramId, limit = 8) {
-  const { data, error } = await sb()
-    .from('transactions')
-    .select('*')
-    .eq('telegram_id', Number(telegramId))
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const { data, error } = await sb().from('transactions').select('*').eq('telegram_id', Number(telegramId)).order('created_at', { ascending: false }).limit(limit);
   if (error) throw error;
   return data || [];
 }
 
 async function completeOrder(order, product, totalPrice, buyer = {}) {
   const quantity = Number(order.quantity || 1);
-  const currentStock = Array.isArray(product.data) ? product.data : [];
-  if (currentStock.length < quantity) throw new Error('Stok produk tidak mencukupi.');
+  let delivered = [];
+  const updatePayload = { sold: Number(product.terjual || 0) + quantity, updated_at: new Date().toISOString() };
 
-  const delivered = currentStock.slice(0, quantity);
-  const remaining = currentStock.slice(quantity);
+  if (order.variant_key) {
+    const variants = normalizeVariants(product.variants);
+    const { variant, index } = findVariant({ variants }, order.variant_key);
+    if (!variant || index < 0) throw new Error('Varian produk tidak ditemukan.');
+    const currentStock = Array.isArray(variant.stock) ? variant.stock : [];
+    if (currentStock.length < quantity) throw new Error('Stok varian tidak mencukupi.');
+    delivered = currentStock.slice(0, quantity);
+    variants[index] = { ...variant, stock: currentStock.slice(quantity), sold: Number(variant.sold || 0) + quantity };
+    updatePayload.variants = variants;
+  } else {
+    const currentStock = Array.isArray(product.data) ? product.data : [];
+    if (currentStock.length < quantity) throw new Error('Stok produk tidak mencukupi.');
+    delivered = currentStock.slice(0, quantity);
+    updatePayload.stock = currentStock.slice(quantity);
+  }
 
-  const { error: productError } = await sb()
-    .from('products')
-    .update({
-      stock: remaining,
-      sold: Number(product.terjual || 0) + quantity,
-      updated_at: new Date().toISOString()
-    })
-    .eq('code', product.kode);
+  const { error: productError } = await sb().from('products').update(updatePayload).eq('code', product.kode);
   if (productError) throw productError;
 
   const transaction = {
@@ -441,6 +489,9 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     username: buyer.username || null,
     product_name: product.nama,
     product_code: product.kode,
+    variant_key: order.variant_key || '',
+    variant_name: order.variant_name || '',
+    unit_price: Number(order.unit_price || 0),
     quantity,
     total_price: Number(totalPrice),
     order_ref: order.invoice_ref || null,
@@ -460,10 +511,7 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     updated_at: new Date().toISOString()
   }, { onConflict: 'telegram_id' });
 
-  if (order.voucher_code) {
-    await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
-  }
-
+  if (order.voucher_code) await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
   await deletePendingOrder(order.telegram_id);
   return { delivered, transaction };
 }
@@ -495,5 +543,11 @@ module.exports = {
   voucherIsValid,
   listTransactions,
   listTransactionsByUser,
-  completeOrder
+  completeOrder,
+  normalizeBulkPrices,
+  normalizeVariants,
+  variantKey,
+  findVariant,
+  productAvailableStock,
+  orderUnitPrice
 };
