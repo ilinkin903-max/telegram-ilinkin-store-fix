@@ -706,15 +706,20 @@ async function checkPayment(query, invoiceFromButton) {
   });
 
   if (config.channelLog) {
-    await tg.sendMessage(config.channelLog, `✅ *PESANAN SELESAI*\n` +
+    const fee = Number(order.fee || 0);
+    const total = Number(order.amount || 0);
+    const subtotal = Math.max(0, total - fee);
+    const username = query.from.username ? '@' + query.from.username : (query.from.first_name || String(query.from.id));
+    await tg.sendMessage(config.channelLog, `✅ PESANAN SELESAI\n` +
       `=======================\n` +
-      `User: @${query.from.username || '-'}\n` +
-      `Invoice: *${order.invoice_ref}*\n` +
-      `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
-      `Jumlah Beli: *${order.quantity}*\n` +
-      `Total Harga: *${formatRupiah(order.amount)}*\n` +
-      `Tanggal: *${formatWIB(new Date())}*\n` +
-      `=======================`, { parse_mode: 'Markdown' }).catch(() => null);
+      `User: ${username}\n` +
+      `Trx ID: ${order.invoice_ref}\n` +
+      `Produk: ${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}\n` +
+      `Harga: ${formatRupiah(subtotal)}\n` +
+      `Jumlah Beli: ${order.quantity}\n` +
+      `Fee: ${formatRupiah(fee)}\n` +
+      `Total Harga: ${formatRupiah(total)}\n` +
+      `Tanggal: ${formatWIB(new Date())}`).catch(() => null);
   }
 
   return sendHome(userId, query.from, null);
