@@ -28,6 +28,8 @@ function normalizeVariant(item, index = 0) {
     price: Number(item?.price || item?.harga || 0),
     sku: variantKey(item, index),
     note: String(item?.note || item?.catatan || '').trim(),
+    description: String(item?.description || item?.deskripsi || '').trim(),
+    snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '').replace(/,/g, '\n')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
   };
@@ -128,7 +130,7 @@ async function getStats() {
 }
 
 async function listProducts() {
-  const { data, error } = await sb().from('products').select('*').order('created_at', { ascending: false });
+  const { data, error } = await sb().from('products').select('*').order('name', { ascending: true });
   if (error) throw error;
   return (data || []).map(normalizeProduct);
 }
