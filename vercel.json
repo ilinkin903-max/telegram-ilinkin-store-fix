@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/reseller",
+      "destination": "/api/reseller"
+    },
+    {
+      "source": "/webhook",
+      "destination": "/api/telegram"
+    }
+  ]
+}
