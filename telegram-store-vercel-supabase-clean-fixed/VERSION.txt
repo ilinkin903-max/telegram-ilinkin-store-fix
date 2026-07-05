@@ -1,1 +1,1 @@
-Admin UI v5 - Variant compact add form + horizontal scroll menu
+Admin UI v6 - Edit produk non-stok, stok tambah/kelola varian, stok default hilang saat varian aktif
