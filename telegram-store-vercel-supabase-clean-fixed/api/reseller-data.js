@@ -49,6 +49,8 @@ function parseVariants(value) {
     price: numberOf(item.price || item.harga),
     sku: String(item.sku || item.kode || `VAR${index + 1}`).trim().toUpperCase(),
     note: String(item.note || item.catatan || '').trim(),
+    description: String(item.description || item.deskripsi || '').trim(),
+    snk: String(item.snk || item.terms || item.syarat || '').trim(),
     stock: parseStockList(item.stock || item.stok || item.data || []),
     bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
   })).filter((item) => item.name);
@@ -63,7 +65,9 @@ function parseVariants(value) {
       sku,
       stock: parseStockList(parts[3] || ''),
       bulk_prices: parseBulkPrices(parts[4] || ''),
-      note: parts.slice(5).join(' | ')
+      description: parts[5] || '',
+      snk: parts[6] || '',
+      note: parts.slice(7).join(' | ')
     };
   }).filter((item) => item.name);
 }
@@ -125,7 +129,10 @@ module.exports = async function handler(req, res) {
         store_name: body.store_name,
         store_description: body.store_description,
         logo_url: body.logo_url,
-        banner_url: body.banner_url
+        banner_url: body.banner_url,
+        start_media_type: body.start_media_type,
+        start_media_value: body.start_media_value,
+        start_media_caption: body.start_media_caption
       });
       return json(res, 200, { ok: true, data });
     }

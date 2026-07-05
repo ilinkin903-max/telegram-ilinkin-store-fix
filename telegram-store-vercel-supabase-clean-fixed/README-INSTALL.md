@@ -125,3 +125,24 @@ telegram-ilinkin-store-fix.vercel.app
 ```
 
 Isi domain saja, tanpa `https://` dan tanpa `/reseller`.
+
+## Update terbaru: varian, header toko, dan media /start
+
+Perubahan utama:
+- Header Mini App menampilkan nama toko sebagai judul besar, dan `By iLink` sebagai teks kecil.
+- Edit produk sekarang punya tombol `Edit Varian / Harga / Stok` yang membuka popup khusus varian.
+- Varian mendukung deskripsi dan SnK per varian.
+- Menu `Gambar & Identitas Toko` punya pengaturan media saat user mengetik `/start`:
+  - `Tanpa media`
+  - `Gambar toko` memakai URL gambar HTTPS publik
+  - `Stiker Telegram` memakai file_id stiker
+
+Format varian di Mini App:
+
+```text
+Nama Varian|Harga|Kode Varian|stok1,stok2|qty:harga,qty:harga|Deskripsi Varian|SnK Varian
+1 Bulan|10000|BULAN1|akun1,akun2|5:9000,10:8000|Deskripsi khusus 1 bulan|SnK khusus 1 bulan
+Lifetime|50000|LIFE|kode1,kode2|3:45000|Deskripsi lifetime|SnK lifetime
+```
+
+Pengaturan media `/start` disimpan di tabel `shop_settings`, jadi tidak perlu kolom baru jika tabel `shop_settings` sudah ada.

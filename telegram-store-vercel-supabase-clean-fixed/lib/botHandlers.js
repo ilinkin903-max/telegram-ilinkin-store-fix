@@ -91,9 +91,35 @@ async function sendHome(chatId, from, req) {
     `- 📦 Stok Terjual: *${stats.stokTerjual}*\n\n` +
     `Silahkan pilih tombol dibawah ini!`;
 
+  const reply_markup = homeKeyboard(req, from.id);
+  const settings = await db.getShopSettings().catch(() => ({}));
+  const mediaType = String(settings.start_media_type || 'none').toLowerCase();
+  const mediaValue = String(settings.start_media_value || '').trim();
+  const mediaCaption = String(settings.start_media_caption || '').trim();
+
+  if (mediaValue && mediaType === 'photo') {
+    try {
+      return await tg.sendPhotoRef(chatId, mediaValue, {
+        caption: mediaCaption || text,
+        parse_mode: mediaCaption ? undefined : 'Markdown',
+        reply_markup
+      });
+    } catch (error) {
+      console.error('Gagal kirim media /start:', error.message);
+    }
+  }
+
+  if (mediaValue && mediaType === 'sticker') {
+    try {
+      await tg.sendSticker(chatId, mediaValue);
+    } catch (error) {
+      console.error('Gagal kirim stiker /start:', error.message);
+    }
+  }
+
   return tg.sendMessage(chatId, text, {
     parse_mode: 'Markdown',
-    reply_markup: homeKeyboard(req, from.id)
+    reply_markup
   });
 }
 
@@ -115,6 +141,14 @@ function productStockTotal(product) {
 
 function variantPrice(product, variant) {
   return Number(variant?.price || product?.harga || 0);
+}
+
+function variantDescription(product, variant) {
+  return String(variant?.description || variant?.deskripsi || product?.deskripsi || '-');
+}
+
+function variantTerms(product, variant) {
+  return String(variant?.snk || variant?.terms || product?.snk || '-');
 }
 
 function bulkRows(product, variant) {
@@ -550,7 +584,7 @@ ${formatBulkText(product, variant)}
 ` +
     `Stok Tersedia: *${variant ? stockOfVariant(variant).length : product.data.length}*
 ` +
-    `Deskripsi: *${product.deskripsi || '-'}*
+    `Deskripsi: *${variantDescription(product, variant)}*
 ` +
     `=======================
 ` +
@@ -687,10 +721,11 @@ async function checkPayment(query, invoiceFromButton) {
   }
 
   const product = await db.getProductByCode(order.product_code);
+  const variant = selectedVariant(product, order);
   const result = await db.completeOrder(order, product, order.amount, query.from);
   const dataProduk = result.delivered.join('\n');
   const filename = `${userId}-${product.kode}${order.variant_key ? '-' + order.variant_key : ''}-${order.quantity}.txt`;
-  const fileText = `<|==== SYARAT DAN KETENTUAN ====|>\n${product.snk}\n\n<|==== PRODUK ====|>\n${dataProduk}\n\n//Terimakasih telah percaya kepada ${config.botName}.`;
+  const fileText = `<|==== SYARAT DAN KETENTUAN ====|>\n${variantTerms(product, variant)}\n\n<|==== PRODUK ====|>\n${dataProduk}\n\n//Terimakasih telah percaya kepada ${config.botName}.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   await tg.sendDocument(userId, filename, fileText, {
@@ -706,15 +741,20 @@ async function checkPayment(query, invoiceFromButton) {
   });
 
   if (config.channelLog) {
-    await tg.sendMessage(config.channelLog, `✅ *PESANAN SELESAI*\n` +
+    const fee = Number(order.fee || 0);
+    const total = Number(order.amount || 0);
+    const subtotal = Math.max(0, total - fee);
+    const username = query.from.username ? '@' + query.from.username : (query.from.first_name || String(query.from.id));
+    await tg.sendMessage(config.channelLog, `✅ PESANAN SELESAI\n` +
       `=======================\n` +
-      `User: @${query.from.username || '-'}\n` +
-      `Invoice: *${order.invoice_ref}*\n` +
-      `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
-      `Jumlah Beli: *${order.quantity}*\n` +
-      `Total Harga: *${formatRupiah(order.amount)}*\n` +
-      `Tanggal: *${formatWIB(new Date())}*\n` +
-      `=======================`, { parse_mode: 'Markdown' }).catch(() => null);
+      `User: ${username}\n` +
+      `Trx ID: ${order.invoice_ref}\n` +
+      `Produk: ${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}\n` +
+      `Harga: ${formatRupiah(subtotal)}\n` +
+      `Jumlah Beli: ${order.quantity}\n` +
+      `Fee: ${formatRupiah(fee)}\n` +
+      `Total Harga: ${formatRupiah(total)}\n` +
+      `Tanggal: ${formatWIB(new Date())}`).catch(() => null);
   }
 
   return sendHome(userId, query.from, null);
