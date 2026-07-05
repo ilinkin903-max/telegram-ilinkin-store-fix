@@ -218,7 +218,7 @@ async function sendStock(chatId) {
   if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk.');
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const variantLines = (p.variants || []).map((v) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
-    return `${i + 1}. *${p.nama}* \`${p.kode}\`\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
+    return `${i + 1}. *${p.nama}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   return tg.sendMessage(chatId, text, { parse_mode: 'Markdown' });
 }

@@ -1,10 +1,1 @@
-Versi: admin-dashboard-current-ui-v2
-Isi sesuai revisi terbaru:
-- Admin Dashboard, bukan Reseller/Freze
-- Nama toko besar, By iLink kecil
-- Saldo/Order/Produk/Stok 2x2
-- Tidak ada tombol Belanja Produk Lain, Bagikan Toko, Escrow, GMV
-- Produk Edit/Stok/Kelola/Hapus pakai modal popup
-- Edit Varian/Harga/Stok dalam popup khusus, dengan deskripsi dan SnK per varian
-- Start media /start: none/photo/sticker tersimpan di shop_settings
-- Notifikasi order selesai ke CHANNEL_LOG
+Admin UI v4 - add product labels, variant switch, green add page, purple menu, blue chart, stock no product code
