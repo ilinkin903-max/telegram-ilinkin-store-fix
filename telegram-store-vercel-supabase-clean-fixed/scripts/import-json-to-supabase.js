@@ -48,6 +48,10 @@ async function main() {
     price: Number(p.harga || 0),
     description: String(p.deskripsi || ''),
     terms: String(p.snk || ''),
+    image_url: String(p.image_url || ''),
+    category: String(p.category || p.kategori || ''),
+    bulk_prices: Array.isArray(p.bulk_prices) ? p.bulk_prices : [],
+    variants: Array.isArray(p.variants) ? p.variants : [],
     stock: Array.isArray(p.data) ? p.data : [],
     sold: Number(p.terjual || 0),
     updated_at: new Date().toISOString()

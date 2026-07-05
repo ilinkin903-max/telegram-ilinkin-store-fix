@@ -1,59 +1,81 @@
-# Telegram Store Vercel + Supabase - Owner Tools Lengkap
+# Telegram Store Vercel + Supabase - Mini App Marketplace UI
 
-Versi ini berisi bot Telegram webhook untuk Vercel, database Supabase, dan Mini App reseller panel.
+Versi ini berisi bot Telegram webhook untuk Vercel, database Supabase, dan Mini App reseller panel dengan UI marketplace neo-brutal seperti contoh gambar.
 
-## Fitur baru
+## Fitur Mini App terbaru
 
-- Mini App Dashboard dengan grafik omzet harian dan produk terlaris.
-- Mini App Products: tambah produk, list produk, hapus produk.
-- Mini App Edit Produk lengkap: nama, kode, harga, deskripsi, SnK, gambar produk, dan stok.
-- Mini App Edit Stok: tambah stok atau ganti semua stok.
-- Mini App Voucher: tambah, edit, aktif/nonaktif, hapus voucher.
-- Mini App Gambar Toko: simpan nama toko, deskripsi, logo URL, banner URL.
-- Mini App Broadcast: teks, gambar URL/file_id, dan stiker file_id.
-- Bot Telegram Owner Menu lengkap.
-- Broadcast Telegram bisa reply foto/stiker dengan command `/bc`.
+- Tampilan dashboard lebih nyaman: hero reseller, kartu Saldo/Escrow/GMV/Produk, search, dan kartu produk.
+- Menu cepat: Stats, Produk, Penjualan, Tambah, Edit, Voucher, Broadcast, Toko.
+- Edit produk lengkap: nama, kode, harga dasar, kategori, URL gambar, deskripsi, SnK, stok.
+- Harga bulk per produk.
+- Varian produk per produk.
+- Edit stok: tambah stok atau ganti semua stok.
+- Voucher: tambah, edit, aktif/nonaktif, hapus.
+- Gambar toko: nama toko, deskripsi, logo URL, banner URL.
+- Broadcast: teks, gambar URL/file_id, dan stiker file_id.
+- Bot Telegram Owner Menu tetap ada.
 
-## Update database Supabase lama
+## SQL Supabase
 
-Kalau project Supabase sudah pernah dibuat dari versi sebelumnya, jalankan file ini di Supabase SQL Editor:
-
-```text
-supabase/update-owner-tools.sql
-```
-
-Copy semua isi file tersebut, paste ke Supabase SQL Editor, lalu klik Run.
-
-Kalau project Supabase masih baru, cukup jalankan:
+Kalau Supabase baru/kosong, jalankan:
 
 ```text
 supabase/schema.sql
 ```
 
-## Deploy update ke Vercel
-
-1. Upload folder `vercel-supabase-bot` ini ke GitHub repository kamu.
-2. Pastikan path tetap seperti ini:
+Kalau Supabase sudah pernah dibuat dari versi sebelumnya, jalankan:
 
 ```text
-vercel-supabase-bot/api/reseller.js
-vercel-supabase-bot/api/reseller-data.js
-vercel-supabase-bot/lib/botHandlers.js
-vercel-supabase-bot/lib/db.js
-vercel-supabase-bot/supabase/update-owner-tools.sql
+supabase/update-owner-tools.sql
 ```
 
-3. Vercel akan redeploy otomatis.
-4. Kalau tidak otomatis, buka Vercel -> Deployments -> Redeploy.
-5. Setelah redeploy, buka ulang Mini App dari Telegram dengan command:
+Script update menambah kolom baru:
 
 ```text
-/reseller
+products.category
+products.bulk_prices
+products.variants
 ```
+
+## Format harga bulk dan varian di Mini App
+
+Harga bulk:
+
+```text
+5|5000
+10|9000
+50|40000
+```
+
+Varian:
+
+```text
+1 Bulan|10000|BULAN1
+Lifetime|50000|LIFE
+Premium|25000|PREM
+```
+
+Kolom ketiga pada varian adalah kode/sku opsional.
+
+## Upload ke GitHub
+
+Upload isi ZIP ini ke repo GitHub. Di root repo sebaiknya langsung terlihat:
+
+```text
+api/
+lib/
+public/
+scripts/
+supabase/
+Database/
+package.json
+vercel.json
+README-INSTALL.md
+```
+
+Kalau struktur seperti di atas, Vercel Root Directory dikosongkan/default.
 
 ## Environment Variables Vercel
-
-Minimal harus ada:
 
 ```env
 BOT_TOKEN=token_bot_kamu
@@ -78,68 +100,28 @@ PAKASIR_SLUG=slug_pakasir
 PAKASIR_API_KEY=api_key_pakasir
 ```
 
-## Command owner Telegram
+## Setelah deploy
+
+Pasang webhook:
 
 ```text
+https://project-kamu.vercel.app/api/set-webhook?secret=WEBHOOK_SECRET
+```
+
+Test di Telegram:
+
+```text
+/debugowner
 /ownermenu
-/addproduk Nama|Kode|Harga|Deskripsi|SnK
-/delproduk Kode
-/addstok Kode|stok1\nstok2
-/editstok Kode|stok1\nstok2
-/editnama Kode|Nama Baru
-/editkode KodeLama|KodeBaru
-/editharga Kode|HargaBaru
-/editdeskripsi Kode|Deskripsi Baru
-/editsnk Kode|SnK Baru
-/listuser
-/deluser ID_TELEGRAM
-/addvoucher KODE|semua|POTONGAN|LIMIT
-/editvoucher KODE_LAMA|KODE_BARU|semua|POTONGAN|LIMIT
-/delvoucher KODE
-/rekap
-/rekap 7 2026
 /reseller
 ```
 
-## Broadcast Telegram
+## BotFather Mini App
 
-Broadcast teks:
-
-```text
-/bc Halo semua, stok baru sudah ready.
-```
-
-Broadcast gambar dari URL:
+Set domain bot di BotFather:
 
 ```text
-/bcphoto https://domain.com/gambar.jpg|Caption broadcast
+telegram-ilinkin-store-fix.vercel.app
 ```
 
-Broadcast gambar dari Telegram: reply sebuah foto lalu ketik:
-
-```text
-/bc Caption broadcast
-```
-
-Broadcast stiker dari Telegram: reply sebuah stiker lalu ketik:
-
-```text
-/bc
-```
-
-Atau reply stiker lalu ketik:
-
-```text
-/bcsticker
-```
-
-## Catatan gambar toko dan produk
-
-Mini App menyimpan gambar memakai URL publik, bukan upload file langsung. Jadi upload gambar ke tempat yang punya URL publik, lalu paste URL-nya ke Mini App.
-
-Contoh URL gambar:
-
-```text
-https://domain.com/logo.jpg
-```
-
+Isi domain saja, tanpa `https://` dan tanpa `/reseller`.

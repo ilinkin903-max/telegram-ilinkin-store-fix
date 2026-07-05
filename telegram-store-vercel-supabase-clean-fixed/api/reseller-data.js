@@ -22,6 +22,39 @@ function boolOf(value) {
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'aktif';
 }
 
+function parseBulkPrices(value) {
+  if (Array.isArray(value)) return value.map((item) => ({
+    min_qty: numberOf(item.min_qty || item.qty || item.jumlah),
+    price: numberOf(item.price || item.harga)
+  })).filter((item) => item.min_qty > 0 && item.price > 0);
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  return raw.split(/\n+/).map((line) => {
+    const parts = line.split(/[=|,;]/).map((x) => x.trim()).filter(Boolean);
+    return { min_qty: numberOf(parts[0]), price: numberOf(parts[1]) };
+  }).filter((item) => item.min_qty > 0 && item.price > 0);
+}
+
+function parseVariants(value) {
+  if (Array.isArray(value)) return value.map((item) => ({
+    name: String(item.name || item.nama || '').trim(),
+    price: numberOf(item.price || item.harga),
+    sku: String(item.sku || item.kode || '').trim().toUpperCase(),
+    note: String(item.note || item.catatan || '').trim()
+  })).filter((item) => item.name);
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  return raw.split(/\n+/).map((line) => {
+    const parts = line.split('|').map((x) => x.trim());
+    return {
+      name: parts[0] || '',
+      price: numberOf(parts[1]),
+      sku: String(parts[2] || '').trim().toUpperCase(),
+      note: parts.slice(3).join(' | ')
+    };
+  }).filter((item) => item.name);
+}
+
 async function broadcast(payload = {}) {
   const users = await db.listUsers(1000);
   const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
@@ -91,8 +124,11 @@ module.exports = async function handler(req, res) {
       const deskripsi = String(body.deskripsi || '').trim();
       const snk = String(body.snk || '').trim();
       const image_url = String(body.image_url || '').trim();
+      const category = String(body.category || body.kategori || '').trim();
+      const bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
+      const variants = parseVariants(body.variants_text || body.variant_text || body.variants);
       if (!nama || !kode || !harga || !deskripsi || !snk) return json(res, 400, { ok: false, error: 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga, deskripsi, snk, image_url, data: splitStock(body.stock_text || '') });
+      const product = await db.addProduct({ nama, kode, harga, deskripsi, snk, image_url, category, bulk_prices, variants, data: splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 
@@ -125,8 +161,11 @@ module.exports = async function handler(req, res) {
       const code = String(body.current_code || body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
       const updates = {};
-      ['nama', 'kode', 'deskripsi', 'snk', 'image_url'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);
+      if (body.bulk_text !== undefined || body.bulk_prices !== undefined) updates.bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
+      if (body.variants_text !== undefined || body.variant_text !== undefined || body.variants !== undefined) updates.variants = parseVariants(body.variants_text || body.variant_text || body.variants);
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
       if (body.field && body.value !== undefined) updates[body.field] = body.field === 'harga' ? numberOf(body.value) : String(body.value || '').trim();
       const product = await db.updateProductByCode(code, updates);

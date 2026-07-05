@@ -20,6 +20,10 @@ create table if not exists public.products (
   price integer not null default 0,
   description text not null default '',
   terms text not null default '',
+  image_url text not null default '',
+  category text not null default '',
+  bulk_prices jsonb not null default '[]'::jsonb,
+  variants jsonb not null default '[]'::jsonb,
   stock jsonb not null default '[]'::jsonb,
   sold integer not null default 0,
   created_at timestamptz not null default now(),
@@ -75,6 +79,9 @@ create table if not exists public.vouchers (
 
 -- Update fitur owner tools lengkap.
 alter table public.products add column if not exists image_url text not null default '';
+alter table public.products add column if not exists category text not null default '';
+alter table public.products add column if not exists bulk_prices jsonb not null default '[]'::jsonb;
+alter table public.products add column if not exists variants jsonb not null default '[]'::jsonb;
 alter table public.vouchers add column if not exists description text not null default '';
 alter table public.vouchers add column if not exists active boolean not null default true;
 alter table public.vouchers add column if not exists expires_at timestamptz;

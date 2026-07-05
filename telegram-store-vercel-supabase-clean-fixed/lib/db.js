@@ -15,6 +15,9 @@ function normalizeProduct(row) {
     deskripsi: row.description || '',
     snk: row.terms || '',
     image_url: row.image_url || '',
+    category: row.category || '',
+    bulk_prices: Array.isArray(row.bulk_prices) ? row.bulk_prices : [],
+    variants: Array.isArray(row.variants) ? row.variants : [],
     data: Array.isArray(row.stock) ? row.stock : [],
     terjual: row.sold || 0,
     created_at: row.created_at,
@@ -76,6 +79,9 @@ async function addProduct(input) {
     description: String(input.deskripsi || input.description || ''),
     terms: String(input.snk || input.terms || ''),
     image_url: String(input.image_url || input.imageUrl || '').trim(),
+    category: String(input.category || input.kategori || '').trim(),
+    bulk_prices: Array.isArray(input.bulk_prices || input.bulkPrices) ? (input.bulk_prices || input.bulkPrices) : [],
+    variants: Array.isArray(input.variants) ? input.variants : [],
     stock: Array.isArray(input.data || input.stock) ? (input.data || input.stock) : splitStock(input.stock_text || ''),
     sold: Number(input.terjual || input.sold || 0),
     updated_at: new Date().toISOString()
@@ -116,6 +122,12 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.deskripsi !== undefined || updates.description !== undefined) payload.description = String(updates.deskripsi ?? updates.description);
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
+  if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
+  if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) {
+    const bulkValue = updates.bulk_prices ?? updates.bulkPrices;
+    payload.bulk_prices = Array.isArray(bulkValue) ? bulkValue : [];
+  }
+  if (updates.variants !== undefined) payload.variants = Array.isArray(updates.variants) ? updates.variants : [];
   if (updates.data !== undefined || updates.stock !== undefined) {
     const stockValue = updates.data ?? updates.stock;
     payload.stock = Array.isArray(stockValue) ? stockValue : splitStock(String(stockValue || ''));
