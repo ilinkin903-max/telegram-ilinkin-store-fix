@@ -38,3 +38,15 @@ alter table public.transactions add column if not exists delivered_text text not
 
 ## Update v15
 - Perbaikan tampilan form varian: field utama non-varian benar-benar disembunyikan saat varian aktif.
+
+## Update v16 - ON/OFF per Varian
+
+Setiap varian produk bisa diaktifkan/nonaktifkan sendiri dari Mini App:
+
+- Buka Produk -> Edit
+- Aktifkan/Edit Varian Produk
+- Pada setiap kartu varian gunakan tombol ON/OFF
+- Varian OFF tidak muncul di pilihan pembelian bot Telegram
+- Produk tetap terlihat di Mini App agar admin bisa mengaktifkan varian kembali
+
+Tidak perlu SQL baru karena status varian disimpan di kolom JSON `products.variants`.

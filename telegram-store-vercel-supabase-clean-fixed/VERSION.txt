@@ -1,3 +1,5 @@
-Admin UI v15
-- Fix: field Harga Satuan, Harga Grosir, Deskripsi, dan Syarat & Ketentuan sekarang benar-benar hilang saat varian aktif di Tambah Produk dan Edit Produk.
-- Menjaga harga tampilan produk tetap mengikuti harga varian.
+Admin UI v16
+- Setiap varian produk sekarang bisa ON/OFF sendiri.
+- Varian OFF tetap terlihat di Mini App untuk admin, tetapi tidak muncul di pilihan varian bot Telegram.
+- Harga kartu produk mengikuti varian aktif; jika semua varian OFF, kartu tetap terlihat di admin dengan status varian OFF.
+- Tombol ON/OFF varian tersedia di Tambah Produk dan Edit Produk.

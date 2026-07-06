@@ -30,6 +30,7 @@ function normalizeVariant(item, index = 0) {
     note: String(item?.note || item?.catatan || '').trim(),
     description: String(item?.description || item?.deskripsi || '').trim(),
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
+    active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '').replace(/,/g, '\n')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
   };

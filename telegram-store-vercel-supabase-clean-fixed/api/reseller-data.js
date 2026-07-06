@@ -18,8 +18,9 @@ function numberOf(value) {
 
 function boolOf(value) {
   if (value === true || value === false) return value;
-  const raw = String(value || '').toLowerCase();
-  return raw === 'true' || raw === '1' || raw === 'on' || raw === 'aktif';
+  const raw = String(value ?? '').toLowerCase();
+  if (['false', '0', 'off', 'nonaktif', 'inactive', 'mati'].includes(raw)) return false;
+  return raw === 'true' || raw === '1' || raw === 'on' || raw === 'aktif' || raw === 'active' || raw === '';
 }
 
 function parseBulkPrices(value) {
@@ -51,6 +52,7 @@ function parseVariants(value) {
     note: String(item.note || item.catatan || '').trim(),
     description: String(item.description || item.deskripsi || '').trim(),
     snk: String(item.snk || item.terms || item.syarat || '').trim(),
+    active: item.active === undefined ? true : boolOf(item.active),
     stock: parseStockList(item.stock || item.stok || item.data || []),
     bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
   })).filter((item) => item.name);
@@ -67,7 +69,8 @@ function parseVariants(value) {
       bulk_prices: parseBulkPrices(parts[4] || ''),
       description: parts[5] || '',
       snk: parts[6] || '',
-      note: parts.slice(7).join(' | ')
+      active: parts[7] === undefined ? true : boolOf(parts[7]),
+      note: parts.slice(8).join(' | ')
     };
   }).filter((item) => item.name);
 }

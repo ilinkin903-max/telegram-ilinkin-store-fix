@@ -186,9 +186,28 @@ function stockOfVariant(variant) {
   return Array.isArray(variant?.stock) ? variant.stock : [];
 }
 
+function isVariantActive(variant) {
+  return variant?.active !== false;
+}
+
+function activeVariantsWithIndex(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  return variants
+    .map((variant, index) => ({ variant, index }))
+    .filter((item) => isVariantActive(item.variant));
+}
+
 function productStockTotal(product) {
-  const variantTotal = (product.variants || []).reduce((sum, variant) => sum + stockOfVariant(variant).length, 0);
-  return variantTotal > 0 ? variantTotal : (Array.isArray(product.data) ? product.data.length : 0);
+  const allVariants = Array.isArray(product?.variants) ? product.variants : [];
+  if (allVariants.length) {
+    return activeVariantsWithIndex(product).reduce((sum, item) => sum + stockOfVariant(item.variant).length, 0);
+  }
+  return Array.isArray(product?.data) ? product.data.length : 0;
+}
+
+function isBuyableProduct(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  return !variants.length || activeVariantsWithIndex(product).length > 0;
 }
 
 function variantPrice(product, variant) {
@@ -242,10 +261,11 @@ function availableStockForOrder(product, order = {}) {
 
 function productButtons(products) {
   const rows = products.slice(0, 80).map((p) => {
-    const variants = Array.isArray(p.variants) ? p.variants : [];
+    const variants = activeVariantsWithIndex(p).map((item) => item.variant);
+    const allVariants = Array.isArray(p.variants) ? p.variants : [];
     const prices = variants.length ? variants.map((v) => variantPrice(p, v)).filter(Boolean) : [Number(p.harga || 0)];
     const minPrice = prices.length ? Math.min(...prices) : Number(p.harga || 0);
-    const suffix = variants.length ? ` | ${variants.length} varian` : '';
+    const suffix = allVariants.length ? ` | ${variants.length}/${allVariants.length} varian aktif` : '';
     return [{
       text: `${p.nama} | mulai ${formatRupiah(minPrice)} | Stok ${productStockTotal(p)}${suffix}`,
       callback_data: `item:${p.kode}`
@@ -256,7 +276,7 @@ function productButtons(products) {
 }
 
 async function sendProductList(chatId, query = null) {
-  const products = await db.listProducts({ activeOnly: true });
+  const products = (await db.listProducts({ activeOnly: true })).filter(isBuyableProduct);
   if (!products.length) {
     const empty = '📭 Belum ada produk aktif.';
     if (query?.message?.message_id) return editMessage(query, empty, { reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]] } });
@@ -269,14 +289,14 @@ async function sendProductList(chatId, query = null) {
 }
 
 async function sendStock(chatId, query = null) {
-  const products = await db.listProducts({ activeOnly: true });
+  const products = (await db.listProducts({ activeOnly: true })).filter(isBuyableProduct);
   if (!products.length) {
     const empty='📭 Belum ada produk aktif.';
     if (query?.message?.message_id) return editMessage(query, empty);
     return tg.sendMessage(chatId, empty);
   }
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
-    const variantLines = (p.variants || []).map((v) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
+    const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
     return `${i + 1}. *${p.nama}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
@@ -606,9 +626,9 @@ async function handleProductSelection(query, code) {
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
-  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const variants = activeVariantsWithIndex(product);
   if (variants.length) {
-    const rows = variants.map((variant, index) => ([{
+    const rows = variants.map(({ variant, index }) => ([{
       text: `${variant.name} | ${formatRupiah(variantPrice(product, variant))} | Stok ${stockOfVariant(variant).length}`,
       callback_data: `variant:${product.kode}:${index}`
     }]));
@@ -619,6 +639,9 @@ Pilih varian produk yang ingin dibeli. Setelah memilih varian, kamu langsung men
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: rows }
     });
+  }
+  if (Array.isArray(product.variants) && product.variants.length) {
+    return tg.answerCallbackQuery(query.id, { text: 'Semua varian produk ini sedang OFF.', show_alert: true });
   }
   return startOrderWithSelection(query, product, null, -1);
 }
@@ -647,6 +670,7 @@ async function handleVariantSelection(query, code, indexText) {
   const index = Number(indexText);
   const variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
+  if (!isVariantActive(variant)) return tg.answerCallbackQuery(query.id, { text: 'Varian ini sedang OFF.', show_alert: true });
   if (stockOfVariant(variant).length < 1) return tg.answerCallbackQuery(query.id, { text: 'Stok varian kosong.', show_alert: true });
   return startOrderWithSelection(query, product, variant, index);
 }
