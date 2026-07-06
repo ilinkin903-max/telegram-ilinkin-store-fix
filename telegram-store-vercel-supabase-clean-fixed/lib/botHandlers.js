@@ -28,6 +28,14 @@ function parseNumber(value) {
   return Number(cleaned || 0);
 }
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;');
+}
+
 async function sendProductUpdated(chatId, product, label) {
   if (!product) return tg.sendMessage(chatId, '⚠️ Produk tidak ditemukan. Cek kembali kode produk.' );
   return tg.sendMessage(chatId, `✅ ${label} berhasil.\n\nProduk: *${product.nama}*\nKode: \`${product.kode}\`\nHarga: *${formatRupiah(product.harga)}*\nStok: *${product.data.length}*`, { parse_mode: 'Markdown' });
@@ -696,6 +704,39 @@ async function createPayment(query) {
   });
 }
 
+
+async function sendDeliveredProductMessage(userId, product, order, variant, dataProduk) {
+  const terms = variantTerms(product, variant);
+  const title = `${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}`;
+  const text = `✅ <b>PRODUK BERHASIL DIKIRIM</b>
+` +
+    `=======================
+` +
+    `Produk: <b>${escapeHtml(title)}</b>
+` +
+    `Jumlah: <b>${escapeHtml(order.quantity || 1)}</b>
+
+` +
+    `<b>SYARAT & KETENTUAN</b>
+${escapeHtml(terms)}
+
+` +
+    `<b>DATA PRODUK</b>
+<pre>${escapeHtml(dataProduk)}</pre>
+` +
+    `Klik/tahan bagian data produk untuk menyalin. Jika tombol salin muncul, gunakan tombol tersebut.`;
+  const copyText = String(dataProduk || '');
+  const keyboard = copyText.length && copyText.length <= 256 ? {
+    inline_keyboard: [[{ text: '📋 Salin Produk', copy_text: { text: copyText } }]]
+  } : undefined;
+  try {
+    return await tg.sendMessage(userId, text, { parse_mode: 'HTML', reply_markup: keyboard });
+  } catch (error) {
+    console.error('Gagal kirim pesan produk dengan tombol salin:', error.message);
+    return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
+  }
+}
+
 async function checkPayment(query, invoiceFromButton) {
   const userId = query.from.id;
   const order = await db.getPendingOrder(userId);
@@ -743,6 +784,8 @@ async function checkPayment(query, invoiceFromButton) {
       `=======================\n` +
       `Terimakasih telah membeli produk di ${config.botName}`
   });
+
+  await sendDeliveredProductMessage(userId, product, order, variant, dataProduk);
 
   if (config.channelLog) {
     const fee = Number(order.fee || 0);

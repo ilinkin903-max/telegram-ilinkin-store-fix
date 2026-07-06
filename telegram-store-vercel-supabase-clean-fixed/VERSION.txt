@@ -1,1 +1,1 @@
-Admin UI v8 - voucher colors, product ON/OFF, active products hidden from bot
+Admin UI v9 - dashboard omset harian, sales cards, user sorting, delivery message with copy support
