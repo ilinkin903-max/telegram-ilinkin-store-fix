@@ -36,16 +36,24 @@
       return [parts[0]||'',parts[1]||'',sku,stock,parts[3]||'',parts[4]||'',parts[5]||''].join('|');
     }).filter(Boolean).join('\n');
   }
-  function mergeVariantStockText(product, mode){
+  function mergeVariantStockArray(product, mode){
     var existing=product.variants||[];
     return existing.map(function(v,i){
       var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
       var el=document.querySelector('[data-stock-field="'+sku.replace(/"/g,'&quot;')+'"]');
       var input=el?cleanListText(el.value):[];
       var stock=mode==='append' ? variantStock(v).concat(input) : input;
-      var bulk=variantBulkText(v);
-      return [v.name||v.nama||'',v.price||v.harga||'',sku,stock.join(','),bulk,v.description||v.deskripsi||'',v.snk||v.terms||''].join('|');
-    }).join('\n');
+      return {
+        name:v.name||v.nama||'',
+        price:v.price||v.harga||0,
+        sku:sku,
+        stock:stock,
+        bulk_prices:Array.isArray(v.bulk_prices)?v.bulk_prices:parseBulkArray(variantBulkText(v)),
+        description:v.description||v.deskripsi||'',
+        snk:v.snk||v.terms||'',
+        active:variantActive(v)
+      };
+    });
   }
   function stockCount(p){ var v=(p.variants||[]).reduce(function(sum,x){return sum+variantStock(x).length;},0); return v>0?v:((p.data||[]).length); }
   function addVariantRow(data){
@@ -151,7 +159,7 @@
     }
     html += '<button class="btn lime" type="submit">Tambahkan Stok</button></form>';
     openModal('Tambah Stok - '+p.nama, html);
-    document.getElementById('modalAppendStockForm').onsubmit=async function(e){ e.preventDefault(); var d={kode:p.kode}; if(hasVar){ d.variants_text=mergeVariantStockText(p,'append'); } else { var add=cleanListText(document.getElementById('appendDefaultStock').value); d.stock_text=(p.data||[]).concat(add).join('\n'); } await post('edit-product-full',d); closeModal(); };
+    document.getElementById('modalAppendStockForm').onsubmit=async function(e){ e.preventDefault(); var d={kode:p.kode}; if(hasVar){ d.variants=mergeVariantStockArray(p,'append'); delete d.variants_text; delete d.variant_text; } else { var add=cleanListText(document.getElementById('appendDefaultStock').value); d.stock_text=(p.data||[]).concat(add).join('\n'); } await post('edit-product-full',d); closeModal(); };
   }
   function openManageProduct(code){
     var p=findProduct(code); if(!p) return;
@@ -164,7 +172,7 @@
     }
     html += '<button class="btn yellow" type="submit">Simpan Kelola Stok</button></form>';
     openModal('Kelola Stok - '+p.nama, html);
-    document.getElementById('modalManageStockForm').onsubmit=async function(e){ e.preventDefault(); var d={kode:p.kode}; if(hasVar){ d.variants_text=mergeVariantStockText(p,'replace'); } else { d.stock_text=cleanListText(document.getElementById('manageDefaultStock').value).join('\n'); } await post('edit-product-full',d); closeModal(); };
+    document.getElementById('modalManageStockForm').onsubmit=async function(e){ e.preventDefault(); var d={kode:p.kode}; if(hasVar){ d.variants=mergeVariantStockArray(p,'replace'); delete d.variants_text; delete d.variant_text; } else { d.stock_text=cleanListText(document.getElementById('manageDefaultStock').value).join('\n'); } await post('edit-product-full',d); closeModal(); };
   }
   function openDeleteProduct(code){ var p=findProduct(code); if(!p) return; openModal('Hapus Produk','<p class="dangerText">Yakin hapus produk '+esc(p.nama)+' ('+esc(p.kode)+')?</p><button class="btn red" id="confirmDeleteProduct">Hapus Sekarang</button>'); document.getElementById('confirmDeleteProduct').onclick=async function(){ await post('delete-product',{kode:p.kode}); closeModal(); }; }
   function wireProductButtons(){ document.querySelectorAll('[data-edit-product]').forEach(function(btn){btn.onclick=function(){openEditProduct(btn.dataset.editProduct);};}); document.querySelectorAll('[data-manage-product]').forEach(function(btn){btn.onclick=function(){openManageProduct(btn.dataset.manageProduct);};}); document.querySelectorAll('[data-stock-product]').forEach(function(btn){btn.onclick=function(){openStockProduct(btn.dataset.stockProduct);};}); document.querySelectorAll('[data-delete-product]').forEach(function(btn){btn.onclick=function(){openDeleteProduct(btn.dataset.deleteProduct);};}); document.querySelectorAll('[data-toggle-product]').forEach(function(btn){btn.onclick=async function(e){ e.stopPropagation(); var p=findProduct(btn.dataset.toggleProduct); if(!p) return; await post('toggle-product',{kode:p.kode,active:p.active===false}); };}); }

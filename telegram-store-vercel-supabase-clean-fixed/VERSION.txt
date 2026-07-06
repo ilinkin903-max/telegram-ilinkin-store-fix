@@ -1,5 +1,4 @@
-Admin UI v18
-- Memastikan revisi v17 masuk.
-- Fix tab aktif: menu yang diklik selalu menjadi kuning, termasuk Voucher/Broadcast/Toko.
-- Link Customer Service dan Grup tetap ada di /start dan diatur dari Mini App.
-- Teks bot tetap menampilkan "2 varian" tanpa kode produk utama.
+Admin UI v19 - Variant parser fix
+- Varian tidak lagi dikirim dari Mini App sebagai teks delimiter untuk edit/stok/kelola.
+- Stok, deskripsi, dan SnK varian sekarang dikirim sebagai JSON terstruktur.
+- Aman untuk isi karakter | : ; dan deskripsi/SnK beberapa baris.
