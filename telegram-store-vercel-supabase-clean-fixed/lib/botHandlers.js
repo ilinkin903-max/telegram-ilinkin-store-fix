@@ -88,6 +88,50 @@ function homeKeyboard(req, userId) {
   return { inline_keyboard: rows };
 }
 
+
+
+async function editMessage(query, text, options = {}) {
+  const chatId = query.message.chat.id;
+  const messageId = query.message.message_id;
+  try {
+    if (query.message.photo || query.message.video || query.message.animation || query.message.document) {
+      return await tg.editMessageCaption(chatId, messageId, text, options);
+    }
+    return await tg.editMessageText(chatId, messageId, text, options);
+  } catch (error) {
+    await tg.deleteMessage(chatId, messageId).catch(() => null);
+    return tg.sendMessage(chatId, text, options);
+  }
+}
+
+async function buildHomeText(from) {
+  const stats = await db.getStats();
+  return `Halo, *${from.first_name || 'Kak'}* 👋
+
+` +
+    `Selamat datang di *${config.botName}*
+` +
+    `- 👥 Total User: *${stats.users} User*
+` +
+    `- 🛍️ Total Transaksi: *${stats.orders} Transaksi*
+` +
+    `- 📦 Stok Tersedia: *${stats.stokTersedia}*
+` +
+    `- 📦 Stok Terjual: *${stats.stokTerjual}*
+
+` +
+    `Silahkan pilih tombol dibawah ini!`;
+}
+
+async function editHome(query, req) {
+  await db.upsertUser(query.from);
+  const text = await buildHomeText(query.from);
+  return editMessage(query, text, {
+    parse_mode: 'Markdown',
+    reply_markup: homeKeyboard(req, query.from.id)
+  });
+}
+
 async function sendHome(chatId, from, req) {
   await db.upsertUser(from);
   const stats = await db.getStats();
@@ -211,29 +255,42 @@ function productButtons(products) {
   return { inline_keyboard: rows };
 }
 
-async function sendProductList(chatId) {
+async function sendProductList(chatId, query = null) {
   const products = await db.listProducts({ activeOnly: true });
-  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk aktif.');
-  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk terlebih dahulu. Setelah itu pilih varian, lalu jumlah belinya.';
-  return tg.sendMessage(chatId, text, {
-    parse_mode: 'Markdown',
-    reply_markup: productButtons(products)
-  });
+  if (!products.length) {
+    const empty = '📭 Belum ada produk aktif.';
+    if (query?.message?.message_id) return editMessage(query, empty, { reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]] } });
+    return tg.sendMessage(chatId, empty);
+  }
+  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk. Jika ada varian, pilih varian lalu langsung atur jumlah beli.';
+  const options = { parse_mode: 'Markdown', reply_markup: productButtons(products) };
+  if (query?.message?.message_id) return editMessage(query, text, options);
+  return tg.sendMessage(chatId, text, options);
 }
 
-async function sendStock(chatId) {
+async function sendStock(chatId, query = null) {
   const products = await db.listProducts({ activeOnly: true });
-  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk aktif.');
+  if (!products.length) {
+    const empty='📭 Belum ada produk aktif.';
+    if (query?.message?.message_id) return editMessage(query, empty);
+    return tg.sendMessage(chatId, empty);
+  }
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const variantLines = (p.variants || []).map((v) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
     return `${i + 1}. *${p.nama}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
-  return tg.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
+  if (query?.message?.message_id) return editMessage(query, text, options);
+  return tg.sendMessage(chatId, text, options);
 }
 
-async function sendHistory(chatId, userId) {
+async function sendHistory(chatId, userId, query = null) {
   const rows = await db.listTransactionsByUser(userId, 8);
-  if (!rows.length) return tg.sendMessage(chatId, '📭 Kamu belum memiliki riwayat transaksi.');
+  if (!rows.length) {
+    const empty='📭 Kamu belum memiliki riwayat transaksi.';
+    if (query?.message?.message_id) return editMessage(query, empty, { reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
+    return tg.sendMessage(chatId, empty);
+  }
   const text = '*RIWAYAT TRANSAKSI*\n=======================\n' + rows.map((item, idx) => (
     `${idx + 1}. *${item.product_name}*${item.variant_name ? ' - ' + item.variant_name : ''}\n` +
     `   Kode: \`${item.product_code}\`\n` +
@@ -241,7 +298,9 @@ async function sendHistory(chatId, userId) {
     `   Harga: *${formatRupiah(item.total_price)}*\n` +
     `   Tanggal: *${formatWIB(item.created_at)}*`
   )).join('\n\n');
-  return tg.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
+  if (query?.message?.message_id) return editMessage(query, text, options);
+  return tg.sendMessage(chatId, text, options);
 }
 
 function confirmationText(product, order) {
@@ -287,7 +346,7 @@ function quantityKeyboard() {
         { text: '+50', callback_data: 'plus:50' }
       ],
       [{ text: '🔄 Reset', callback_data: 'reset' }],
-      [{ text: '🔙 Kembali', callback_data: 'kembaliawal' }, { text: '✅ Konfirmasi', callback_data: 'konfirmasi' }]
+      [{ text: '🔙 Kembali', callback_data: 'daftarproduk' }, { text: '✅ Konfirmasi', callback_data: 'konfirmasi' }]
     ]
   };
 }
@@ -549,15 +608,14 @@ async function handleProductSelection(query, code) {
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   const variants = Array.isArray(product.variants) ? product.variants : [];
   if (variants.length) {
-    await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
     const rows = variants.map((variant, index) => ([{
       text: `${variant.name} | ${formatRupiah(variantPrice(product, variant))} | Stok ${stockOfVariant(variant).length}`,
       callback_data: `variant:${product.kode}:${index}`
     }]));
     rows.push([{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]);
-    return tg.sendMessage(userId, `📦 *${product.nama}*
+    return editMessage(query, `📦 *${product.nama}*
 =======================
-Pilih varian produk yang ingin dibeli:`, {
+Pilih varian produk yang ingin dibeli. Setelah memilih varian, kamu langsung mengatur jumlah beli.`, {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: rows }
     });
@@ -579,28 +637,7 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
     quantity: 1,
     status: 'draft'
   });
-  await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
-  return tg.sendMessage(userId, `📦 *${product.nama}*
-` +
-    `=======================
-` +
-    `Varian: *${variantName}*
-` +
-    `Harga Satuan: *${formatRupiah(unitPrice)}*
-` +
-    `Harga Grosir:
-${formatBulkText(product, variant)}
-` +
-    `Stok Tersedia: *${variant ? stockOfVariant(variant).length : product.data.length}*
-` +
-    `Deskripsi: *${variantDescription(product, variant)}*
-` +
-    `=======================
-` +
-    `Klik tombol dibawah untuk melanjutkan!`, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: [[{ text: '➡️ Lanjut', callback_data: 'lanjut' }], [{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]] }
-    });
+  return showConfirmation(query, true);
 }
 
 async function handleVariantSelection(query, code, indexText) {
@@ -623,7 +660,7 @@ async function showConfirmation(query, edit = false) {
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   const text = confirmationText(product, order);
   const options = { parse_mode: 'Markdown', reply_markup: quantityKeyboard() };
-  if (edit && query.message?.message_id) return tg.editMessageText(query.message.chat.id, query.message.message_id, text, options);
+  if (edit && query.message?.message_id) return editMessage(query, text, options);
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   return tg.sendMessage(userId, text, options);
 }
@@ -811,16 +848,15 @@ async function handleCallbackQuery(query, req) {
   const cmd = String(query.data || '');
   await tg.answerCallbackQuery(query.id).catch(() => null);
 
-  if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id);
-  if (cmd === 'stok') return sendStock(query.message.chat.id);
-  if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id);
+  if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id, query);
+  if (cmd === 'stok') return sendStock(query.message.chat.id, query);
+  if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
   if (cmd === 'caraorder') {
-    return tg.sendMessage(query.message.chat.id, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Setelah bayar klik Saya Sudah Bayar\n7. Produk dikirim otomatis', { parse_mode: 'Markdown' });
+    return editMessage(query, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk/varian\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Setelah bayar klik Saya Sudah Bayar\n7. Produk dikirim otomatis', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
   }
   if (cmd === 'kembaliawal') {
     await db.deletePendingOrder(query.from.id).catch(() => null);
-    await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-    return sendHome(query.message.chat.id, query.from, req);
+    return editHome(query, req);
   }
   if (cmd.startsWith('item:')) return handleProductSelection(query, cmd.slice(5));
   if (cmd.startsWith('variant:')) { const parts = cmd.split(':'); return handleVariantSelection(query, parts[1], parts[2]); }
@@ -829,24 +865,21 @@ async function handleCallbackQuery(query, req) {
   if (cmd.startsWith('plus:')) return changeQuantity(query, Number(cmd.split(':')[1] || 1), false);
   if (cmd.startsWith('min:')) return changeQuantity(query, -Number(cmd.split(':')[1] || 1), false);
   if (cmd === 'konfirmasi') {
-    await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-    return tg.sendMessage(query.from.id, '🎟 Jika kamu mempunyai kode voucher yang berlaku, klik Punya. Jika tidak, klik Tidak.', {
-      reply_markup: { inline_keyboard: [[{ text: 'Tidak', callback_data: 'bayar' }, { text: 'Punya', callback_data: 'punya' }], [{ text: '❌ Batal', callback_data: 'batalbeli' }]] }
+    return editMessage(query, '🎟 Jika kamu mempunyai kode voucher yang berlaku, klik Punya. Jika tidak, klik Tidak.', {
+      reply_markup: { inline_keyboard: [[{ text: 'Tidak', callback_data: 'bayar' }, { text: 'Punya', callback_data: 'punya' }], [{ text: '🔙 Kembali', callback_data: 'daftarproduk' }, { text: '❌ Batal', callback_data: 'batalbeli' }]] }
     });
   }
   if (cmd === 'punya') {
     const order = await db.getPendingOrder(query.from.id);
     if (!order) return tg.sendMessage(query.from.id, '⚠️ Harap ulangi pilih produk!');
     await db.upsertPendingOrder({ ...order, status: 'waiting_voucher' });
-    await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-    return tg.sendMessage(query.from.id, 'Silahkan kirim kode voucher kamu.');
+    return editMessage(query, 'Silahkan kirim kode voucher kamu.');
   }
   if (cmd === 'bayar') return createPayment(query);
   if (cmd.startsWith('cekbayar:')) return checkPayment(query, cmd.split(':')[1]);
   if (cmd === 'batalbeli') {
     await db.deletePendingOrder(query.from.id).catch(() => null);
-    await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-    return tg.sendMessage(query.from.id, '✅ Pesananmu berhasil dibatalkan.');
+    return editMessage(query, '✅ Pesananmu berhasil dibatalkan.');
   }
 }
 

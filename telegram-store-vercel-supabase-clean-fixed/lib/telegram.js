@@ -37,6 +37,16 @@ async function editMessageText(chatId, messageId, text, options = {}) {
   });
 }
 
+
+async function editMessageCaption(chatId, messageId, caption, options = {}) {
+  return callTelegram('editMessageCaption', {
+    chat_id: chatId,
+    message_id: messageId,
+    caption,
+    ...options
+  });
+}
+
 async function answerCallbackQuery(callbackQueryId, options = {}) {
   return callTelegram('answerCallbackQuery', {
     callback_query_id: callbackQueryId,
@@ -108,6 +118,7 @@ module.exports = {
   callTelegram,
   sendMessage,
   editMessageText,
+  editMessageCaption,
   answerCallbackQuery,
   deleteMessage,
   sendPhoto,

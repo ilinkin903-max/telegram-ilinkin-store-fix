@@ -1,16 +1,19 @@
-# Telegram Store Vercel Supabase - Admin UI v8
+# Telegram Store Vercel Supabase - Admin UI v10
 
-Update ini menambahkan warna pada Voucher, Broadcast, Produk Terlaris, Identitas Toko, Panduan Media, dan tombol ON/OFF produk. Produk yang OFF tidak muncul di daftar produk/stok bot Telegram.
+Upload isi folder ini ke root repository GitHub, lalu Redeploy di Vercel.
 
-## Pasang
-1. Upload isi ZIP ke GitHub.
-2. Redeploy Vercel.
-3. Jalankan SQL update di Supabase.
-4. Buka ulang webhook:
+## Setelah deploy
+Buka ulang webhook:
 
 ```text
 https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=abc123
 ```
 
-## SQL update wajib
-Jalankan file `supabase/update-owner-tools.sql` di Supabase SQL Editor.
+Sesuaikan `abc123` dengan `WEBHOOK_SECRET` kamu.
+
+## Catatan v10
+- Edit Produk sekarang bisa menambah varian baru.
+- Deskripsi/SnK produk dan varian bisa multi-baris.
+- Stok varian tetap dikelola dari tombol Stok/Kelola.
+- Di bot Telegram, pilih varian langsung menuju pengaturan jumlah, tidak lewat halaman tambahan.
+- Tombol kembali di daftar produk, varian, stok, riwayat, dan konfirmasi memakai edit pesan supaya chat tidak penuh.
