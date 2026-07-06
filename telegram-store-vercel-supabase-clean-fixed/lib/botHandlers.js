@@ -879,7 +879,14 @@ async function handleCallbackQuery(query, req) {
   if (cmd.startsWith('cekbayar:')) return checkPayment(query, cmd.split(':')[1]);
   if (cmd === 'batalbeli') {
     await db.deletePendingOrder(query.from.id).catch(() => null);
-    return editMessage(query, '✅ Pesananmu berhasil dibatalkan.');
+    // Jika sedang di halaman QRIS, hapus pesan QRIS agar gambar QR tidak tertinggal,
+    // lalu tampilkan kembali halaman awal seperti /start. Untuk halaman teks biasa,
+    // cukup edit pesan agar tidak menambah spam pesan baru.
+    if (query.message && (query.message.photo || query.message.video || query.message.animation || query.message.document)) {
+      await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+      return sendHome(query.message.chat.id, query.from, req);
+    }
+    return editHome(query, req);
   }
 }
 

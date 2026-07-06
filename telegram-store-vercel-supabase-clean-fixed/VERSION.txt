@@ -1,8 +1,1 @@
-Admin UI v10 - edit varian tambah + bot edit pesan
-
-Perubahan:
-- Popup Edit Produk bisa menambah varian baru.
-- Deskripsi dan SnK produk/varian memakai textarea beberapa baris.
-- Deskripsi dan SnK varian disimpan multi-baris lewat JSON variants.
-- Alur bot Telegram lebih ringkas: setelah pilih varian langsung ke atur jumlah, tanpa halaman lanjut tambahan.
-- Tombol Kembali di alur produk memakai edit pesan agar tidak menumpuk banyak pesan baru.
+Admin UI v11 - fix multiline variant edit and QRIS cancel cleanup

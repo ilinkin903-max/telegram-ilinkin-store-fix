@@ -72,6 +72,20 @@ function parseVariants(value) {
   }).filter((item) => item.name);
 }
 
+function parseVariantPayload(body) {
+  // Prefer structured JSON array from the Mini App. This prevents multiline
+  // descriptions/SnK from being split into extra variants when a legacy
+  // variants_text field is also present in the submitted form.
+  if (Array.isArray(body.variants)) return parseVariants(body.variants);
+  if (Array.isArray(body.variant_text)) return parseVariants(body.variant_text);
+  if (Array.isArray(body.variants_text)) return parseVariants(body.variants_text);
+  if (body.variants !== undefined && typeof body.variants !== 'string') return parseVariants(body.variants);
+  if (body.variant_text !== undefined && String(body.variant_text || '').trim()) return parseVariants(body.variant_text);
+  if (body.variants_text !== undefined && String(body.variants_text || '').trim()) return parseVariants(body.variants_text);
+  if (body.variants !== undefined) return parseVariants(body.variants);
+  return [];
+}
+
 async function broadcast(payload = {}) {
   const users = await db.listUsers(1000);
   const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
@@ -146,7 +160,7 @@ module.exports = async function handler(req, res) {
       const image_url = String(body.image_url || '').trim();
       const category = String(body.category || body.kategori || '').trim();
       const bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
-      const variants = parseVariants(body.variants_text || body.variant_text || body.variants);
+      const variants = parseVariantPayload(body);
       const hasVariants = variants.length > 0;
       const finalHarga = harga || (hasVariants ? numberOf(variants[0].price) : 0);
       const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
@@ -199,7 +213,7 @@ module.exports = async function handler(req, res) {
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);
       if (body.bulk_text !== undefined || body.bulk_prices !== undefined) updates.bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
-      if (body.variants_text !== undefined || body.variant_text !== undefined || body.variants !== undefined) updates.variants = parseVariants(body.variants_text || body.variant_text || body.variants);
+      if (body.variants_text !== undefined || body.variant_text !== undefined || body.variants !== undefined) updates.variants = parseVariantPayload(body);
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
       if (body.field && body.value !== undefined) updates[body.field] = body.field === 'harga' ? numberOf(body.value) : String(body.value || '').trim();
       const product = await db.updateProductByCode(code, updates);

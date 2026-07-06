@@ -312,6 +312,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       if(active){
         var variants=collectEditVariants(p);
         d.variants=variants;
+        delete d.variants_text;
+        delete d.variant_text;
         if(variants.length){
           if(!String(d.harga||'').trim()) d.harga=variants[0].price||p.harga||0;
           if(!String(d.deskripsi||'').trim()) d.deskripsi=variants[0].description||p.deskripsi||'Produk dengan varian.';
@@ -320,6 +322,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         }
       } else {
         d.variants=[];
+        delete d.variants_text;
+        delete d.variant_text;
       }
       await post('edit-product-full',d); closeModal();
     };
@@ -376,6 +380,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     if(t&&t.checked){
       if(variants.length){
         payload.variants=variants;
+        delete payload.variants_text;
+        delete payload.variant_text;
         payload.harga=variants[0].price||'0';
         payload.deskripsi=variants[0].description||'Produk dengan varian.';
         payload.snk=variants[0].snk||'Syarat mengikuti varian yang dipilih.';
