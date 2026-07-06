@@ -1,1 +1,1 @@
-Admin UI v11 - fix multiline variant edit and QRIS cancel cleanup
+Admin UI v12 - QRIS cancel delete + subtle dashboard image background

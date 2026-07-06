@@ -17,3 +17,8 @@ Sesuaikan `abc123` dengan `WEBHOOK_SECRET` kamu.
 - Stok varian tetap dikelola dari tombol Stok/Kelola.
 - Di bot Telegram, pilih varian langsung menuju pengaturan jumlah, tidak lewat halaman tambahan.
 - Tombol kembali di daftar produk, varian, stok, riwayat, dan konfirmasi memakai edit pesan supaya chat tidak penuh.
+
+
+## Update v12
+- Saat pesanan dibatalkan, pesan QRIS/gambar QR dihapus lalu bot mengirim ulang halaman awal seperti /start.
+- Gambar yang diisi pada menu Toko untuk media /start akan muncul samar sebagai background Admin Dashboard.
