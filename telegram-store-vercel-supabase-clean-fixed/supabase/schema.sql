@@ -24,6 +24,7 @@ create table if not exists public.products (
   category text not null default '',
   bulk_prices jsonb not null default '[]'::jsonb,
   variants jsonb not null default '[]'::jsonb,
+  active boolean not null default true,
   stock jsonb not null default '[]'::jsonb,
   sold integer not null default 0,
   created_at timestamptz not null default now(),

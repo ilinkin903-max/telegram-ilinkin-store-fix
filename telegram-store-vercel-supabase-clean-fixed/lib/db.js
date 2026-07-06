@@ -51,6 +51,7 @@ function normalizeProduct(row) {
     snk: row.terms || '',
     image_url: row.image_url || '',
     category: row.category || '',
+    active: row.active !== false,
     bulk_prices: normalizeBulkPrices(row.bulk_prices),
     variants: normalizeVariants(row.variants),
     data: Array.isArray(row.stock) ? row.stock.map((x) => String(x).trim()).filter(Boolean) : [],
@@ -129,8 +130,10 @@ async function getStats() {
   };
 }
 
-async function listProducts() {
-  const { data, error } = await sb().from('products').select('*').order('name', { ascending: true });
+async function listProducts(options = {}) {
+  let query = sb().from('products').select('*').order('name', { ascending: true });
+  if (options.activeOnly) query = query.neq('active', false);
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []).map(normalizeProduct);
 }
@@ -193,6 +196,7 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
   if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
+  if (updates.active !== undefined) payload.active = updates.active === true || String(updates.active).toLowerCase() === 'true' || String(updates.active) === '1' || String(updates.active).toLowerCase() === 'on';
   if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) payload.bulk_prices = normalizeBulkPrices(updates.bulk_prices ?? updates.bulkPrices);
   if (updates.variants !== undefined) payload.variants = normalizeVariants(updates.variants);
   if (updates.data !== undefined || updates.stock !== undefined) {

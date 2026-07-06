@@ -156,6 +156,15 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data: product });
     }
 
+
+    if (action === 'toggle-product') {
+      const code = String(body.kode || '').trim().toUpperCase();
+      if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
+      const product = await db.updateProductByCode(code, { active: boolOf(body.active) });
+      if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
+      return json(res, 200, { ok: true, data: product });
+    }
+
     if (action === 'delete-product') {
       const code = String(body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
@@ -186,6 +195,7 @@ module.exports = async function handler(req, res) {
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
       const updates = {};
       ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      if (body.active !== undefined) updates.active = boolOf(body.active);
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);
       if (body.bulk_text !== undefined || body.bulk_prices !== undefined) updates.bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);

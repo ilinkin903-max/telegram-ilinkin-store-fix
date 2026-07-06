@@ -204,8 +204,8 @@ function productButtons(products) {
 }
 
 async function sendProductList(chatId) {
-  const products = await db.listProducts();
-  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk.');
+  const products = await db.listProducts({ activeOnly: true });
+  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk aktif.');
   const text = '*DAFTAR PRODUK*\n=======================\nPilih produk terlebih dahulu. Setelah itu pilih varian, lalu jumlah belinya.';
   return tg.sendMessage(chatId, text, {
     parse_mode: 'Markdown',
@@ -214,8 +214,8 @@ async function sendProductList(chatId) {
 }
 
 async function sendStock(chatId) {
-  const products = await db.listProducts();
-  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk.');
+  const products = await db.listProducts({ activeOnly: true });
+  if (!products.length) return tg.sendMessage(chatId, '📭 Belum ada produk aktif.');
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const variantLines = (p.variants || []).map((v) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
     return `${i + 1}. *${p.nama}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
@@ -538,6 +538,7 @@ async function handleProductSelection(query, code) {
   const userId = query.from.id;
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
+  if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   const variants = Array.isArray(product.variants) ? product.variants : [];
   if (variants.length) {
     await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
@@ -597,6 +598,7 @@ ${formatBulkText(product, variant)}
 async function handleVariantSelection(query, code, indexText) {
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(query.from.id, '⚠️ Produk tidak ditemukan.');
+  if (product.active === false) return tg.sendMessage(query.from.id, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   const index = Number(indexText);
   const variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
@@ -610,6 +612,7 @@ async function showConfirmation(query, edit = false) {
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, harap ulangi pilih produk!');
+  if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   const text = confirmationText(product, order);
   const options = { parse_mode: 'Markdown', reply_markup: quantityKeyboard() };
   if (edit && query.message?.message_id) return tg.editMessageText(query.message.chat.id, query.message.message_id, text, options);
@@ -642,6 +645,7 @@ async function createPayment(query) {
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
+  if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
   const unit = orderUnitPrice(product, order);

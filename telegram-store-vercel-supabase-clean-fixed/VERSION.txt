@@ -1,1 +1,1 @@
-Admin UI v7 - Edit product form follows Add Product layout, variant editor uses column cards, stock stays in Stok/Kelola.
+Admin UI v8 - voucher colors, product ON/OFF, active products hidden from bot
