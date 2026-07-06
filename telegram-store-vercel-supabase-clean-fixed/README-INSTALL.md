@@ -22,3 +22,15 @@ Sesuaikan `abc123` dengan `WEBHOOK_SECRET` kamu.
 ## Update v12
 - Saat pesanan dibatalkan, pesan QRIS/gambar QR dihapus lalu bot mengirim ulang halaman awal seperti /start.
 - Gambar yang diisi pada menu Toko untuk media /start akan muncul samar sebagai background Admin Dashboard.
+
+## Update v13
+- Edit Produk: saat varian aktif, harga/harga grosir/deskripsi/SnK utama disembunyikan seperti Tambah Produk.
+- Bot: invoice dan produk setelah pembayaran dibuat menjadi satu pesan ringkas.
+- Penjualan: setiap invoice punya tombol Lihat Produk untuk melihat produk yang diterima pembeli di popup.
+
+SQL tambahan wajib dijalankan di Supabase SQL Editor:
+
+```sql
+alter table public.transactions add column if not exists delivered_items jsonb not null default '[]'::jsonb;
+alter table public.transactions add column if not exists delivered_text text not null default '';
+```

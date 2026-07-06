@@ -329,9 +329,11 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         delete d.variants_text;
         delete d.variant_text;
         if(variants.length){
-          if(!String(d.harga||'').trim()) d.harga=variants[0].price||p.harga||0;
-          if(!String(d.deskripsi||'').trim()) d.deskripsi=variants[0].description||p.deskripsi||'Produk dengan varian.';
-          if(!String(d.snk||'').trim()) d.snk=variants[0].snk||p.snk||'Syarat mengikuti varian yang dipilih.';
+          // Saat varian aktif, data harga/grosir/deskripsi/SnK utama mengikuti varian pertama.
+          // Field utama disembunyikan agar edit produk sama ringkasnya seperti tambah produk.
+          d.harga=variants[0].price||0;
+          d.deskripsi=variants[0].description||'Produk dengan varian.';
+          d.snk=variants[0].snk||'Syarat mengikuti varian yang dipilih.';
           d.bulk_text='';
         }
       } else {
@@ -371,7 +373,27 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   }
   function openDeleteProduct(code){ var p=findProduct(code); if(!p) return; openModal('Hapus Produk','<p class="dangerText">Yakin hapus produk '+esc(p.nama)+' ('+esc(p.kode)+')?</p><button class="btn red" id="confirmDeleteProduct">Hapus Sekarang</button>'); document.getElementById('confirmDeleteProduct').onclick=async function(){ await post('delete-product',{kode:p.kode}); closeModal(); }; }
   function wireProductButtons(){ document.querySelectorAll('[data-edit-product]').forEach(function(btn){btn.onclick=function(){openEditProduct(btn.dataset.editProduct);};}); document.querySelectorAll('[data-manage-product]').forEach(function(btn){btn.onclick=function(){openManageProduct(btn.dataset.manageProduct);};}); document.querySelectorAll('[data-stock-product]').forEach(function(btn){btn.onclick=function(){openStockProduct(btn.dataset.stockProduct);};}); document.querySelectorAll('[data-delete-product]').forEach(function(btn){btn.onclick=function(){openDeleteProduct(btn.dataset.deleteProduct);};}); document.querySelectorAll('[data-toggle-product]').forEach(function(btn){btn.onclick=async function(e){ e.stopPropagation(); var p=findProduct(btn.dataset.toggleProduct); if(!p) return; await post('toggle-product',{kode:p.kode,active:p.active===false}); };}); }
-  function renderOrders(){ document.getElementById('orderList').innerHTML=state.orders.map(function(o){ var user=o.username?'@'+esc(o.username):esc(o.telegram_id); var ref=esc(o.order_ref||('INV-'+String(o.created_at||'').replace(/[^0-9]/g,'').slice(-10))); var name=esc(o.product_name)+(o.variant_name?' <span class="chip yellow">'+esc(o.variant_name)+'</span>':''); return '<article class="orderCard"><div class="orderRef">'+ref+'</div><b class="orderTitle">'+name+'</b><span class="statusDone">COMPLETED</span><div class="orderMeta">×'+esc(o.quantity||1)+' · <b>'+rupiah(o.total_price)+'</b><br>💰 Earning: <b style="color:#00877a">'+rupiah(o.total_price)+'</b><br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div></article>'; }).join('')||'<div class="empty">Belum ada order.</div>'; }
+  function orderProductText(o){
+    if(Array.isArray(o.delivered_items) && o.delivered_items.length) return o.delivered_items.join('\n');
+    if(o.delivered_text) return String(o.delivered_text);
+    return 'Data produk pembelian ini belum tersimpan. Order lama sebelum update v13 belum memiliki arsip produk terkirim.';
+  }
+  function openOrderProducts(ref){
+    var o=state.orders.find(function(x){return String(x.order_ref||'')===String(ref||'');});
+    if(!o) return;
+    var user=o.username?'@'+esc(o.username):esc(o.telegram_id);
+    var text=orderProductText(o);
+    openModal('Produk Pembelian', '<div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(o.order_ref||'-')+'</div><div class="detailItem"><b>User</b><br>'+user+'</div><div class="detailItem"><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="detailItem"><b>Total</b><br>'+rupiah(o.total_price)+'</div></div><div class="field" style="margin-top:12px"><label class="label">Produk yang diterima pembeli</label><textarea class="textarea tall" readonly>'+esc(text)+'</textarea></div>');
+  }
+  function renderOrders(){
+    document.getElementById('orderList').innerHTML=state.orders.map(function(o){
+      var user=o.username?'@'+esc(o.username):esc(o.telegram_id);
+      var ref=esc(o.order_ref||('INV-'+String(o.created_at||'').replace(/[^0-9]/g,'').slice(-10)));
+      var name=esc(o.product_name)+(o.variant_name?' <span class="chip yellow">'+esc(o.variant_name)+'</span>':'');
+      return '<article class="orderCard"><div class="orderRef">'+ref+'</div><b class="orderTitle">'+name+'</b><span class="statusDone">COMPLETED</span><div class="orderMeta">×'+esc(o.quantity||1)+' · <b>'+rupiah(o.total_price)+'</b><br>💰 Earning: <b style="color:#00877a">'+rupiah(o.total_price)+'</b><br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div><button class="btn small purple" type="button" data-order-products="'+ref+'">Lihat Produk</button></article>';
+    }).join('')||'<div class="empty">Belum ada order.</div>';
+    document.querySelectorAll('[data-order-products]').forEach(function(btn){btn.onclick=function(){openOrderProducts(btn.dataset.orderProducts);};});
+  }
   function renderUsers(sortMode){ if(sortMode) state.userSort=sortMode; var rows=state.users.slice(); if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);}); else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);}); document.getElementById('userList').innerHTML=rows.map(function(u){return '<tr><td>'+esc(u.telegram_id)+'</td><td>'+(u.username?'@'+esc(u.username):esc(u.first_name||'-'))+'</td><td>'+esc(u.transaction_count||0)+'</td><td>'+rupiah(u.spending||0)+'</td><td><button class="btn small red" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></td></tr>';}).join('')||'<tr><td colspan="5">Belum ada user.</td></tr>'; document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};}); document.querySelectorAll('[data-user-sort]').forEach(function(btn){btn.onclick=function(){ renderUsers(btn.dataset.userSort); };}); }
   function voucherFormHtml(v){ v=v||{}; var target=(v.products&&v.products.length)?v.products.join(','):'semua'; return '<form id="modalVoucherForm" class="form">'+
     '<input type="hidden" name="current_code" value="'+esc(v.code||'')+'">'+

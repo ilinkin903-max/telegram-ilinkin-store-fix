@@ -100,3 +100,7 @@ alter table public.pending_orders add column if not exists unit_price integer no
 alter table public.transactions add column if not exists variant_key text not null default '';
 alter table public.transactions add column if not exists variant_name text not null default '';
 alter table public.transactions add column if not exists unit_price integer not null default 0;
+
+alter table public.transactions add column if not exists delivered_items jsonb not null default '[]'::jsonb;
+alter table public.transactions add column if not exists delivered_text text not null default '';
+

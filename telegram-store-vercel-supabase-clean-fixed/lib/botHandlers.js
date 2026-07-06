@@ -742,34 +742,53 @@ async function createPayment(query) {
 }
 
 
-async function sendDeliveredProductMessage(userId, product, order, variant, dataProduk) {
+async function sendOrderProductInvoiceMessage(userId, product, order, variant, dataProduk) {
   const terms = variantTerms(product, variant);
   const title = `${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}`;
-  const text = `✅ <b>PRODUK BERHASIL DIKIRIM</b>
+  const fee = Number(order.fee || 0);
+  const total = Number(order.amount || 0);
+  const subtotal = Math.max(0, total - fee);
+  const rawProduct = String(dataProduk || '').trim();
+  const productForMessage = rawProduct.length > 2800
+    ? rawProduct.slice(0, 2800) + '\n...\n(Data produk terlalu panjang, salin dari file backup/order log jika diperlukan.)'
+    : rawProduct;
+  const text = `✅ <b>PESANAN SELESAI</b>
 ` +
     `=======================
 ` +
+    `Invoice: <b>${escapeHtml(order.invoice_ref || '-')}</b>
+` +
     `Produk: <b>${escapeHtml(title)}</b>
 ` +
-    `Jumlah: <b>${escapeHtml(order.quantity || 1)}</b>
+    `Harga: <b>${escapeHtml(formatRupiah(subtotal))}</b>
+` +
+    `Jumlah Beli: <b>${escapeHtml(order.quantity || 1)}</b>
+` +
+    `Fee: <b>${escapeHtml(formatRupiah(fee))}</b>
+` +
+    `Total Harga: <b>${escapeHtml(formatRupiah(total))}</b>
+` +
+    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>
+` +
+    `=======================
 
 ` +
     `<b>SYARAT & KETENTUAN</b>
 ${escapeHtml(terms)}
 
 ` +
-    `<b>DATA PRODUK</b>
-<pre>${escapeHtml(dataProduk)}</pre>
+    `<b>PRODUK YANG DIDAPAT</b>
+<pre>${escapeHtml(productForMessage || '-')}</pre>
 ` +
     `Klik/tahan bagian data produk untuk menyalin. Jika tombol salin muncul, gunakan tombol tersebut.`;
-  const copyText = String(dataProduk || '');
+  const copyText = rawProduct;
   const keyboard = copyText.length && copyText.length <= 256 ? {
     inline_keyboard: [[{ text: '📋 Salin Produk', copy_text: { text: copyText } }]]
   } : undefined;
   try {
     return await tg.sendMessage(userId, text, { parse_mode: 'HTML', reply_markup: keyboard });
   } catch (error) {
-    console.error('Gagal kirim pesan produk dengan tombol salin:', error.message);
+    console.error('Gagal kirim invoice + produk:', error.message);
     return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
   }
 }
@@ -806,23 +825,9 @@ async function checkPayment(query, invoiceFromButton) {
   const variant = selectedVariant(product, order);
   const result = await db.completeOrder(order, product, order.amount, query.from);
   const dataProduk = result.delivered.join('\n');
-  const filename = `${userId}-${product.kode}${order.variant_key ? '-' + order.variant_key : ''}-${order.quantity}.txt`;
-  const fileText = `<|==== SYARAT DAN KETENTUAN ====|>\n${variantTerms(product, variant)}\n\n<|==== PRODUK ====|>\n${dataProduk}\n\n//Terimakasih telah percaya kepada ${config.botName}.`;
 
-  await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-  await tg.sendDocument(userId, filename, fileText, {
-    caption: `✅ PESANAN SELESAI\n` +
-      `=======================\n` +
-      `Invoice: ${order.invoice_ref}\n` +
-      `Produk: ${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}\n` +
-      `Jumlah Beli: ${order.quantity}\n` +
-      `Total Harga: ${formatRupiah(order.amount)}\n` +
-      `Tanggal: ${formatWIB(new Date())}\n` +
-      `=======================\n` +
-      `Terimakasih telah membeli produk di ${config.botName}`
-  });
-
-  await sendDeliveredProductMessage(userId, product, order, variant, dataProduk);
+  await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+  await sendOrderProductInvoiceMessage(userId, product, order, variant, dataProduk);
 
   if (config.channelLog) {
     const fee = Number(order.fee || 0);

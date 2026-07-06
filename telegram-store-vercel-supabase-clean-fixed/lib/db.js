@@ -501,6 +501,8 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     quantity,
     total_price: Number(totalPrice),
     order_ref: order.invoice_ref || null,
+    delivered_items: delivered,
+    delivered_text: delivered.join('\n'),
     created_at: new Date().toISOString()
   };
 
