@@ -1,1 +1,1 @@
-Admin UI v13 - Edit variant hide main fields + one-message invoice product + order product popup
+Admin UI v14 - Edit variant hides main fields + product card price follows variants

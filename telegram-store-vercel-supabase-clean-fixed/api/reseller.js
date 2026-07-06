@@ -233,9 +233,29 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
   function productColor(p){ var text=String((p&&p.kode)||(p&&p.nama)||'x'); var h=0; for(var i=0;i<text.length;i++) h=(h*31+text.charCodeAt(i))%360; return 'hsl('+h+' 85% 68%)'; }
   function productMediaHtml(p){ if(p.image_url) return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
-  function renderProducts(){ var q=(document.getElementById('search').value||'').toLowerCase(); var rows=state.products.filter(function(p){return productMatches(p,q);}); document.getElementById('productCounter').textContent=rows.length+' / '+state.products.length+' produk'; document.getElementById('productList').innerHTML=rows.map(function(p){ var bulk=(p.bulk_prices||[]).slice(0,2).map(function(b){return '<span class="chip yellow">'+(b.min_qty||b.qty)+'+ '+rupiah(b.price||b.harga)+'</span>';}).join(''); var vars=(p.variants||[]).slice(0,3).map(function(v){return '<span class="chip purple">'+esc(v.name||v.nama)+' '+rupiah(v.price||v.harga||p.harga)+' • '+variantStock(v).length+' stok</span>';}).join(''); return '<article class="product '+(p.active===false?'productOff':'')+'">'+
-      '<div class="productTop">'+productMediaHtml(p)+'<div><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - STOK '+stockCount(p)+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
-      '<div class="price">'+rupiah(p.harga)+'</div><div class="chips"><span class="chip green">'+esc(p.kode)+'</span>'+bulk+vars+'</div>'+ 
+  function productVariants(p){ return Array.isArray(p&&p.variants) ? p.variants.filter(function(v){ return (v.name||v.nama||v.sku||v.kode) && Number(v.price||v.harga||0)>0; }) : []; }
+  function productDisplayPrice(p){
+    var vars=productVariants(p);
+    if(!vars.length) return rupiah(p.harga);
+    var prices=vars.map(function(v){return Number(v.price||v.harga||0);}).filter(function(n){return n>0;}).sort(function(a,b){return a-b;});
+    if(!prices.length) return rupiah(p.harga);
+    if(prices[0]===prices[prices.length-1]) return rupiah(prices[0]);
+    return rupiah(prices[0])+' - '+rupiah(prices[prices.length-1]);
+  }
+  function productBulkChips(p){
+    var vars=productVariants(p);
+    if(vars.length){
+      return vars.slice(0,3).map(function(v){
+        var b=(v.bulk_prices||[])[0];
+        if(!b) return '';
+        return '<span class="chip yellow">'+esc(v.name||v.nama||v.sku||v.kode)+' '+(b.min_qty||b.qty)+'+ '+rupiah(b.price||b.harga)+'</span>';
+      }).join('');
+    }
+    return (p.bulk_prices||[]).slice(0,2).map(function(b){return '<span class="chip yellow">'+(b.min_qty||b.qty)+'+ '+rupiah(b.price||b.harga)+'</span>';}).join('');
+  }
+  function renderProducts(){ var q=(document.getElementById('search').value||'').toLowerCase(); var rows=state.products.filter(function(p){return productMatches(p,q);}); document.getElementById('productCounter').textContent=rows.length+' / '+state.products.length+' produk'; document.getElementById('productList').innerHTML=rows.map(function(p){ var varsArr=productVariants(p); var bulk=productBulkChips(p); var vars=varsArr.slice(0,3).map(function(v){return '<span class="chip purple">'+esc(v.name||v.nama)+' '+rupiah(v.price||v.harga||p.harga)+' • '+variantStock(v).length+' stok</span>';}).join(''); return '<article class="product '+(p.active===false?'productOff':'')+'">'+
+      '<div class="productTop">'+productMediaHtml(p)+'<div><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - STOK '+stockCount(p)+(varsArr.length?' - '+varsArr.length+' varian':'')+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
+      '<div class="price">'+productDisplayPrice(p)+'</div><div class="chips"><span class="chip green">'+esc(p.kode)+'</span>'+bulk+vars+'</div>'+ 
       '<div class="actions"><button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button><button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button><button class="btn small red" data-delete-product="'+esc(p.kode)+'">Hapus</button></div></article>'; }).join('')||'<div class="empty">Produk belum ada.</div>'; wireProductButtons(); }
   function findProduct(code){ return state.products.find(function(x){return x.kode===code;}); }
   function editVariantCardHtml(v,i, allowRemove){
@@ -304,8 +324,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     return '<form id="modalEditForm" class="form"><input type="hidden" name="kode" value="'+esc(p.kode)+'">'+
       '<div class="row3"><div class="field"><label class="label">Nama Produk</label><input class="input" name="nama" placeholder="Contoh: Canva Pro 1 Bulan" value="'+esc(p.nama||'')+'"></div><div class="field"><label class="label">Kode Produk</label><input class="input" name="kode_baru" placeholder="Contoh: CANVA1B" value="'+esc(p.kode||'')+'"></div><div class="field"><label class="label">Kategori</label><input class="input" name="category" placeholder="Contoh: Akun Premium" value="'+esc(p.category||'')+'"></div></div>'+
       '<div class="field"><label class="label">Link Gambar Produk</label><input class="input" name="image_url" placeholder="Opsional: https://domain.com/canva.jpg" value="'+esc(p.image_url||'')+'"></div>'+ 
-      '<div class="row" data-hide-when-edit-variant><div class="field"><label class="label">Harga Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
-      '<div class="row" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
+      '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
+      '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
       '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
       '<button class="btn cyan" type="submit">Simpan Perubahan</button></form>';
   }
