@@ -71,7 +71,16 @@ async function broadcastToUsers(payload = {}) {
 }
 
 
-function homeKeyboard(req, userId) {
+function normalizeUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^t\.me\//i.test(value)) return `https://${value}`;
+  if (/^@/.test(value)) return `https://t.me/${value.slice(1)}`;
+  return `https://${value}`;
+}
+
+function homeKeyboard(req, userId, settings = {}) {
   const rows = [
     [{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }],
     [
@@ -82,9 +91,14 @@ function homeKeyboard(req, userId) {
   ];
 
   const miniAppUrl = getMiniAppUrl(req);
-  if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Reseller Panel', web_app: { url: miniAppUrl } }]);
-  if (config.channelStore) rows.push([{ text: '‹📢› Channel', url: config.channelStore }]);
-  if (config.customerService) rows.push([{ text: '‹📞› Customer Service', url: config.customerService }]);
+  if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Admin Dashboard', web_app: { url: miniAppUrl } }]);
+  const csUrl = normalizeUrl(settings.customer_service_link || config.customerService);
+  const groupUrl = normalizeUrl(settings.group_link || config.channelStore);
+  const contactRow = [];
+  if (csUrl) contactRow.push({ text: '‹📞› Customer Service', url: csUrl });
+  if (groupUrl) contactRow.push({ text: '‹👥› Grup', url: groupUrl });
+  if (contactRow.length) rows.push(contactRow);
+  if (config.channelStore && groupUrl !== normalizeUrl(config.channelStore)) rows.push([{ text: '‹📢› Channel', url: normalizeUrl(config.channelStore) }]);
   return { inline_keyboard: rows };
 }
 
@@ -126,9 +140,10 @@ async function buildHomeText(from) {
 async function editHome(query, req) {
   await db.upsertUser(query.from);
   const text = await buildHomeText(query.from);
+  const settings = await db.getShopSettings().catch(() => ({}));
   return editMessage(query, text, {
     parse_mode: 'Markdown',
-    reply_markup: homeKeyboard(req, query.from.id)
+    reply_markup: homeKeyboard(req, query.from.id, settings)
   });
 }
 
@@ -143,8 +158,8 @@ async function sendHome(chatId, from, req) {
     `- 📦 Stok Terjual: *${stats.stokTerjual}*\n\n` +
     `Silahkan pilih tombol dibawah ini!`;
 
-  const reply_markup = homeKeyboard(req, from.id);
   const settings = await db.getShopSettings().catch(() => ({}));
+  const reply_markup = homeKeyboard(req, from.id, settings);
   const mediaType = String(settings.start_media_type || 'none').toLowerCase();
   const mediaValue = String(settings.start_media_value || '').trim();
   const mediaCaption = String(settings.start_media_caption || '').trim();
@@ -265,7 +280,7 @@ function productButtons(products) {
     const allVariants = Array.isArray(p.variants) ? p.variants : [];
     const prices = variants.length ? variants.map((v) => variantPrice(p, v)).filter(Boolean) : [Number(p.harga || 0)];
     const minPrice = prices.length ? Math.min(...prices) : Number(p.harga || 0);
-    const suffix = allVariants.length ? ` | ${variants.length}/${allVariants.length} varian aktif` : '';
+    const suffix = variants.length ? ` | ${variants.length} varian` : '';
     return [{
       text: `${p.nama} | mulai ${formatRupiah(minPrice)} | Stok ${productStockTotal(p)}${suffix}`,
       callback_data: `item:${p.kode}`

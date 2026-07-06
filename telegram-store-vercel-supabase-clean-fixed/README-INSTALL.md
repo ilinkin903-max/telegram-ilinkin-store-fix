@@ -50,3 +50,10 @@ Setiap varian produk bisa diaktifkan/nonaktifkan sendiri dari Mini App:
 - Produk tetap terlihat di Mini App agar admin bisa mengaktifkan varian kembali
 
 Tidak perlu SQL baru karena status varian disimpan di kolom JSON `products.variants`.
+
+
+## Admin UI v17
+- Teks varian di bot disederhanakan menjadi '2 varian'.
+- Kode produk utama tidak ditampilkan di kartu produk Mini App.
+- Kode produk/varian di Produk Terlaris tidak ditampilkan.
+- /start menambahkan tombol Customer Service dan Grup dari pengaturan Mini App.

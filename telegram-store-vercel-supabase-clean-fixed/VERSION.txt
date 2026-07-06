@@ -3,3 +3,10 @@ Admin UI v16
 - Varian OFF tetap terlihat di Mini App untuk admin, tetapi tidak muncul di pilihan varian bot Telegram.
 - Harga kartu produk mengikuti varian aktif; jika semua varian OFF, kartu tetap terlihat di admin dengan status varian OFF.
 - Tombol ON/OFF varian tersedia di Tambah Produk dan Edit Produk.
+
+
+## Admin UI v17
+- Teks varian di bot disederhanakan menjadi '2 varian'.
+- Kode produk utama tidak ditampilkan di kartu produk Mini App.
+- Kode produk/varian di Produk Terlaris tidak ditampilkan.
+- /start menambahkan tombol Customer Service dan Grup dari pengaturan Mini App.

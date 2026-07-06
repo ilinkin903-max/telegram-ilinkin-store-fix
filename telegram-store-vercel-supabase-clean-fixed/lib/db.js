@@ -337,13 +337,13 @@ async function getMonthlyRekap(month, year) {
 async function getShopSettings() {
   const { data, error } = await sb().from('shop_settings').select('key,value');
   if (error) throw error;
-  const out = { store_name: '', store_description: '', logo_url: '', banner_url: '', start_media_type: 'none', start_media_value: '', start_media_caption: '' };
+  const out = { store_name: '', store_description: '', logo_url: '', banner_url: '', start_media_type: 'none', start_media_value: '', start_media_caption: '', customer_service_link: '', group_link: '' };
   (data || []).forEach((row) => { out[row.key] = row.value; });
   return out;
 }
 
 async function saveShopSettings(input = {}) {
-  const rows = ['store_name', 'store_description', 'logo_url', 'banner_url', 'start_media_type', 'start_media_value', 'start_media_caption']
+  const rows = ['store_name', 'store_description', 'logo_url', 'banner_url', 'start_media_type', 'start_media_value', 'start_media_caption', 'customer_service_link', 'group_link']
     .filter((key) => input[key] !== undefined)
     .map((key) => ({ key, value: String(input[key] || ''), updated_at: new Date().toISOString() }));
   if (!rows.length) return getShopSettings();

@@ -149,7 +149,9 @@ module.exports = async function handler(req, res) {
         banner_url: body.banner_url,
         start_media_type: body.start_media_type,
         start_media_value: body.start_media_value,
-        start_media_caption: body.start_media_caption
+        start_media_caption: body.start_media_caption,
+        customer_service_link: body.customer_service_link,
+        group_link: body.group_link
       });
       return json(res, 200, { ok: true, data });
     }
