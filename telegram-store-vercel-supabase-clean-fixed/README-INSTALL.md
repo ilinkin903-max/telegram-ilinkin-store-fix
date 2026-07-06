@@ -1,3 +1,15 @@
+# Admin UI v18
+
+Perbaikan:
+- Tab/menu yang diklik selalu menjadi kuning.
+- Voucher, Broadcast, dan Toko tetap hijau saat tidak aktif.
+- Revisi v17 tetap ada: tombol Customer Service dan Grup di /start, teks varian singkat, kode produk utama tidak tampil di kartu produk, kode produk/varian tidak tampil di produk terlaris.
+
+Cara pasang:
+1. Upload isi ZIP ke GitHub.
+2. Redeploy Vercel.
+3. Buka ulang /api/set-webhook?secret=...
+
 # Telegram Store Vercel Supabase - Admin UI v10
 
 Upload isi folder ini ke root repository GitHub, lalu Redeploy di Vercel.
