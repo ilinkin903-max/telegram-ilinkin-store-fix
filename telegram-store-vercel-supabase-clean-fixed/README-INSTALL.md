@@ -34,3 +34,7 @@ SQL tambahan wajib dijalankan di Supabase SQL Editor:
 alter table public.transactions add column if not exists delivered_items jsonb not null default '[]'::jsonb;
 alter table public.transactions add column if not exists delivered_text text not null default '';
 ```
+
+
+## Update v15
+- Perbaikan tampilan form varian: field utama non-varian benar-benar disembunyikan saat varian aktif.

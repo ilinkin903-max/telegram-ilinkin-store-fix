@@ -1,1 +1,3 @@
-Admin UI v14 - Edit variant hides main fields + product card price follows variants
+Admin UI v15
+- Fix: field Harga Satuan, Harga Grosir, Deskripsi, dan Syarat & Ketentuan sekarang benar-benar hilang saat varian aktif di Tambah Produk dan Edit Produk.
+- Menjaga harga tampilan produk tetap mengikuti harga varian.
