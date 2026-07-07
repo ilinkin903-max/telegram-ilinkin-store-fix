@@ -1,3 +1,21 @@
+# Update v25 - Maintenance Database
+
+Versi ini menambahkan tab **Maintenance** di Mini App untuk membersihkan data lama agar Supabase Free tetap ringan.
+
+Fitur maintenance:
+- hapus pending order expired
+- hapus pending order lama
+- hapus polling lama beserta hasilnya
+- hapus detail jawaban polling lama
+- kosongkan produk terkirim lama tanpa menghapus invoice
+- hapus user tanpa transaksi lama
+- hapus voucher nonaktif/expired
+- hapus transaksi lama permanen, gunakan hati-hati
+
+Tidak perlu SQL baru. Upload isi ZIP ke GitHub, redeploy Vercel, lalu set webhook ulang.
+
+---
+
 # Telegram Store Vercel Supabase - Admin UI v23
 
 Update v23:

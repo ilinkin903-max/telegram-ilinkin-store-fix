@@ -750,6 +750,144 @@ async function deleteBroadcastPoll(id) {
   if (error) throw error;
 }
 
+
+function cutoffIso(days) {
+  const safeDays = Math.max(1, Number(days || 30));
+  return new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function countRows(table, apply) {
+  let query = sb().from(table).select('*', { count: 'exact', head: true });
+  if (typeof apply === 'function') query = apply(query);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count || 0;
+}
+
+async function getMaintenanceStats() {
+  const now = new Date().toISOString();
+  const older7 = cutoffIso(7);
+  const older30 = cutoffIso(30);
+  const older90 = cutoffIso(90);
+  const [
+    pendingOrders,
+    pendingOld,
+    pendingExpired,
+    transactions,
+    transactionsOld90,
+    deliveredOld90,
+    polls,
+    pollsOld30,
+    pollAnswers,
+    users,
+    usersEmptyOld30,
+    inactiveExpiredVouchers
+  ] = await Promise.all([
+    countRows('pending_orders'),
+    countRows('pending_orders', (q) => q.lt('updated_at', older7)),
+    countRows('pending_orders', (q) => q.not('expires_at', 'is', null).lt('expires_at', now)),
+    countRows('transactions'),
+    countRows('transactions', (q) => q.lt('created_at', older90)),
+    countRows('transactions', (q) => q.lt('created_at', older90).neq('delivered_text', '')),
+    countRows('broadcast_polls'),
+    countRows('broadcast_polls', (q) => q.lt('created_at', older30)),
+    countRows('broadcast_poll_answers'),
+    countRows('bot_users'),
+    countRows('bot_users', (q) => q.eq('transaction_count', 0).lt('updated_at', older30)),
+    countRows('vouchers', (q) => q.or(`active.eq.false,expires_at.lt.${now}`))
+  ]);
+  return {
+    pending_orders: pendingOrders,
+    pending_orders_old_7d: pendingOld,
+    pending_orders_expired: pendingExpired,
+    transactions,
+    transactions_old_90d: transactionsOld90,
+    delivered_items_old_90d: deliveredOld90,
+    broadcast_polls: polls,
+    broadcast_polls_old_30d: pollsOld30,
+    broadcast_poll_answers: pollAnswers,
+    bot_users: users,
+    bot_users_empty_old_30d: usersEmptyOld30,
+    vouchers_inactive_or_expired: inactiveExpiredVouchers,
+    generated_at: new Date().toISOString()
+  };
+}
+
+async function deleteByIds(table, column, ids) {
+  if (!ids.length) return 0;
+  const { error } = await sb().from(table).delete().in(column, ids);
+  if (error) throw error;
+  return ids.length;
+}
+
+async function cleanupDatabase(input = {}) {
+  const target = String(input.target || '').trim();
+  const days = Math.max(1, Number(input.days || 30));
+  const cutoff = cutoffIso(days);
+  const now = new Date().toISOString();
+
+  if (target === 'pending-old') {
+    const before = await countRows('pending_orders', (q) => q.lt('updated_at', cutoff));
+    const { error } = await sb().from('pending_orders').delete().lt('updated_at', cutoff);
+    if (error) throw error;
+    return { target, days, affected: before, message: `Pending order lebih dari ${days} hari dihapus.` };
+  }
+
+  if (target === 'pending-expired') {
+    const before = await countRows('pending_orders', (q) => q.not('expires_at', 'is', null).lt('expires_at', now));
+    const { error } = await sb().from('pending_orders').delete().not('expires_at', 'is', null).lt('expires_at', now);
+    if (error) throw error;
+    return { target, affected: before, message: 'Pending order expired dihapus.' };
+  }
+
+  if (target === 'polls-old') {
+    const { data, error: selectError } = await sb().from('broadcast_polls').select('id').lt('created_at', cutoff);
+    if (selectError) throw selectError;
+    const ids = (data || []).map((x) => x.id).filter(Boolean);
+    await deleteByIds('broadcast_poll_answers', 'broadcast_id', ids);
+    await deleteByIds('broadcast_poll_messages', 'broadcast_id', ids);
+    const deleted = await deleteByIds('broadcast_polls', 'id', ids);
+    return { target, days, affected: deleted, message: `Polling lebih dari ${days} hari dihapus.` };
+  }
+
+  if (target === 'poll-answers-old') {
+    const before = await countRows('broadcast_poll_answers', (q) => q.lt('updated_at', cutoff));
+    const { error } = await sb().from('broadcast_poll_answers').delete().lt('updated_at', cutoff);
+    if (error) throw error;
+    return { target, days, affected: before, message: `Detail jawaban polling lebih dari ${days} hari dihapus.` };
+  }
+
+  if (target === 'delivered-old') {
+    const before = await countRows('transactions', (q) => q.lt('created_at', cutoff).neq('delivered_text', ''));
+    const { error } = await sb().from('transactions').update({ delivered_items: [], delivered_text: '' }).lt('created_at', cutoff).neq('delivered_text', '');
+    if (error) throw error;
+    return { target, days, affected: before, message: `Data produk terkirim lebih dari ${days} hari dikosongkan. Transaksi tetap tersimpan.` };
+  }
+
+  if (target === 'transactions-old') {
+    const before = await countRows('transactions', (q) => q.lt('created_at', cutoff));
+    const { error } = await sb().from('transactions').delete().lt('created_at', cutoff);
+    if (error) throw error;
+    return { target, days, affected: before, message: `Transaksi lebih dari ${days} hari dihapus permanen.` };
+  }
+
+  if (target === 'users-empty-old') {
+    const before = await countRows('bot_users', (q) => q.eq('transaction_count', 0).lt('updated_at', cutoff));
+    const { error } = await sb().from('bot_users').delete().eq('transaction_count', 0).lt('updated_at', cutoff);
+    if (error) throw error;
+    return { target, days, affected: before, message: `User tanpa transaksi lebih dari ${days} hari dihapus.` };
+  }
+
+  if (target === 'vouchers-inactive-expired') {
+    const before = await countRows('vouchers', (q) => q.or(`active.eq.false,expires_at.lt.${now}`));
+    const { error } = await sb().from('vouchers').delete().or(`active.eq.false,expires_at.lt.${now}`);
+    if (error) throw error;
+    return { target, affected: before, message: 'Voucher nonaktif atau expired dihapus.' };
+  }
+
+  throw new Error('Target maintenance tidak dikenal.');
+}
+
 module.exports = {
   upsertUser,
   getStats,
@@ -792,5 +930,7 @@ module.exports = {
   recordPollAnswer,
   listBroadcastPolls,
   getBroadcastPollResult,
-  deleteBroadcastPoll
+  deleteBroadcastPoll,
+  getMaintenanceStats,
+  cleanupDatabase
 };

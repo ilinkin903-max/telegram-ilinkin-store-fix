@@ -161,6 +161,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
+    if (req.method === 'GET' && action === 'maintenance-stats') return json(res, 200, { ok: true, data: await db.getMaintenanceStats() });
     if (req.method === 'GET' && action === 'poll-result') {
       const id = String(req.query?.id || '').trim();
       if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
@@ -306,6 +307,11 @@ module.exports = async function handler(req, res) {
       if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
       await db.deleteBroadcastPoll(id);
       return json(res, 200, { ok: true });
+    }
+
+    if (action === 'maintenance-cleanup') {
+      const result = await db.cleanupDatabase(body);
+      return json(res, 200, { ok: true, data: result });
     }
 
     return json(res, 404, { ok: false, error: 'Action tidak ditemukan.' });
