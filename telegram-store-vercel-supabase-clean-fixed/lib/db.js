@@ -9,7 +9,13 @@ const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 function wibDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
-  return new Date(date.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10);
+  // Use Intl with Asia/Jakarta explicitly. This is safer than relying on server timezone
+  // and prevents today's Indonesian orders from falling into yesterday's graph.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function addDaysKey(key, days) {
@@ -60,7 +66,19 @@ function normalizeVariant(item, index = 0) {
 
 function normalizeVariants(value) {
   const rows = Array.isArray(value) ? value : [];
-  return rows.map(normalizeVariant).filter((item) => item.name && Number(item.price || 0) > 0);
+  const out = [];
+  const seen = new Set();
+  rows.map(normalizeVariant).forEach((item, index) => {
+    if (!item.name || Number(item.price || 0) <= 0) return;
+    // Guard against old broken variant data generated from multiline description/SnK.
+    // Lines such as '- Garansi 7 hari' must not be treated as separate variants.
+    if (/^[-•*]+\s+/.test(item.name) && /^VAR\d+$/i.test(item.sku || '')) return;
+    const key = String(item.sku || `${item.name}:${item.price}:${index}`).trim().toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
 }
 
 function normalizeProduct(row) {
@@ -330,11 +348,14 @@ async function listVouchers(limit = 100) {
 }
 
 async function getMonthlyRekap(month, year) {
-  const now = new Date();
-  const m = Number(month || (now.getMonth() + 1));
-  const y = Number(year || now.getFullYear());
-  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
-  const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+  const todayKey = wibDateKey(new Date());
+  const [currentY, currentM] = todayKey.split('-').map(Number);
+  const m = Number(month || currentM);
+  const y = Number(year || currentY);
+  const startKey = `${y}-${String(m).padStart(2, '0')}-01`;
+  const endKey = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  const start = wibKeyStartUtc(startKey);
+  const end = wibKeyStartUtc(endKey);
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
@@ -515,6 +536,7 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   const { error: productError } = await sb().from('products').update(updatePayload).eq('code', product.kode);
   if (productError) throw productError;
 
+  const nowIso = new Date().toISOString();
   const transaction = {
     telegram_id: Number(order.telegram_id),
     username: buyer.username || null,
@@ -528,7 +550,7 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     order_ref: order.invoice_ref || null,
     delivered_items: delivered,
     delivered_text: delivered.join('\n'),
-    created_at: new Date().toISOString()
+    created_at: nowIso
   };
 
   const { error: trxError } = await sb().from('transactions').insert(transaction);
@@ -547,6 +569,167 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   if (order.voucher_code) await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
   await deletePendingOrder(order.telegram_id);
   return { delivered, transaction };
+}
+
+
+function normalizePollOptions(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    if (typeof item === 'string') return { text: String(item), index, voter_count: 0 };
+    return {
+      text: String(item?.text || item?.label || item?.option || `Opsi ${index + 1}`),
+      index,
+      voter_count: Number(item?.voter_count || item?.votes || 0)
+    };
+  }).filter((item) => item.text.trim());
+}
+
+async function createBroadcastPoll(input = {}) {
+  const payload = {
+    question: String(input.question || '').trim(),
+    options: normalizePollOptions(input.options || []).map((x) => ({ text: x.text, index: x.index })),
+    is_anonymous: input.is_anonymous === undefined ? true : Boolean(input.is_anonymous),
+    poll_type: String(input.type || input.poll_type || 'regular'),
+    allows_multiple_answers: Boolean(input.allows_multiple_answers),
+    status: String(input.status || 'draft'),
+    created_by: input.created_by ? Number(input.created_by) : null,
+    total_sent: Number(input.total_sent || 0),
+    total_failed: Number(input.total_failed || 0),
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.question || !payload.options.length) throw new Error('Data polling tidak lengkap.');
+  const { data, error } = await sb().from('broadcast_polls').insert(payload).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function getBroadcastPoll(id) {
+  const { data, error } = await sb().from('broadcast_polls').select('*').eq('id', String(id)).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function updateBroadcastPoll(id, updates = {}) {
+  const payload = { ...updates, updated_at: new Date().toISOString() };
+  const { data, error } = await sb().from('broadcast_polls').update(payload).eq('id', String(id)).select('*').maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function addBroadcastPollMessage(input = {}) {
+  const payload = {
+    broadcast_id: String(input.broadcast_id),
+    poll_id: String(input.poll_id || ''),
+    telegram_id: Number(input.telegram_id || 0),
+    message_id: Number(input.message_id || 0),
+    options_state: normalizePollOptions(input.options_state || input.options || []),
+    total_voter_count: Number(input.total_voter_count || 0),
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.broadcast_id || !payload.poll_id) return null;
+  const { data, error } = await sb().from('broadcast_poll_messages').upsert(payload, { onConflict: 'poll_id' }).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function recordPollUpdate(poll = {}) {
+  const pollId = String(poll.id || poll.poll_id || '');
+  if (!pollId) return null;
+  const options_state = normalizePollOptions(poll.options || []);
+  const total_voter_count = Number(poll.total_voter_count || options_state.reduce((s, x) => s + Number(x.voter_count || 0), 0));
+  const { data: row, error: findError } = await sb().from('broadcast_poll_messages').select('*').eq('poll_id', pollId).maybeSingle();
+  if (findError) throw findError;
+  if (!row) return null;
+  const { data, error } = await sb().from('broadcast_poll_messages')
+    .update({ options_state, total_voter_count, updated_at: new Date().toISOString() })
+    .eq('poll_id', pollId)
+    .select('*')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function recordPollAnswer(answer = {}) {
+  const pollId = String(answer.poll_id || '');
+  const user = answer.user || {};
+  const telegramId = Number(user.id || answer.telegram_id || 0);
+  if (!pollId || !telegramId) return null;
+  const { data: messageRow, error: findError } = await sb().from('broadcast_poll_messages').select('*').eq('poll_id', pollId).maybeSingle();
+  if (findError) throw findError;
+  if (!messageRow) return null;
+  const payload = {
+    broadcast_id: messageRow.broadcast_id,
+    poll_id: pollId,
+    telegram_id: telegramId,
+    username: user.username || null,
+    first_name: user.first_name || null,
+    option_ids: Array.isArray(answer.option_ids) ? answer.option_ids.map(Number) : [],
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('broadcast_poll_answers')
+    .upsert(payload, { onConflict: 'broadcast_id,telegram_id' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function listBroadcastPolls(limit = 50) {
+  const { data, error } = await sb().from('broadcast_polls')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(Number(limit) || 50);
+  if (error) throw error;
+  return data || [];
+}
+
+async function getBroadcastPollResult(id) {
+  const poll = await getBroadcastPoll(id);
+  if (!poll) return null;
+  const [{ data: answers, error: answerError }, { data: messages, error: messageError }] = await Promise.all([
+    sb().from('broadcast_poll_answers').select('*').eq('broadcast_id', String(id)),
+    sb().from('broadcast_poll_messages').select('*').eq('broadcast_id', String(id))
+  ]);
+  if (answerError) throw answerError;
+  if (messageError) throw messageError;
+  const options = normalizePollOptions(poll.options || []);
+  const counts = options.map(() => 0);
+  const answerRows = answers || [];
+  if (answerRows.length) {
+    answerRows.forEach((row) => {
+      const optionIds = Array.isArray(row.option_ids) ? row.option_ids : [];
+      optionIds.forEach((idx) => { if (counts[idx] !== undefined) counts[idx] += 1; });
+    });
+  } else {
+    (messages || []).forEach((row) => {
+      const state = normalizePollOptions(row.options_state || []);
+      state.forEach((opt, idx) => { if (counts[idx] !== undefined) counts[idx] += Number(opt.voter_count || 0); });
+    });
+  }
+  const totalVotes = counts.reduce((a, b) => a + b, 0);
+  const totalVoters = answerRows.length || (messages || []).reduce((sum, row) => sum + Number(row.total_voter_count || 0), 0);
+  return {
+    ...poll,
+    options_result: options.map((opt, idx) => ({
+      text: opt.text,
+      index: idx,
+      votes: counts[idx] || 0,
+      percent: totalVotes ? Math.round(((counts[idx] || 0) / totalVotes) * 1000) / 10 : 0
+    })),
+    total_votes: totalVotes,
+    total_voters: totalVoters,
+    answer_count: answerRows.length,
+    message_count: (messages || []).length
+  };
+}
+
+async function deleteBroadcastPoll(id) {
+  const broadcastId = String(id || '');
+  if (!broadcastId) return;
+  await sb().from('broadcast_poll_answers').delete().eq('broadcast_id', broadcastId);
+  await sb().from('broadcast_poll_messages').delete().eq('broadcast_id', broadcastId);
+  const { error } = await sb().from('broadcast_polls').delete().eq('id', broadcastId);
+  if (error) throw error;
 }
 
 module.exports = {
@@ -582,5 +765,14 @@ module.exports = {
   variantKey,
   findVariant,
   productAvailableStock,
-  orderUnitPrice
+  orderUnitPrice,
+  createBroadcastPoll,
+  getBroadcastPoll,
+  updateBroadcastPoll,
+  addBroadcastPollMessage,
+  recordPollUpdate,
+  recordPollAnswer,
+  listBroadcastPolls,
+  getBroadcastPollResult,
+  deleteBroadcastPoll
 };

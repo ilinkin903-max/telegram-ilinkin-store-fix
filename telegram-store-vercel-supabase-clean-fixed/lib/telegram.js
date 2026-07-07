@@ -92,9 +92,27 @@ async function sendSticker(chatId, sticker, options = {}) {
   });
 }
 
+async function sendPoll(chatId, question, optionsList = [], options = {}) {
+  return callTelegram('sendPoll', {
+    chat_id: chatId,
+    question,
+    options: optionsList,
+    ...options
+  });
+}
+
 
 async function copyMessage(chatId, fromChatId, messageId, options = {}) {
   return callTelegram('copyMessage', {
+    chat_id: chatId,
+    from_chat_id: fromChatId,
+    message_id: messageId,
+    ...options
+  });
+}
+
+async function forwardMessage(chatId, fromChatId, messageId, options = {}) {
+  return callTelegram('forwardMessage', {
     chat_id: chatId,
     from_chat_id: fromChatId,
     message_id: messageId,
@@ -120,7 +138,7 @@ async function sendDocument(chatId, filename, content, options = {}) {
 async function setWebhook(url) {
   return callTelegram('setWebhook', {
     url,
-    allowed_updates: ['message', 'callback_query']
+    allowed_updates: ['message', 'callback_query', 'poll', 'poll_answer']
   });
 }
 
@@ -134,7 +152,9 @@ module.exports = {
   sendPhoto,
   sendPhotoRef,
   sendSticker,
+  sendPoll,
   copyMessage,
+  forwardMessage,
   sendDocument,
   setWebhook
 };

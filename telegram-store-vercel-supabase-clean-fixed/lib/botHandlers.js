@@ -55,9 +55,16 @@ async function broadcastToUsers(payload = {}) {
   let failed = 0;
 
   async function sendOne(id) {
-    if (type === 'copy' || type === 'poll') {
-      if (!fromChatId || !messageId) throw new Error('Data polling/source message tidak lengkap.');
+    if (type === 'copy') {
+      if (!fromChatId || !messageId) throw new Error('Data source message tidak lengkap.');
       return tg.copyMessage(id, fromChatId, messageId);
+    }
+    if (type === 'poll') {
+      if (!fromChatId || !messageId) throw new Error('Data polling/source message tidak lengkap.');
+      // Forward polling, not copy, so the poll can stay visible/updated from admin's original poll.
+      // If Telegram refuses forwarding for a specific poll, fall back to copyMessage.
+      try { return await tg.forwardMessage(id, fromChatId, messageId); }
+      catch (e) { return tg.copyMessage(id, fromChatId, messageId); }
     }
     if (type === 'photo') return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined });
     if (type === 'sticker') {
@@ -74,6 +81,94 @@ async function broadcastToUsers(payload = {}) {
     results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
   }
   return { total: targets.length, sent, failed, type };
+}
+
+
+function pollOptionsFromTelegram(poll = {}) {
+  return (poll.options || []).map((item, index) => ({ text: String(item.text || `Opsi ${index + 1}`), index }));
+}
+
+function pollPreviewText(pollRecord = {}) {
+  const opts = (pollRecord.options || []).map((o, i) => `${i + 1}. ${o.text || o}`).join('\n') || '-';
+  return `📊 Polling diterima sebagai preview.\n\n` +
+    `Judul: ${pollRecord.question}\n\n` +
+    `Pilihan:\n${opts}\n\n` +
+    `Polling belum dikirim ke user. Klik tombol di bawah untuk broadcast.`;
+}
+
+async function preparePollPreview(chatId, from, poll = {}) {
+  const record = await db.createBroadcastPoll({
+    question: poll.question || 'Polling',
+    options: pollOptionsFromTelegram(poll),
+    is_anonymous: poll.is_anonymous !== false,
+    type: poll.type || 'regular',
+    allows_multiple_answers: Boolean(poll.allows_multiple_answers),
+    status: 'draft',
+    created_by: from.id
+  });
+  return tg.sendMessage(chatId, pollPreviewText(record), {
+    reply_markup: { inline_keyboard: [
+      [{ text: '📢 Broadcast Polling', callback_data: `bcpoll_send:${record.id}` }],
+      [{ text: '📈 Lihat Hasil', callback_data: `poll_result:${record.id}` }, { text: '🗑 Hapus Draft', callback_data: `poll_delete:${record.id}` }],
+      [{ text: '❌ Batal', callback_data: 'bcpoll_cancel' }]
+    ] }
+  });
+}
+
+async function broadcastPollRecordToUsers(pollRecord = {}) {
+  const users = await db.listUsers(1000);
+  const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
+  const optionsList = (pollRecord.options || []).map((o) => String(o.text || o)).filter(Boolean);
+  let sent = 0;
+  let failed = 0;
+  async function sendOne(id) {
+    const msg = await tg.sendPoll(id, pollRecord.question, optionsList, {
+      is_anonymous: pollRecord.is_anonymous !== false,
+      type: pollRecord.poll_type || pollRecord.type || 'regular',
+      allows_multiple_answers: Boolean(pollRecord.allows_multiple_answers)
+    });
+    if (msg?.poll?.id) {
+      await db.addBroadcastPollMessage({
+        broadcast_id: pollRecord.id,
+        poll_id: msg.poll.id,
+        telegram_id: id,
+        message_id: msg.message_id,
+        options_state: msg.poll.options || [],
+        total_voter_count: msg.poll.total_voter_count || 0
+      }).catch((e) => console.error('Gagal simpan poll message:', e.message));
+    }
+    return msg;
+  }
+  for (let i = 0; i < targets.length; i += 10) {
+    const part = targets.slice(i, i + 10);
+    const results = await Promise.allSettled(part.map(sendOne));
+    results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
+  }
+  await db.updateBroadcastPoll(pollRecord.id, { status: 'sent', total_sent: sent, total_failed: failed }).catch(() => null);
+  return { total: targets.length, sent, failed, type: 'poll' };
+}
+
+function pollResultText(result = {}) {
+  if (!result) return '⚠️ Polling tidak ditemukan.';
+  const rows = (result.options_result || []).map((o, i) => {
+    return `${i + 1}. ${o.text}\n   ${o.votes} suara (${o.percent}%)`;
+  }).join('\n\n') || '-';
+  return `📊 HASIL POLLING\n=======================\n` +
+    `Pertanyaan: ${result.question}\n` +
+    `Status: ${result.status || '-'}\n` +
+    `Terkirim: ${result.total_sent || 0}\n` +
+    `Total Vote: ${result.total_votes || 0}\n` +
+    `Total Voter: ${result.total_voters || 0}\n\n` + rows;
+}
+
+async function sendPollingList(chatId) {
+  const polls = await db.listBroadcastPolls(10);
+  if (!polls.length) return tg.sendMessage(chatId, '📊 Belum ada polling tersimpan.');
+  const rows = polls.map((p) => ([
+    { text: `${String(p.question || 'Polling').slice(0, 28)} (${p.status || 'draft'})`, callback_data: `poll_result:${p.id}` },
+    { text: '🗑 Hapus', callback_data: `poll_delete:${p.id}` }
+  ]));
+  return tg.sendMessage(chatId, '📊 Daftar polling terakhir.\nKlik judul untuk lihat hasil atau hapus untuk membersihkan database.', { reply_markup: { inline_keyboard: rows } });
 }
 
 
@@ -409,7 +504,7 @@ async function sendOwnerMenu(chatId) {
     `/bc *( Broadcast Teks / Reply Foto / Reply Stiker / Reply Polling )*\n` +
     `/bcphoto *( Broadcast Gambar URL/File ID )*\n` +
     `/bcsticker *( Broadcast Stiker File ID )*\n` +
-    `/bcpoll *( Broadcast Polling Forward/Reply )*\n` +
+    `/bcpoll *( Broadcast Polling setelah preview/reply )*\n` +
     `/addvoucher *( Tambah Voucher Bot )*\n` +
     `/editvoucher *( Edit Voucher Bot )*\n` +
     `/delvoucher *( Hapus Voucher Bot )*\n` +
@@ -431,7 +526,7 @@ async function sendOwnerMenu(chatId) {
     `/bc Pesan broadcast\n` +
     `/bcphoto URL_GAMBAR|Caption\n` +
     `/bcsticker FILE_ID_STIKER\n` +
-    `/bcpoll reply polling`;
+    `/bcpoll reply polling / klik tombol preview`;
   return tg.sendMessage(chatId, text);
 }
 
@@ -440,10 +535,10 @@ async function handleTextMessage(msg, req) {
   const from = msg.from || msg.chat;
   const text = String(msg.text || msg.caption || '').trim();
 
-  // Owner can broadcast a Telegram poll by forwarding/sending the poll to the bot.
+  // Owner can prepare a Telegram poll broadcast by forwarding/sending the poll to the bot.
+  // It is NOT broadcast automatically anymore. Admin must confirm first.
   if (!text && msg.poll && isOwner(from.id)) {
-    const result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: msg.message_id });
-    return tg.sendMessage(chatId, `✅ Broadcast polling selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+    return preparePollPreview(chatId, from, msg.poll);
   }
 
   if (!text) return;
@@ -452,6 +547,10 @@ async function handleTextMessage(msg, req) {
 
   if (lower.startsWith('/start') || lower.startsWith('/menu')) return sendHome(chatId, from, req);
   if (lower.startsWith('/getid')) return tg.sendMessage(chatId, `ID Telegram kamu: ${from.id}`);
+  if (lower.startsWith('/polling')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    return sendPollingList(chatId);
+  }
   if (lower.startsWith('/debugowner')) {
     const miniAppUrl = getMiniAppUrl(req) || '-';
     return tg.sendMessage(chatId, `DEBUG OWNER\nUser ID: ${from.id}\nOWNER_ID env: ${config.ownerId}\nIs owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}\nMINIAPP_URL: ${miniAppUrl}`);
@@ -593,9 +692,8 @@ async function handleTextMessage(msg, req) {
   if (lower.startsWith('/bcpoll')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const source = msg.reply_to_message?.poll ? msg.reply_to_message : null;
-    if (!source) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\nForward polling ke bot, lalu reply polling itu dengan /bcpoll');
-    const result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: source.message_id });
-    return tg.sendMessage(chatId, `✅ Broadcast polling selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+    if (!source) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\nKirim/forward polling ke bot, atau reply polling dengan /bcpoll untuk preview.');
+    return preparePollPreview(chatId, from, source.poll);
   }
 
   if (lower.startsWith('/bcphoto')) {
@@ -626,7 +724,7 @@ async function handleTextMessage(msg, req) {
     let result;
     if (replyPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto, caption: body });
     else if (replySticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker, message: body });
-    else if (replyPoll) result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: replyPoll.message_id });
+    else if (replyPoll) return preparePollPreview(chatId, from, replyPoll.poll);
     else {
       if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker/polling dengan /bc Caption');
       result = await broadcastToUsers({ type: 'text', message: body });
@@ -916,6 +1014,36 @@ async function handleCallbackQuery(query, req) {
   const cmd = String(query.data || '');
   await tg.answerCallbackQuery(query.id).catch(() => null);
 
+  if (cmd === 'bcpoll_cancel') {
+    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    return editMessage(query, '❌ Broadcast polling dibatalkan. Polling tidak dikirim ke user.');
+  }
+  if (cmd.startsWith('bcpoll_send:')) {
+    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    const pollId = cmd.slice('bcpoll_send:'.length);
+    const pollRecord = await db.getBroadcastPoll(pollId);
+    if (!pollRecord) return tg.answerCallbackQuery(query.id, { text: 'Polling tidak ditemukan.', show_alert: true });
+    const result = await broadcastPollRecordToUsers(pollRecord);
+    return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
+  }
+  if (cmd.startsWith('poll_result:')) {
+    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    const id = cmd.slice('poll_result:'.length);
+    const result = await db.getBroadcastPollResult(id);
+    return editMessage(query, pollResultText(result), { reply_markup: { inline_keyboard: [[{ text: '🔄 Refresh', callback_data: `poll_result:${id}` }, { text: '🗑 Hapus', callback_data: `poll_delete:${id}` }], [{ text: '📊 Daftar Polling', callback_data: 'poll_list' }]] } });
+  }
+  if (cmd.startsWith('poll_delete:')) {
+    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    const id = cmd.slice('poll_delete:'.length);
+    await db.deleteBroadcastPoll(id);
+    return editMessage(query, '✅ Data polling sudah dihapus dari database.');
+  }
+  if (cmd === 'poll_list') {
+    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+    return sendPollingList(query.message.chat.id);
+  }
+
   if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id, query);
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
@@ -959,6 +1087,8 @@ async function handleCallbackQuery(query, req) {
 }
 
 async function handleUpdate(update, req) {
+  if (update.poll_answer) return db.recordPollAnswer(update.poll_answer).catch((e) => console.error('Gagal simpan poll answer:', e.message));
+  if (update.poll) return db.recordPollUpdate(update.poll).catch((e) => console.error('Gagal update poll:', e.message));
   if (update.message) return handleTextMessage(update.message, req);
   if (update.callback_query) return handleCallbackQuery(update.callback_query, req);
 }

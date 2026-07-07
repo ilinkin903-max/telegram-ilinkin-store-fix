@@ -1,1 +1,6 @@
-Admin UI v20 - varian parser aman, analytics WIB, broadcast polling
+Admin UI v22 - polling analytics + delete + safer variants
+- Broadcast polling sekarang disimpan dan bisa dilihat hasilnya di Mini App/command /polling.
+- Admin bisa menghapus data polling agar database tidak penuh.
+- Webhook menerima poll dan poll_answer.
+- Parser varian semakin aman untuk karakter -, |, :, ; dan deskripsi/SnK multi-baris.
+- Omset/grafik tetap memakai timezone Asia/Jakarta.

@@ -45,17 +45,32 @@ function parseStockList(value) {
 }
 
 function parseVariants(value) {
-  if (Array.isArray(value)) return value.map((item, index) => ({
-    name: String(item.name || item.nama || '').trim(),
-    price: numberOf(item.price || item.harga),
-    sku: String(item.sku || item.kode || `VAR${index + 1}`).trim().toUpperCase(),
-    note: String(item.note || item.catatan || '').trim(),
-    description: String(item.description || item.deskripsi || '').trim(),
-    snk: String(item.snk || item.terms || item.syarat || '').trim(),
-    active: item.active === undefined ? true : boolOf(item.active),
-    stock: parseStockList(item.stock || item.stok || item.data || []),
-    bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
-  })).filter((item) => item.name && Number(item.price || 0) > 0);
+  if (Array.isArray(value)) {
+    const seen = new Set();
+    const out = [];
+    value.map((item, index) => ({
+      name: String(item.name || item.nama || '').trim(),
+      price: numberOf(item.price || item.harga),
+      sku: String(item.sku || item.kode || `VAR${index + 1}`).trim().toUpperCase(),
+      note: String(item.note || item.catatan || '').trim(),
+      description: String(item.description || item.deskripsi || '').trim(),
+      snk: String(item.snk || item.terms || item.syarat || '').trim(),
+      active: item.active === undefined ? true : boolOf(item.active),
+      stock: parseStockList(item.stock || item.stok || item.data || []),
+      bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
+    })).forEach((item, index) => {
+      if (!item.name || Number(item.price || 0) <= 0) return;
+      // Prevent old broken rows from multiline description/SnK becoming variants.
+      // Characters like '-', '|', ':', ';' are safe inside description/SnK because
+      // structured Mini App data is used and not split into variant rows.
+      if (/^[-•*]+\s+/.test(item.name) && /^VAR\d+$/i.test(item.sku || '')) return;
+      const key = String(item.sku || `${item.name}:${item.price}:${index}`).trim().toUpperCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(item);
+    });
+    return out;
+  }
 
   // Legacy fallback for old text-based variant input. Keep this intentionally strict:
   // a valid variant line must contain pipe separators and a numeric price. Lines from
@@ -145,6 +160,12 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
+    if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
+    if (req.method === 'GET' && action === 'poll-result') {
+      const id = String(req.query?.id || '').trim();
+      if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
+      return json(res, 200, { ok: true, data: await db.getBroadcastPollResult(id) });
+    }
 
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method tidak didukung.' });
 
@@ -278,6 +299,13 @@ module.exports = async function handler(req, res) {
     if (action === 'broadcast') {
       const result = await broadcast(body);
       return json(res, 200, { ok: true, data: result });
+    }
+
+    if (action === 'delete-poll') {
+      const id = String(body.id || body.poll_id || '').trim();
+      if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
+      await db.deleteBroadcastPoll(id);
+      return json(res, 200, { ok: true });
     }
 
     return json(res, 404, { ok: false, error: 'Action tidak ditemukan.' });
