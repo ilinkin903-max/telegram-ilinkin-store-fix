@@ -1,38 +1,21 @@
-# Telegram Store Vercel Supabase - Admin UI v22
+# Telegram Store Vercel Supabase - Admin UI v23
 
-## Update v22
+Update v23:
+- Broadcast polling sekarang memakai mode global/forward dari polling asli.
+- User melihat hasil polling keseluruhan, bukan hasil pribadi 100%.
+- Admin tetap perlu konfirmasi broadcast polling dari preview.
+- Hasil polling tetap tersimpan di Supabase dan bisa dihapus dari Mini App atau command /polling.
 
-- Hasil polling broadcast bisa dilihat oleh admin.
-- Data polling bisa dihapus dari Mini App atau command `/polling` agar database tidak penuh.
-- Broadcast polling tidak langsung terkirim. Admin kirim/forward polling ke bot, lalu klik tombol konfirmasi.
-- Parser varian aman untuk karakter `-`, `|`, `:`, `;` dan teks multi-baris di deskripsi/SnK.
-- Omset hari ini dan grafik memakai timezone WIB / Asia Jakarta.
-
-## SQL wajib dijalankan
-
-Jalankan `supabase/update-owner-tools.sql` di Supabase SQL Editor.
-
-## Deploy
-
+## Cara pasang
 1. Upload isi ZIP ke GitHub.
-2. Redeploy Vercel.
-3. Setelah Ready, buka ulang webhook:
+2. Jalankan SQL update di Supabase dari `supabase/update-owner-tools.sql`.
+3. Redeploy Vercel.
+4. Buka ulang webhook: `/api/set-webhook?secret=WEBHOOK_SECRET`.
 
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=abc123
-```
-
-Sesuaikan `abc123` dengan `WEBHOOK_SECRET` kamu.
-
-## Cara pakai polling
-
-1. Admin kirim/forward polling ke bot.
+## Cara broadcast polling global
+1. Kirim atau forward polling ke bot.
 2. Bot menampilkan preview.
-3. Klik **Broadcast Polling**.
-4. Lihat hasil di Mini App tab **Polling** atau kirim command:
+3. Klik Broadcast Polling.
+4. Polling dikirim dengan forward agar hasil vote user menjadi satu/global.
 
-```text
-/polling
-```
-
-Di hasil polling tersedia tombol hapus untuk membersihkan database.
+Catatan: polling lama yang dibuat sebelum v23 tidak punya source message, jadi sebaiknya buat polling baru setelah update ini.

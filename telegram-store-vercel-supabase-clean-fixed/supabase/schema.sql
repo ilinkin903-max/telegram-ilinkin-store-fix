@@ -115,6 +115,10 @@ create table if not exists public.broadcast_polls (
   allows_multiple_answers boolean not null default false,
   status text not null default 'draft',
   created_by bigint,
+  source_chat_id bigint,
+  source_message_id integer,
+  source_poll_id text,
+  broadcast_mode text not null default 'sendpoll',
   total_sent integer not null default 0,
   total_failed integer not null default 0,
   created_at timestamptz not null default now(),
@@ -148,4 +152,11 @@ create table if not exists public.broadcast_poll_answers (
 
 create index if not exists broadcast_poll_messages_broadcast_idx on public.broadcast_poll_messages (broadcast_id);
 create index if not exists broadcast_poll_answers_broadcast_idx on public.broadcast_poll_answers (broadcast_id);
+
+-- Source polling asli untuk mode global/forward.
+alter table public.broadcast_polls add column if not exists source_chat_id bigint;
+alter table public.broadcast_polls add column if not exists source_message_id integer;
+alter table public.broadcast_polls add column if not exists source_poll_id text;
+alter table public.broadcast_polls add column if not exists broadcast_mode text not null default 'sendpoll';
+
 create index if not exists broadcast_poll_answers_poll_idx on public.broadcast_poll_answers (poll_id);

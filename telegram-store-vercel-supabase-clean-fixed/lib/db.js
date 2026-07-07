@@ -593,6 +593,10 @@ async function createBroadcastPoll(input = {}) {
     allows_multiple_answers: Boolean(input.allows_multiple_answers),
     status: String(input.status || 'draft'),
     created_by: input.created_by ? Number(input.created_by) : null,
+    source_chat_id: input.source_chat_id || input.sourceChatId ? Number(input.source_chat_id || input.sourceChatId) : null,
+    source_message_id: input.source_message_id || input.sourceMessageId ? Number(input.source_message_id || input.sourceMessageId) : null,
+    source_poll_id: input.source_poll_id || input.sourcePollId ? String(input.source_poll_id || input.sourcePollId) : null,
+    broadcast_mode: String(input.broadcast_mode || input.broadcastMode || (input.source_chat_id || input.source_message_id ? 'forward' : 'sendpoll')),
     total_sent: Number(input.total_sent || 0),
     total_failed: Number(input.total_failed || 0),
     updated_at: new Date().toISOString()

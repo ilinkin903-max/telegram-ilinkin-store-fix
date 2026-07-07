@@ -90,13 +90,20 @@ function pollOptionsFromTelegram(poll = {}) {
 
 function pollPreviewText(pollRecord = {}) {
   const opts = (pollRecord.options || []).map((o, i) => `${i + 1}. ${o.text || o}`).join('\n') || '-';
+  const mode = pollRecord.source_message_id
+    ? 'Mode: global/forward. User akan melihat hasil polling keseluruhan, bukan hasil pribadi 100%.'
+    : 'Mode: fallback draft lama. Untuk hasil global, kirim/forward polling baru ke bot lalu broadcast dari preview.';
   return `📊 Polling diterima sebagai preview.\n\n` +
     `Judul: ${pollRecord.question}\n\n` +
     `Pilihan:\n${opts}\n\n` +
+    `${mode}\n\n` +
     `Polling belum dikirim ke user. Klik tombol di bawah untuk broadcast.`;
 }
 
-async function preparePollPreview(chatId, from, poll = {}) {
+async function preparePollPreview(chatId, from, source = {}) {
+  const poll = source.poll || source;
+  const sourceChatId = source.chat?.id || chatId;
+  const sourceMessageId = source.message_id || source.messageId || null;
   const record = await db.createBroadcastPoll({
     question: poll.question || 'Polling',
     options: pollOptionsFromTelegram(poll),
@@ -104,7 +111,11 @@ async function preparePollPreview(chatId, from, poll = {}) {
     type: poll.type || 'regular',
     allows_multiple_answers: Boolean(poll.allows_multiple_answers),
     status: 'draft',
-    created_by: from.id
+    created_by: from.id,
+    source_chat_id: sourceChatId,
+    source_message_id: sourceMessageId,
+    source_poll_id: poll.id || null,
+    broadcast_mode: sourceMessageId ? 'forward' : 'sendpoll'
   });
   return tg.sendMessage(chatId, pollPreviewText(record), {
     reply_markup: { inline_keyboard: [
@@ -119,22 +130,32 @@ async function broadcastPollRecordToUsers(pollRecord = {}) {
   const users = await db.listUsers(1000);
   const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
   const optionsList = (pollRecord.options || []).map((o) => String(o.text || o)).filter(Boolean);
+  const canForward = Boolean(pollRecord.source_chat_id && pollRecord.source_message_id);
   let sent = 0;
   let failed = 0;
   async function sendOne(id) {
-    const msg = await tg.sendPoll(id, pollRecord.question, optionsList, {
-      is_anonymous: pollRecord.is_anonymous !== false,
-      type: pollRecord.poll_type || pollRecord.type || 'regular',
-      allows_multiple_answers: Boolean(pollRecord.allows_multiple_answers)
-    });
-    if (msg?.poll?.id) {
+    let msg;
+    if (canForward) {
+      // Forward polling asli agar hasil vote user adalah hasil global yang sama.
+      // Jangan memakai sendPoll untuk draft baru karena itu membuat polling terpisah per user.
+      msg = await tg.forwardMessage(id, pollRecord.source_chat_id, pollRecord.source_message_id);
+    } else {
+      // Fallback untuk draft lama tanpa source message.
+      msg = await tg.sendPoll(id, pollRecord.question, optionsList, {
+        is_anonymous: pollRecord.is_anonymous !== false,
+        type: pollRecord.poll_type || pollRecord.type || 'regular',
+        allows_multiple_answers: Boolean(pollRecord.allows_multiple_answers)
+      });
+    }
+    const pollId = msg?.poll?.id || pollRecord.source_poll_id;
+    if (pollId) {
       await db.addBroadcastPollMessage({
         broadcast_id: pollRecord.id,
-        poll_id: msg.poll.id,
+        poll_id: pollId,
         telegram_id: id,
-        message_id: msg.message_id,
-        options_state: msg.poll.options || [],
-        total_voter_count: msg.poll.total_voter_count || 0
+        message_id: msg?.message_id || 0,
+        options_state: msg?.poll?.options || pollRecord.options || [],
+        total_voter_count: msg?.poll?.total_voter_count || 0
       }).catch((e) => console.error('Gagal simpan poll message:', e.message));
     }
     return msg;
@@ -144,8 +165,8 @@ async function broadcastPollRecordToUsers(pollRecord = {}) {
     const results = await Promise.allSettled(part.map(sendOne));
     results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
   }
-  await db.updateBroadcastPoll(pollRecord.id, { status: 'sent', total_sent: sent, total_failed: failed }).catch(() => null);
-  return { total: targets.length, sent, failed, type: 'poll' };
+  await db.updateBroadcastPoll(pollRecord.id, { status: 'sent', total_sent: sent, total_failed: failed, broadcast_mode: canForward ? 'forward' : 'sendpoll' }).catch(() => null);
+  return { total: targets.length, sent, failed, type: 'poll', mode: canForward ? 'forward' : 'sendpoll' };
 }
 
 function pollResultText(result = {}) {
@@ -538,7 +559,7 @@ async function handleTextMessage(msg, req) {
   // Owner can prepare a Telegram poll broadcast by forwarding/sending the poll to the bot.
   // It is NOT broadcast automatically anymore. Admin must confirm first.
   if (!text && msg.poll && isOwner(from.id)) {
-    return preparePollPreview(chatId, from, msg.poll);
+    return preparePollPreview(chatId, from, msg);
   }
 
   if (!text) return;
@@ -693,7 +714,7 @@ async function handleTextMessage(msg, req) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const source = msg.reply_to_message?.poll ? msg.reply_to_message : null;
     if (!source) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\nKirim/forward polling ke bot, atau reply polling dengan /bcpoll untuk preview.');
-    return preparePollPreview(chatId, from, source.poll);
+    return preparePollPreview(chatId, from, source);
   }
 
   if (lower.startsWith('/bcphoto')) {
@@ -724,7 +745,7 @@ async function handleTextMessage(msg, req) {
     let result;
     if (replyPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto, caption: body });
     else if (replySticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker, message: body });
-    else if (replyPoll) return preparePollPreview(chatId, from, replyPoll.poll);
+    else if (replyPoll) return preparePollPreview(chatId, from, replyPoll);
     else {
       if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker/polling dengan /bc Caption');
       result = await broadcastToUsers({ type: 'text', message: body });
@@ -1024,7 +1045,8 @@ async function handleCallbackQuery(query, req) {
     const pollRecord = await db.getBroadcastPoll(pollId);
     if (!pollRecord) return tg.answerCallbackQuery(query.id, { text: 'Polling tidak ditemukan.', show_alert: true });
     const result = await broadcastPollRecordToUsers(pollRecord);
-    return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
+    const modeInfo = result.mode === 'forward' ? 'Mode: polling global. User melihat hasil keseluruhan.' : 'Mode: fallback. Draft lama tanpa source polling.';
+    return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n${modeInfo}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
   }
   if (cmd.startsWith('poll_result:')) {
     if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
