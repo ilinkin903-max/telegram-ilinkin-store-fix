@@ -219,7 +219,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function compileAddVariants(){
     var hidden=document.getElementById('addVariantsText');
     var rows=collectAddVariants();
-    if(hidden){ hidden.value=rows.map(function(v){ return [v.name,v.price,v.sku,(v.stock||[]).join(','),bulkToText(v.bulk_prices||[]),String(v.description||'').replace(/\n/g,' '),String(v.snk||'').replace(/\n/g,' '),v.active===false?'off':'on'].join('|'); }).join('\n'); }
+    if(hidden) hidden.value='';
     return rows;
   }
   function renderHeader(){
@@ -238,7 +238,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     renderSettingsForm();
   }
   function renderSettingsForm(){ var s=state.settings||{}; var f=document.getElementById('settingsForm'); if(!f) return; ['store_name','customer_service_link','group_link','start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(f[k]) f[k].value = s[k] || (k==='start_media_type'?'none':''); }); if(f.store_description) f.store_description.value=''; if(f.logo_url) f.logo_url.value=''; if(f.banner_url) f.banner_url.value=''; }
-  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=daily.length?daily[daily.length-1].revenue:0; var items=[['Omset Hari Ini',rupiah(today)],['Order',s.orders||0],['Produk',s.products||0],['Stok',s.stokTersedia||0]]; document.getElementById('stats').innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
+  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Order',s.orders||0],['Produk',s.products||0],['Stok',s.stokTersedia||0]]; document.getElementById('stats').innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
   function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return d.revenue;}).concat([1])); document.getElementById('revenueChart').innerHTML=list.map(function(d){var chartEl=document.getElementById('revenueChart'); var chartHeight=Math.max(140,(chartEl.clientHeight||240)-82); var h=Math.max(8,Math.round((d.revenue/max)*chartHeight)); return '<div class="barBox"><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barLabel">'+esc(d.label)+'<br>'+rupiah(d.revenue)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; document.getElementById('topProductList').innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
   function productMatches(p,q){ var text=[p.nama,p.kode,p.category,p.deskripsi].join(' ').toLowerCase(); return text.indexOf(q)>=0; }
   function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
@@ -315,8 +315,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     return rows;
   }
   function compileEditVariants(product){
-    var rows=collectEditVariants(product);
-    return rows.map(function(v){ return [v.name,v.price,v.sku,(v.stock||[]).join(','),bulkToText(v.bulk_prices||[]),String(v.description||'').replace(/\n/g,' '),String(v.snk||'').replace(/\n/g,' '),v.active===false?'off':'on'].join('|'); }).join('\n');
+    return collectEditVariants(product);
   }
   function toggleEditVariantBuilder(){
     var chk=document.getElementById('editVariantToggle');

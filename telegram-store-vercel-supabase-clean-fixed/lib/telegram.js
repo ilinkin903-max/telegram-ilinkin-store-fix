@@ -92,6 +92,16 @@ async function sendSticker(chatId, sticker, options = {}) {
   });
 }
 
+
+async function copyMessage(chatId, fromChatId, messageId, options = {}) {
+  return callTelegram('copyMessage', {
+    chat_id: chatId,
+    from_chat_id: fromChatId,
+    message_id: messageId,
+    ...options
+  });
+}
+
 async function sendDocument(chatId, filename, content, options = {}) {
   const form = new FormData();
   form.append('chat_id', String(chatId));
@@ -124,6 +134,7 @@ module.exports = {
   sendPhoto,
   sendPhotoRef,
   sendSticker,
+  copyMessage,
   sendDocument,
   setWebhook
 };

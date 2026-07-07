@@ -5,6 +5,28 @@ function sb() {
   return getSupabase();
 }
 
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function wibDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Date(date.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function addDaysKey(key, days) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + Number(days || 0), 12, 0, 0)).toISOString().slice(0, 10);
+}
+
+function wibKeyStartUtc(key) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - WIB_OFFSET_MS);
+}
+
+function wibKeyLabel(key) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', timeZone: 'Asia/Jakarta' });
+}
+
 function normalizeBulkPrices(value) {
   const rows = Array.isArray(value) ? value : [];
   return rows.map((item) => ({
@@ -38,7 +60,7 @@ function normalizeVariant(item, index = 0) {
 
 function normalizeVariants(value) {
   const rows = Array.isArray(value) ? value : [];
-  return rows.map(normalizeVariant).filter((item) => item.name);
+  return rows.map(normalizeVariant).filter((item) => item.name && Number(item.price || 0) > 0);
 }
 
 function normalizeProduct(row) {
@@ -353,30 +375,29 @@ async function saveShopSettings(input = {}) {
 }
 
 async function getAnalytics() {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - 6);
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  // Analytics are grouped by Asia/Jakarta calendar days, not UTC days.
+  // This prevents purchases made today in Indonesia from appearing in yesterday's bar.
+  const todayKey = wibDateKey(new Date());
+  const firstKey = addDaysKey(todayKey, -6);
+  const start = wibKeyStartUtc(firstKey);
+  const end = wibKeyStartUtc(addDaysKey(todayKey, 1));
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
     .gte('created_at', start.toISOString())
-    .lte('created_at', end.toISOString())
+    .lt('created_at', end.toISOString())
     .order('created_at', { ascending: true });
   if (error) throw error;
   const rows = data || [];
   const daily = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    return { date: key, label: d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }), orders: 0, revenue: 0, quantity: 0 };
+    const key = addDaysKey(firstKey, i);
+    return { date: key, label: wibKeyLabel(key), orders: 0, revenue: 0, quantity: 0 };
   });
+  const dailyMap = new Map(daily.map((item) => [item.date, item]));
   const topMap = new Map();
   rows.forEach((row) => {
-    const keyDate = new Date(row.created_at).toISOString().slice(0, 10);
-    const bucket = daily.find((d) => d.date === keyDate);
+    const keyDate = wibDateKey(row.created_at);
+    const bucket = dailyMap.get(keyDate);
     if (bucket) {
       bucket.orders += 1;
       bucket.revenue += Number(row.total_price || 0);
@@ -390,7 +411,10 @@ async function getAnalytics() {
     topMap.set(key, item);
   });
   return {
-    period: '7d',
+    period: '7d-wib',
+    timezone: 'Asia/Jakarta',
+    today: todayKey,
+    today_revenue: daily[daily.length - 1]?.revenue || 0,
     daily,
     top_products: Array.from(topMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10),
     total_orders: rows.length,

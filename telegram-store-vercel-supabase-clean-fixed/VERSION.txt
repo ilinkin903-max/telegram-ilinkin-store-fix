@@ -1,4 +1,1 @@
-Admin UI v19 - Variant parser fix
-- Varian tidak lagi dikirim dari Mini App sebagai teks delimiter untuk edit/stok/kelola.
-- Stok, deskripsi, dan SnK varian sekarang dikirim sebagai JSON terstruktur.
-- Aman untuk isi karakter | : ; dan deskripsi/SnK beberapa baris.
+Admin UI v20 - varian parser aman, analytics WIB, broadcast polling

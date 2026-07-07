@@ -55,15 +55,24 @@ function parseVariants(value) {
     active: item.active === undefined ? true : boolOf(item.active),
     stock: parseStockList(item.stock || item.stok || item.data || []),
     bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
-  })).filter((item) => item.name);
+  })).filter((item) => item.name && Number(item.price || 0) > 0);
+
+  // Legacy fallback for old text-based variant input. Keep this intentionally strict:
+  // a valid variant line must contain pipe separators and a numeric price. Lines from
+  // multiline descriptions/SnK such as "- garansi 7 hari", "catatan: ...", or
+  // text containing random symbols must never become new variants.
   const raw = String(value || '').trim();
   if (!raw) return [];
   return raw.split(/\n+/).map((line, index) => {
-    const parts = line.split('|').map((x) => x.trim());
+    const text = String(line || '').trim();
+    if (!text.includes('|')) return null;
+    const parts = text.split('|').map((x) => x.trim());
+    const price = numberOf(parts[1]);
+    if (!parts[0] || !price) return null;
     const sku = String(parts[2] || `VAR${index + 1}`).trim().toUpperCase();
     return {
-      name: parts[0] || '',
-      price: numberOf(parts[1]),
+      name: parts[0],
+      price,
       sku,
       stock: parseStockList(parts[3] || ''),
       bulk_prices: parseBulkPrices(parts[4] || ''),
@@ -72,7 +81,7 @@ function parseVariants(value) {
       active: parts[7] === undefined ? true : boolOf(parts[7]),
       note: parts.slice(8).join(' | ')
     };
-  }).filter((item) => item.name);
+  }).filter(Boolean);
 }
 
 function parseVariantPayload(body) {

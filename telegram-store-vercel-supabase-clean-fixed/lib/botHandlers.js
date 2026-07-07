@@ -49,10 +49,16 @@ async function broadcastToUsers(payload = {}) {
   const caption = String(payload.caption || '').trim();
   const photo = String(payload.photo || payload.image_url || '').trim();
   const sticker = String(payload.sticker || payload.sticker_file_id || '').trim();
+  const fromChatId = payload.from_chat_id || payload.fromChatId;
+  const messageId = payload.message_id || payload.messageId;
   let sent = 0;
   let failed = 0;
 
   async function sendOne(id) {
+    if (type === 'copy' || type === 'poll') {
+      if (!fromChatId || !messageId) throw new Error('Data polling/source message tidak lengkap.');
+      return tg.copyMessage(id, fromChatId, messageId);
+    }
     if (type === 'photo') return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined });
     if (type === 'sticker') {
       await tg.sendSticker(id, sticker);
@@ -400,9 +406,10 @@ async function sendOwnerMenu(chatId) {
     `/editsnk *( Edit Syarat n Ketentuan Produk )*\n` +
     `/listuser *( List User )*\n` +
     `/deluser *( Delete User )*\n` +
-    `/bc *( Broadcast Teks / Reply Foto / Reply Stiker )*\n` +
+    `/bc *( Broadcast Teks / Reply Foto / Reply Stiker / Reply Polling )*\n` +
     `/bcphoto *( Broadcast Gambar URL/File ID )*\n` +
     `/bcsticker *( Broadcast Stiker File ID )*\n` +
+    `/bcpoll *( Broadcast Polling Forward/Reply )*\n` +
     `/addvoucher *( Tambah Voucher Bot )*\n` +
     `/editvoucher *( Edit Voucher Bot )*\n` +
     `/delvoucher *( Hapus Voucher Bot )*\n` +
@@ -423,7 +430,8 @@ async function sendOwnerMenu(chatId) {
     `/editvoucher KODE_LAMA|KODE_BARU|semua|POTONGAN|LIMIT\n` +
     `/bc Pesan broadcast\n` +
     `/bcphoto URL_GAMBAR|Caption\n` +
-    `/bcsticker FILE_ID_STIKER`;
+    `/bcsticker FILE_ID_STIKER\n` +
+    `/bcpoll reply polling`;
   return tg.sendMessage(chatId, text);
 }
 
@@ -431,6 +439,12 @@ async function handleTextMessage(msg, req) {
   const chatId = msg.chat.id;
   const from = msg.from || msg.chat;
   const text = String(msg.text || msg.caption || '').trim();
+
+  // Owner can broadcast a Telegram poll by forwarding/sending the poll to the bot.
+  if (!text && msg.poll && isOwner(from.id)) {
+    const result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: msg.message_id });
+    return tg.sendMessage(chatId, `✅ Broadcast polling selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+  }
 
   if (!text) return;
 
@@ -576,6 +590,14 @@ async function handleTextMessage(msg, req) {
     return tg.sendMessage(chatId, `✅ Voucher *${code}* berhasil dihapus.`, { parse_mode: 'Markdown' });
   }
 
+  if (lower.startsWith('/bcpoll')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    const source = msg.reply_to_message?.poll ? msg.reply_to_message : null;
+    if (!source) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\nForward polling ke bot, lalu reply polling itu dengan /bcpoll');
+    const result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: source.message_id });
+    return tg.sendMessage(chatId, `✅ Broadcast polling selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+  }
+
   if (lower.startsWith('/bcphoto')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const raw = parseCommandBody(text, 'bcphoto');
@@ -600,11 +622,13 @@ async function handleTextMessage(msg, req) {
     const body = parseCommandBody(text, 'bc');
     const replyPhoto = msg.reply_to_message?.photo?.slice(-1)?.[0]?.file_id;
     const replySticker = msg.reply_to_message?.sticker?.file_id;
+    const replyPoll = msg.reply_to_message?.poll ? msg.reply_to_message : null;
     let result;
     if (replyPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto, caption: body });
     else if (replySticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker, message: body });
+    else if (replyPoll) result = await broadcastToUsers({ type: 'poll', from_chat_id: chatId, message_id: replyPoll.message_id });
     else {
-      if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker dengan /bc Caption');
+      if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker/polling dengan /bc Caption');
       result = await broadcastToUsers({ type: 'text', message: body });
     }
     return tg.sendMessage(chatId, `✅ Broadcast selesai. Tipe: *${result.type}* | Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
