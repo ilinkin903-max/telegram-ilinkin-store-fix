@@ -1,1 +1,6 @@
-Admin UI v23 - global forwarded polling results
+Admin UI v24 - polling global result fix
+
+Perbaikan:
+- Broadcast polling sekarang membuat polling utama dari bot di chat owner, lalu polling utama itu di-forward ke user.
+- Hasil polling admin memakai update poll global dari bot, bukan polling terpisah per user.
+- /polling dan tab Polling membaca voter_count dari state polling terbaru.

@@ -697,21 +697,35 @@ async function getBroadcastPollResult(id) {
   if (answerError) throw answerError;
   if (messageError) throw messageError;
   const options = normalizePollOptions(poll.options || []);
-  const counts = options.map(() => 0);
   const answerRows = answers || [];
-  if (answerRows.length) {
-    answerRows.forEach((row) => {
-      const optionIds = Array.isArray(row.option_ids) ? row.option_ids : [];
-      optionIds.forEach((idx) => { if (counts[idx] !== undefined) counts[idx] += 1; });
-    });
-  } else {
-    (messages || []).forEach((row) => {
-      const state = normalizePollOptions(row.options_state || []);
-      state.forEach((opt, idx) => { if (counts[idx] !== undefined) counts[idx] += Number(opt.voter_count || 0); });
-    });
+  const messageRows = messages || [];
+
+  const countsFromAnswers = options.map(() => 0);
+  answerRows.forEach((row) => {
+    const optionIds = Array.isArray(row.option_ids) ? row.option_ids : [];
+    optionIds.forEach((idx) => { if (countsFromAnswers[idx] !== undefined) countsFromAnswers[idx] += 1; });
+  });
+
+  // Untuk polling global dari bot, sumber paling akurat biasanya update.poll yang menyimpan voter_count.
+  // Jangan jumlahkan semua forwarded message karena poll_id yang sama bisa tersimpan berkali-kali/tertindih.
+  // Ambil state dengan total voter terbesar, lalu fallback ke poll_answer jika update.poll belum masuk.
+  let bestMessage = null;
+  let bestTotal = -1;
+  messageRows.forEach((row) => {
+    const total = Number(row.total_voter_count || 0);
+    if (total > bestTotal) { bestTotal = total; bestMessage = row; }
+  });
+  const countsFromPollState = options.map(() => 0);
+  if (bestMessage) {
+    const state = normalizePollOptions(bestMessage.options_state || []);
+    state.forEach((opt, idx) => { if (countsFromPollState[idx] !== undefined) countsFromPollState[idx] += Number(opt.voter_count || 0); });
   }
+
+  const stateVotes = countsFromPollState.reduce((a, b) => a + b, 0);
+  const answerVotes = countsFromAnswers.reduce((a, b) => a + b, 0);
+  const counts = stateVotes >= answerVotes ? countsFromPollState : countsFromAnswers;
   const totalVotes = counts.reduce((a, b) => a + b, 0);
-  const totalVoters = answerRows.length || (messages || []).reduce((sum, row) => sum + Number(row.total_voter_count || 0), 0);
+  const totalVoters = Math.max(Number(bestMessage?.total_voter_count || 0), answerRows.length);
   return {
     ...poll,
     options_result: options.map((opt, idx) => ({

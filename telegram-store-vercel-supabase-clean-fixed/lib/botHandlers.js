@@ -126,28 +126,63 @@ async function preparePollPreview(chatId, from, source = {}) {
   });
 }
 
+async function createMasterPollForBroadcast(pollRecord = {}) {
+  const optionsList = (pollRecord.options || []).map((o) => String(o.text || o)).filter(Boolean);
+  if (!optionsList.length) throw new Error('Opsi polling kosong.');
+
+  const ownerChatId = Number(pollRecord.created_by || config.ownerId);
+  if (!ownerChatId) throw new Error('OWNER_ID tidak valid untuk membuat polling utama.');
+
+  // Agar hasil polling user menjadi satu hasil global dan tetap bisa terbaca bot,
+  // bot membuat satu polling utama terlebih dulu di chat owner, lalu polling utama itu di-forward ke user.
+  // Polling hasil forward dari polling yang dibuat bot tetap mengacu ke polling utama yang sama,
+  // sehingga update poll/poll_answer dapat masuk ke webhook bot dan tersimpan ke Supabase.
+  const pollType = String(pollRecord.poll_type || pollRecord.type || 'regular') === 'quiz' ? 'regular' : String(pollRecord.poll_type || pollRecord.type || 'regular');
+  const master = await tg.sendPoll(ownerChatId, pollRecord.question, optionsList, {
+    is_anonymous: pollRecord.is_anonymous !== false,
+    type: pollType,
+    allows_multiple_answers: Boolean(pollRecord.allows_multiple_answers)
+  });
+
+  const masterPollId = master?.poll?.id || pollRecord.source_poll_id || null;
+  if (masterPollId) {
+    await db.addBroadcastPollMessage({
+      broadcast_id: pollRecord.id,
+      poll_id: masterPollId,
+      telegram_id: ownerChatId,
+      message_id: master?.message_id || 0,
+      options_state: master?.poll?.options || pollRecord.options || [],
+      total_voter_count: master?.poll?.total_voter_count || 0
+    }).catch((e) => console.error('Gagal simpan master poll:', e.message));
+  }
+
+  await db.updateBroadcastPoll(pollRecord.id, {
+    source_chat_id: ownerChatId,
+    source_message_id: master?.message_id || null,
+    source_poll_id: masterPollId,
+    broadcast_mode: 'bot_master_forward'
+  }).catch(() => null);
+
+  return { master, ownerChatId, masterPollId };
+}
+
 async function broadcastPollRecordToUsers(pollRecord = {}) {
   const users = await db.listUsers(1000);
   const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
-  const optionsList = (pollRecord.options || []).map((o) => String(o.text || o)).filter(Boolean);
-  const canForward = Boolean(pollRecord.source_chat_id && pollRecord.source_message_id);
   let sent = 0;
   let failed = 0;
+  let masterInfo = null;
+
+  try {
+    masterInfo = await createMasterPollForBroadcast(pollRecord);
+  } catch (e) {
+    console.error('Gagal membuat polling utama bot:', e.message);
+    throw new Error('Gagal membuat polling utama. Cek OWNER_ID dan pastikan bot bisa mengirim pesan ke owner.');
+  }
+
   async function sendOne(id) {
-    let msg;
-    if (canForward) {
-      // Forward polling asli agar hasil vote user adalah hasil global yang sama.
-      // Jangan memakai sendPoll untuk draft baru karena itu membuat polling terpisah per user.
-      msg = await tg.forwardMessage(id, pollRecord.source_chat_id, pollRecord.source_message_id);
-    } else {
-      // Fallback untuk draft lama tanpa source message.
-      msg = await tg.sendPoll(id, pollRecord.question, optionsList, {
-        is_anonymous: pollRecord.is_anonymous !== false,
-        type: pollRecord.poll_type || pollRecord.type || 'regular',
-        allows_multiple_answers: Boolean(pollRecord.allows_multiple_answers)
-      });
-    }
-    const pollId = msg?.poll?.id || pollRecord.source_poll_id;
+    const msg = await tg.forwardMessage(id, masterInfo.ownerChatId, masterInfo.master.message_id);
+    const pollId = msg?.poll?.id || masterInfo.masterPollId;
     if (pollId) {
       await db.addBroadcastPollMessage({
         broadcast_id: pollRecord.id,
@@ -160,13 +195,24 @@ async function broadcastPollRecordToUsers(pollRecord = {}) {
     }
     return msg;
   }
+
   for (let i = 0; i < targets.length; i += 10) {
     const part = targets.slice(i, i + 10);
     const results = await Promise.allSettled(part.map(sendOne));
     results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
   }
-  await db.updateBroadcastPoll(pollRecord.id, { status: 'sent', total_sent: sent, total_failed: failed, broadcast_mode: canForward ? 'forward' : 'sendpoll' }).catch(() => null);
-  return { total: targets.length, sent, failed, type: 'poll', mode: canForward ? 'forward' : 'sendpoll' };
+
+  await db.updateBroadcastPoll(pollRecord.id, {
+    status: 'sent',
+    total_sent: sent,
+    total_failed: failed,
+    broadcast_mode: 'bot_master_forward',
+    source_chat_id: masterInfo.ownerChatId,
+    source_message_id: masterInfo.master.message_id,
+    source_poll_id: masterInfo.masterPollId
+  }).catch(() => null);
+
+  return { total: targets.length, sent, failed, type: 'poll', mode: 'bot_master_forward' };
 }
 
 function pollResultText(result = {}) {
@@ -1045,7 +1091,7 @@ async function handleCallbackQuery(query, req) {
     const pollRecord = await db.getBroadcastPoll(pollId);
     if (!pollRecord) return tg.answerCallbackQuery(query.id, { text: 'Polling tidak ditemukan.', show_alert: true });
     const result = await broadcastPollRecordToUsers(pollRecord);
-    const modeInfo = result.mode === 'forward' ? 'Mode: polling global. User melihat hasil keseluruhan.' : 'Mode: fallback. Draft lama tanpa source polling.';
+    const modeInfo = 'Mode: polling global dari bot. User melihat hasil keseluruhan dan admin bisa melihat suara masuk.';
     return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n${modeInfo}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
   }
   if (cmd.startsWith('poll_result:')) {
