@@ -109,13 +109,38 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   </section>
 
   <section id="promos" class="section">
-    <div class="forms">
-      <div class="panel yellow"><h2 class="sectionTitle">Promo & Voucher</h2><p class="help">Atur dua jenis promo: <b>Voucher Manual</b> yang dipakai user dengan kode voucher, dan <b>Promo Otomatis</b> yang aktif otomatis saat checkout jika syarat cocok.</p><div class="row"><button id="openAddVoucher" class="btn yellow" type="button">+ Tambah Voucher Manual</button><button class="btn lime" type="button" onclick="document.getElementById('promoForm').scrollIntoView({behavior:'smooth',block:'start'})">+ Atur Promo Otomatis</button></div></div>
-      <div class="panel voucherListPanel"><h2 class="sectionTitle">Daftar Voucher Manual</h2><p class="help">Voucher manual dipakai user dengan memasukkan kode voucher saat belanja.</p><div id="voucherList"></div></div>
+    <div class="panel yellow"><h2 class="sectionTitle">Promo & Voucher</h2><p class="help">Satu menu untuk membuat <b>Voucher Manual</b> atau <b>Promo Otomatis</b>. Voucher dipakai user dengan kode, sedangkan Promo Otomatis diterapkan otomatis saat checkout jika syarat cocok.</p></div>
+    <div class="panel lime"><h2 class="sectionTitle">Setting Promo / Voucher</h2>
+      <form id="promoUnifiedForm" class="form">
+        <input type="hidden" name="current_code" value="">
+        <div class="row3">
+          <div class="field"><label class="label">Tipe Setting</label><select class="select" name="promo_kind"><option value="voucher">Voucher Manual</option><option value="auto">Promo Otomatis</option></select></div>
+          <div class="field"><label class="label">Kode</label><input class="input" name="code" placeholder="Contoh: DISKON10 / HEMAT20" required></div>
+          <div class="field"><label class="label">Nama/Judul</label><input class="input" name="name" placeholder="Contoh: Diskon Member Lama"></div>
+        </div>
+        <div class="row3">
+          <div class="field"><label class="label">Status</label><select class="select" name="active"><option value="true">ON</option><option value="false">OFF</option></select></div>
+          <div class="field"><label class="label">Tipe Diskon</label><select class="select" name="discount_type"><option value="amount">Nominal Rupiah</option><option value="percent">Persen</option></select></div>
+          <div class="field"><label class="label">Nilai Diskon</label><input class="input" name="discount_value" type="number" placeholder="Contoh nominal: 5000 / persen: 10" required></div>
+        </div>
+        <div class="row3">
+          <div class="field"><label class="label">Limit Pemakaian</label><input class="input" name="usage_limit" type="number" placeholder="0 = tanpa limit untuk promo otomatis, voucher wajib isi limit"></div>
+          <div class="field"><label class="label">Minimal Jumlah Beli</label><input class="input" name="min_qty" type="number" placeholder="Contoh: 2"></div>
+          <div class="field"><label class="label">Minimal Belanja</label><input class="input" name="min_spend" type="number" placeholder="Contoh: 50000"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label class="label">Produk Target</label><textarea class="textarea" name="products" placeholder="Kosong / semua = semua produk\nAtau isi kode produk: CANVA1B, NETFLIX"></textarea></div>
+          <div class="field"><label class="label">Deskripsi / Catatan</label><textarea class="textarea" name="description" placeholder="Contoh: Berlaku minimal 2 produk, tidak bisa digabung voucher lain."></textarea></div>
+        </div>
+        <div class="row">
+          <div class="field"><label class="label">Mulai Berlaku</label><input class="input" name="start_at" type="datetime-local"></div>
+          <div class="field"><label class="label">Berakhir / Expired</label><input class="input" name="end_at" type="datetime-local"></div>
+        </div>
+        <p class="help"><b>Voucher Manual:</b> user harus memasukkan kode. <b>Promo Otomatis:</b> langsung aktif saat checkout jika syarat cocok. Keduanya bisa dihapus kapan saja.</p>
+        <div class="actions"><button class="btn yellow" type="submit">Simpan Promo / Voucher</button><button class="btn lime" type="button" id="resetPromoUnified">Buat Baru</button></div>
+      </form>
     </div>
-    <div class="panel lime"><h2 class="sectionTitle">Promo Otomatis</h2><p class="help">Promo otomatis langsung diterapkan saat checkout jika produk, jumlah, dan minimal belanja cocok. Jika user memakai voucher manual, voucher manual diprioritaskan.</p><form id="promoForm" class="form"><div class="row3"><div class="field"><label class="label">Kode Promo</label><input class="input" name="code" placeholder="Contoh: HEMAT10" required></div><div class="field"><label class="label">Nama Promo</label><input class="input" name="name" placeholder="Contoh: Diskon Harian" required></div><div class="field"><label class="label">Status Promo</label><select class="select" name="active"><option value="true">ON</option><option value="false">OFF</option></select></div></div><div class="row3"><div class="field"><label class="label">Tipe Diskon</label><select class="select" name="discount_type"><option value="amount">Nominal Rupiah</option><option value="percent">Persen</option></select></div><div class="field"><label class="label">Nilai Diskon</label><input class="input" name="discount_value" type="number" placeholder="Contoh nominal: 5000 / persen: 10" required></div><div class="field"><label class="label">Limit Pemakaian</label><input class="input" name="usage_limit" type="number" placeholder="0 atau kosong = tanpa limit"></div></div><div class="row"><div class="field"><label class="label">Produk Target</label><textarea class="textarea" name="products" placeholder="Kosong/semua = semua produk
-Atau isi kode produk: CANVA1B, NETFLIX"></textarea></div><div class="field"><label class="label">Syarat Promo</label><div class="row"><input class="input" name="min_qty" type="number" placeholder="Min jumlah, contoh 2"><input class="input" name="min_spend" type="number" placeholder="Min belanja, contoh 50000"></div><textarea class="textarea" name="description" placeholder="Catatan promo, contoh: Berlaku untuk pembelian minimal 2 pcs."></textarea></div></div><div class="row"><div class="field"><label class="label">Mulai Promo</label><input class="input" name="start_at" type="datetime-local"></div><div class="field"><label class="label">Berakhir Promo</label><input class="input" name="end_at" type="datetime-local"></div></div><button class="btn yellow" type="submit">Simpan Promo Otomatis</button></form></div>
-    <div class="panel voucherListPanel"><h2 class="sectionTitle">Daftar Promo Otomatis</h2><div id="promoList"></div></div>
+    <div class="panel voucherListPanel"><h2 class="sectionTitle">Daftar Promo & Voucher</h2><p class="help">Daftar voucher manual dan promo otomatis digabung. Lihat label warna untuk membedakan tipe. Semua bisa diedit atau dihapus kapan saja.</p><div id="promoUnifiedList"></div></div>
   </section>
   <section id="deepStats" class="section">
     <div class="panel deepStatsPanel"><h2 class="sectionTitle">Statistik Lengkap</h2><p class="help">Ringkasan status lengkap toko: omset hari ini, omset bulan ini, total omset, rata-rata order, item terjual, conversion estimate, promo aktif, pending order, stok kritis, user terbaik, dan jam ramai.</p><div id="deepStatsBox" class="detailGrid"></div></div>
@@ -457,15 +482,52 @@ Atau isi kode produk: CANVA1B, NETFLIX"></textarea></div><div class="field"><lab
     document.querySelectorAll('[data-order-products]').forEach(function(btn){btn.onclick=function(){openOrderProducts(btn.dataset.orderProducts);};});
   }
   function renderUsers(sortMode){ if(sortMode) state.userSort=sortMode; var rows=state.users.slice(); if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);}); else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);}); document.getElementById('userList').innerHTML=rows.map(function(u){return '<tr><td>'+esc(u.telegram_id)+'</td><td>'+(u.username?'@'+esc(u.username):esc(u.first_name||'-'))+'</td><td>'+esc(u.transaction_count||0)+'</td><td>'+rupiah(u.spending||0)+'</td><td><button class="btn small red" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></td></tr>';}).join('')||'<tr><td colspan="5">Belum ada user.</td></tr>'; document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};}); document.querySelectorAll('[data-user-sort]').forEach(function(btn){btn.onclick=function(){ renderUsers(btn.dataset.userSort); };}); }
-  function voucherFormHtml(v){ v=v||{}; var target=(v.products&&v.products.length)?v.products.join(','):'semua'; return '<form id="modalVoucherForm" class="form">'+
-    '<input type="hidden" name="current_code" value="'+esc(v.code||'')+'">'+
-    '<div class="formCard"><p class="softTitle">Data Voucher</p><div class="row"><div class="field"><label class="label">Kode Voucher</label><input class="input" name="kode" placeholder="Contoh: DISKON10" value="'+esc(v.code||'')+'" required></div><div class="field"><label class="label">Target Produk</label><input class="input" name="produk" placeholder="Contoh: semua atau CANVA1B,NETFLIX" value="'+esc(target)+'"></div></div></div>'+
-    '<div class="formCard"><p class="softTitle">Nilai dan Batas Pemakaian</p><div class="row"><div class="field"><label class="label">Potongan Harga</label><input class="input" name="potongan" type="number" placeholder="Contoh: 10000" value="'+esc(v.discount||'')+'" required></div><div class="field"><label class="label">Limit Pemakaian</label><input class="input" name="limit" type="number" placeholder="Contoh: 20" value="'+esc(v.usage_limit||'')+'" required></div></div></div>'+
-    '<div class="formCard"><p class="softTitle">Status dan Masa Berlaku</p><div class="row"><div class="field"><label class="label">Status Voucher</label><select class="select" name="active"><option value="true" '+(v.active===false?'':'selected')+'>Aktif</option><option value="false" '+(v.active===false?'selected':'')+'>Nonaktif</option></select></div><div class="field"><label class="label">Tanggal Expired</label><input class="input" name="expires_at" placeholder="Opsional: 2026-07-30T23:59:00+07:00" value="'+esc(v.expires_at||'')+'"></div></div></div>'+
-    '<div class="formCard"><div class="field"><label class="label">Deskripsi Voucher</label><textarea class="textarea" name="description" placeholder="Contoh: Voucher promo khusus member lama.">'+esc(v.description||'')+'</textarea></div></div>'+
-    '<button class="btn lime" type="submit">Simpan Voucher</button></form>'; }
-  function openVoucherModal(code){ var v=code?state.vouchers.find(function(x){return x.code===code;}):null; openModal(v?'Edit Voucher':'Tambah Voucher', voucherFormHtml(v)); document.getElementById('modalVoucherForm').onsubmit=async function(e){ e.preventDefault(); var d=formData(e.target); var action=d.current_code?'edit-voucher':'add-voucher'; await post(action,d); closeModal(); }; }
-  function renderVouchers(){ document.getElementById('voucherList').innerHTML=state.vouchers.map(function(v){ var target=(v.products&&v.products.length)?v.products.join(', '):'Semua produk'; return '<div class="voucherCard"><span class="voucherCode">'+esc(v.code)+'</span> '+(v.active===false?'<span class="chip red">OFF</span>':'<span class="chip green">ON</span>')+'<div class="voucherMeta"><span class="chip yellow">Potongan '+rupiah(v.discount)+'</span><span class="chip purple">Limit '+esc(v.usage_limit)+'</span><span class="chip green">Target '+esc(target)+'</span></div><p class="help">'+esc(v.description||'Belum ada deskripsi voucher.')+'</p><div class="actions"><button class="btn small cyan" data-edit-voucher="'+esc(v.code)+'">Edit</button><button class="btn small red" data-delete-voucher="'+esc(v.code)+'">Hapus</button></div></div>';}).join('')||'<div class="empty">Belum ada voucher.</div>'; document.querySelectorAll('[data-edit-voucher]').forEach(function(btn){btn.onclick=function(){openVoucherModal(btn.dataset.editVoucher);};}); document.querySelectorAll('[data-delete-voucher]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus voucher '+btn.dataset.deleteVoucher+'?')) await post('delete-voucher',{kode:btn.dataset.deleteVoucher});};}); }
+  function promoUnifiedReset(){
+    var f=document.getElementById('promoUnifiedForm'); if(!f) return;
+    f.reset(); f.current_code.value='';
+    var title=document.querySelector('#promos .sectionTitle');
+    var btn=f.querySelector('button[type="submit"]'); if(btn) btn.textContent='Simpan Promo / Voucher';
+  }
+  function fillPromoUnified(type, item){
+    var f=document.getElementById('promoUnifiedForm'); if(!f || !item) return;
+    switchTab('promos');
+    f.current_code.value=item.code||'';
+    f.promo_kind.value=type;
+    f.code.value=item.code||'';
+    f.name.value=item.name || (type==='voucher' ? 'Voucher '+(item.code||'') : 'Promo '+(item.code||''));
+    f.active.value=(item.active===false?'false':'true');
+    f.discount_type.value=item.discount_type || 'amount';
+    f.discount_value.value=item.discount_value || item.discount || '';
+    f.usage_limit.value=item.usage_limit || item.limit || '';
+    f.min_qty.value=item.min_qty || 1;
+    f.min_spend.value=item.min_spend || 0;
+    f.products.value=(item.products&&item.products.length)?item.products.join(', '):'semua';
+    f.description.value=item.description||'';
+    f.start_at.value=toLocalInputValue(item.start_at);
+    f.end_at.value=toLocalInputValue(item.end_at || item.expires_at);
+    var btn=f.querySelector('button[type="submit"]'); if(btn) btn.textContent='Update '+(type==='voucher'?'Voucher Manual':'Promo Otomatis');
+    f.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function toLocalInputValue(value){
+    if(!value) return '';
+    var d=new Date(value); if(isNaN(d.getTime())) return '';
+    var pad=function(n){return String(n).padStart(2,'0');};
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+  }
+  function unifiedDiscountText(x){
+    var t=x.discount_type||'amount'; var v=x.discount_value || x.discount || 0;
+    return t==='percent' ? (v+'%') : rupiah(v);
+  }
+  function renderUnifiedPromos(){
+    var el=document.getElementById('promoUnifiedList'); if(!el) return;
+    var vouchers=(state.vouchers||[]).map(function(v){return {type:'voucher',label:'Voucher Manual',row:v};});
+    var promos=(state.promos||[]).map(function(p){return {type:'auto',label:'Promo Otomatis',row:p};});
+    var rows=vouchers.concat(promos).sort(function(a,b){return String(b.row.updated_at||b.row.created_at||'').localeCompare(String(a.row.updated_at||a.row.created_at||''));});
+    el.innerHTML=rows.map(function(item){ var x=item.row; var target=(x.products&&x.products.length)?x.products.join(', '):'Semua produk'; var min='Min '+(x.min_qty||1)+' pcs / '+rupiah(x.min_spend||0); var limit=(x.usage_limit?x.usage_limit:'∞'); var used=item.type==='auto'?(x.used_count||0):((x.used_by&&x.used_by.length)||0); var end=x.end_at||x.expires_at||''; return '<div class="voucherCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="rowBetween"><div><span class="voucherCode">'+esc(x.code)+'</span> <span class="chip '+(item.type==='voucher'?'purple':'yellow')+'">'+esc(item.label)+'</span> '+(x.active===false?'<span class="chip red">OFF</span>':'<span class="chip green">ON</span>')+'</div><div class="actions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div></div><div class="voucherMeta"><span class="chip yellow">Diskon '+esc(unifiedDiscountText(x))+'</span><span class="chip purple">'+esc(min)+'</span><span class="chip green">Target '+esc(target)+'</span><span class="chip orange">Dipakai '+esc(used)+'/'+esc(limit)+'</span></div><p class="help">'+esc(x.name||x.description||'Tanpa deskripsi')+(x.description&&x.name?' — '+esc(x.description):'')+'</p>'+(x.start_at||end?'<small>Berlaku: '+esc(x.start_at||'sekarang')+' s/d '+esc(end||'tanpa batas')+'</small>':'')+'</div>'; }).join('')||'<div class="empty">Belum ada promo atau voucher.</div>';
+    document.querySelectorAll('[data-edit-unified]').forEach(function(btn){btn.onclick=function(){ var parts=btn.dataset.editUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); var item=(type==='voucher'?state.vouchers:state.promos).find(function(x){return String(x.code).toUpperCase()===String(code).toUpperCase();}); fillPromoUnified(type,item); };});
+    document.querySelectorAll('[data-delete-unified]').forEach(function(btn){btn.onclick=async function(){ var parts=btn.dataset.deleteUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); if(!confirm('Hapus '+(type==='voucher'?'voucher':'promo')+' '+code+'?')) return; await post(type==='voucher'?'delete-voucher':'promo-delete', type==='voucher'?{kode:code}:{code:code}); };});
+  }
+  function renderVouchers(){ renderUnifiedPromos(); }
 
   async function openPollResult(id){
     try{
@@ -504,11 +566,7 @@ Atau isi kode produk: CANVA1B, NETFLIX"></textarea></div><div class="field"><lab
     var el=document.getElementById('backupLogs'); if(!el) return;
     el.innerHTML=(state.backups||[]).map(function(b){return '<div class="voucher"><b>'+esc(b.type||'-')+'</b> <span class="chip '+(b.status==='failed'?'red':'green')+'">'+esc(b.status||'-')+'</span><br>File: '+esc(b.filename||'-')+'<br>Ukuran: '+esc(b.size_bytes||0)+' bytes<br><small>'+esc(b.created_at||'')+'</small><p class="help">'+esc(b.note||'')+'</p></div>';}).join('')||'<div class="empty">Belum ada log backup.</div>';
   }
-  function renderPromos(){
-    var el=document.getElementById('promoList'); if(!el) return;
-    el.innerHTML=(state.promos||[]).map(function(p){ var target=(p.products&&p.products.length)?p.products.join(', '):'Semua produk'; var disc=p.discount_type==='percent'?(p.discount_value+'%'):rupiah(p.discount_value); return '<div class="voucherCard"><span class="voucherCode">'+esc(p.code)+'</span> '+(p.active===false?'<span class="chip red">OFF</span>':'<span class="chip green">ON</span>')+'<div class="voucherMeta"><span class="chip yellow">Diskon '+esc(disc)+'</span><span class="chip purple">Min Qty '+esc(p.min_qty||1)+'</span><span class="chip green">Target '+esc(target)+'</span></div><p class="help">'+esc(p.name||'')+' — '+esc(p.description||'')+'</p><small>Dipakai: '+esc(p.used_count||0)+' / '+(p.usage_limit?esc(p.usage_limit):'∞')+'</small><div class="actions"><button class="btn small red" data-promo-delete="'+esc(p.code)+'">Hapus</button></div></div>'; }).join('')||'<div class="empty">Belum ada promo otomatis.</div>';
-    document.querySelectorAll('[data-promo-delete]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus promo '+btn.dataset.promoDelete+'?')) await post('promo-delete',{code:btn.dataset.promoDelete}); };});
-  }
+  function renderPromos(){ renderUnifiedPromos(); }
   function renderDeepStats(){
     var d=state.deepStats||{};
     var box=document.getElementById('deepStatsBox'); if(box){ var rows=[['Omset Hari Ini',rupiah(d.revenue_today)],['Omset Bulan Ini',rupiah(d.revenue_month)],['Total Omset Semua Waktu',rupiah(d.revenue_total)],['Rata-rata Nilai Order',rupiah(d.average_order_value)],['Total Item Terjual',d.quantity_sold||0],['Estimasi Checkout Berhasil',(d.conversion_rate||0)+'%'],['Promo Otomatis Aktif',d.active_promos||0],['Pending Order Aktif',d.pending_orders||0]]; box.innerHTML=rows.map(function(r){return '<div class="detailItem"><b>'+esc(r[0])+'</b><br><span style="font-size:22px">'+esc(r[1])+'</span></div>';}).join(''); }
@@ -547,14 +605,14 @@ Atau isi kode produk: CANVA1B, NETFLIX"></textarea></div><div class="field"><lab
   };
   var addVariantToggle=document.getElementById('addVariantToggle'); if(addVariantToggle) addVariantToggle.onchange=toggleAddVariantBuilder;
   var addVariantRowBtn=document.getElementById('addVariantRow'); if(addVariantRowBtn) addVariantRowBtn.onclick=function(){ addVariantRow(); };
-  var addVoucherBtn=document.getElementById('openAddVoucher'); if(addVoucherBtn) addVoucherBtn.onclick=function(){ openVoucherModal(); };
   document.getElementById('settingsForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.store_description=''; d.logo_url=''; d.banner_url=''; await post('save-settings',d);};
   document.getElementById('broadcastForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); if(d.type==='photo' && !String(d.photo||'').trim()) return toast('URL/file_id gambar wajib diisi untuk broadcast gambar', true); if(d.type==='sticker' && !String(d.sticker||'').trim()) return toast('File ID stiker wajib diisi untuk broadcast stiker', true); if(d.type==='text' && !String(d.message||'').trim()) return toast('Pesan teks wajib diisi', true); var r=await post('broadcast',d); if(r.data) toast('Broadcast terkirim '+r.data.sent+', gagal '+r.data.failed);};
 
   var downloadBackup=document.getElementById('downloadBackup'); if(downloadBackup) downloadBackup.onclick=async function(){ var r=await api('backup-export'); var text=JSON.stringify(r.data,null,2); var blob=new Blob([text],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='backup-bot-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); toast('Backup berhasil diunduh'); await load(); };
   var sendBackupTelegram=document.getElementById('sendBackupTelegram'); if(sendBackupTelegram) sendBackupTelegram.onclick=async function(){ await post('backup-send',{}); toast('Backup dikirim ke Telegram owner'); };
   var importBackupForm=document.getElementById('importBackupForm'); if(importBackupForm) importBackupForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); if(!String(d.backup||'').trim()) return toast('Paste isi backup JSON dulu', true); if(confirm('Import backup sekarang? Data dengan kode/ID sama akan ditimpa.')){ await post('backup-import',{backup:d.backup,include_transactions:!!d.include_transactions}); e.target.reset(); }};
-  var promoForm=document.getElementById('promoForm'); if(promoForm) promoForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); await post('promo-save',d); e.target.reset(); };
+  var promoUnifiedForm=document.getElementById('promoUnifiedForm'); if(promoUnifiedForm) promoUnifiedForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var isAuto=d.promo_kind==='auto'; var payload={ code:d.code, kode:d.code, current_code:d.current_code, name:d.name||d.code, discount_type:d.discount_type, discount_value:d.discount_value, potongan:d.discount_value, produk:d.products, products:d.products, min_qty:d.min_qty||1, min_spend:d.min_spend||0, usage_limit:d.usage_limit, limit:d.usage_limit, description:d.description, active:d.active, start_at:d.start_at||null, end_at:d.end_at||null, expires_at:d.end_at||null }; if(isAuto){ await post('promo-save',payload); } else { await post(d.current_code?'edit-voucher':'add-voucher',payload); } promoUnifiedReset(); };
+  var resetPromoUnified=document.getElementById('resetPromoUnified'); if(resetPromoUnified) resetPromoUnified.onclick=promoUnifiedReset;
 
   var maintenanceForm=document.getElementById('maintenanceForm'); if(maintenanceForm) maintenanceForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var label=e.target.target.options[e.target.target.selectedIndex].text; var days=d.days||30; var warn='Jalankan maintenance: '+label+'?\n\nUmur data minimal: '+days+' hari.\nData yang dihapus tidak bisa dikembalikan.'; if(d.target==='transactions-old') warn='PERINGATAN: ini akan menghapus transaksi lama permanen. Pastikan sudah backup/export.\n\n'+warn; if(confirm(warn)){ var r=await post('maintenance-cleanup',d); if(r.data) toast((r.data.message||'Maintenance selesai')+' Terproses: '+(r.data.affected||0)); } };
   load();

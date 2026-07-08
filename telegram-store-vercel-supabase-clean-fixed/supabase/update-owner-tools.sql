@@ -9,6 +9,13 @@ alter table public.products add column if not exists active boolean not null def
 alter table public.vouchers add column if not exists description text not null default '';
 alter table public.vouchers add column if not exists active boolean not null default true;
 alter table public.vouchers add column if not exists expires_at timestamptz;
+alter table public.vouchers add column if not exists discount_type text not null default 'amount';
+alter table public.vouchers add column if not exists discount_value integer not null default 0;
+alter table public.vouchers add column if not exists min_qty integer not null default 1;
+alter table public.vouchers add column if not exists min_spend integer not null default 0;
+alter table public.vouchers add column if not exists start_at timestamptz;
+update public.vouchers set discount_value = discount where coalesce(discount_value, 0) = 0 and coalesce(discount, 0) > 0;
+
 
 create table if not exists public.shop_settings (
   key text primary key,

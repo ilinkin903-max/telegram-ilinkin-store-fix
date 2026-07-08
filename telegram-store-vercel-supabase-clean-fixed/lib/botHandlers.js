@@ -816,12 +816,16 @@ async function handleTextMessage(msg, req) {
   if (pending?.status === 'waiting_voucher') {
     const voucherCode = text.toUpperCase().trim();
     const voucher = await db.getVoucher(voucherCode);
-    const valid = db.voucherIsValid(voucher, pending.product_code, from.id);
+    const product = await db.getProductByCode(pending.product_code).catch(() => null);
+    const qty = Number(pending.quantity || 1);
+    const subtotal = product ? qty * orderUnitPrice(product, pending) : Number(pending.amount || 0);
+    const valid = db.voucherIsValid(voucher, pending.product_code, from.id, qty, subtotal);
     if (!valid) {
-      return tg.sendMessage(chatId, '⚠️ Voucher tidak valid, sudah habis, sudah pernah kamu pakai, atau tidak cocok dengan produk ini.');
+      return tg.sendMessage(chatId, '⚠️ Voucher tidak valid, belum aktif, sudah habis, syarat minimal belum terpenuhi, sudah pernah kamu pakai, atau tidak cocok dengan produk ini.');
     }
+    const discount = db.voucherDiscountAmount(voucher, subtotal);
     await db.upsertPendingOrder({ ...pending, voucher_code: voucher.code, status: 'ready_to_pay' });
-    return tg.sendMessage(chatId, `✅ Voucher *${voucher.code}* berhasil dipasang. Potongan: *${formatRupiah(voucher.discount)}*`, {
+    return tg.sendMessage(chatId, `✅ Voucher *${voucher.code}* berhasil dipasang. Potongan: *${formatRupiah(discount)}*`, {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: [[{ text: '💸 Lanjut Bayar', callback_data: 'bayar' }], [{ text: '❌ Batal', callback_data: 'batalbeli' }]] }
     });
@@ -932,8 +936,8 @@ async function createPayment(query) {
   let harga = Number(order.quantity || 1) * unit;
   let promoApplied = null;
   const voucher = order.voucher_code ? await db.getVoucher(order.voucher_code) : null;
-  if (db.voucherIsValid(voucher, product.kode, userId)) {
-    harga -= Number(voucher.discount || 0);
+  if (db.voucherIsValid(voucher, product.kode, userId, Number(order.quantity || 1), harga)) {
+    harga -= db.voucherDiscountAmount(voucher, harga);
   } else {
     promoApplied = await db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), harga).catch(() => null);
     if (promoApplied?.discount_amount) harga -= Number(promoApplied.discount_amount || 0);

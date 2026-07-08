@@ -1,9 +1,1 @@
-Admin UI v27 - Promo Voucher Merge + Statistik Text Fix
-
-Perubahan:
-- Teks blok Statistik Lengkap dibuat hitam dan lebih terbaca.
-- Menu Stats diganti menjadi Dashboard.
-- Menu Statistik+ diganti menjadi Statistik Lengkap.
-- Voucher digabung ke menu Promo & Voucher.
-- Dalam Promo & Voucher tersedia Voucher Manual dan Promo Otomatis.
-- Menu Promo & Voucher tetap hijau saat tidak aktif, dan kuning saat aktif.
+Admin UI v28 - Unified Promo Voucher

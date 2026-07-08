@@ -293,15 +293,22 @@ async function getVoucher(code) {
 async function addVoucher(input) {
   const code = String(input.kode || input.code || '').trim().toUpperCase();
   const existing = code ? await getVoucher(code).catch(() => null) : null;
+  const discountType = String(input.discount_type || input.tipe_diskon || existing?.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount';
+  const discountValue = Number(input.discount_value ?? input.potongan ?? input.discount ?? existing?.discount_value ?? existing?.discount ?? 0);
   const payload = {
     code,
     products: parseVoucherProducts(input.produk ?? input.products),
-    discount: Number(input.potongan ?? input.discount ?? 0),
-    usage_limit: Number(input.limit ?? input.usage_limit ?? 0),
+    discount: discountValue,
+    discount_type: discountType,
+    discount_value: discountValue,
+    min_qty: Math.max(1, Number(input.min_qty || existing?.min_qty || 1)),
+    min_spend: Math.max(0, Number(input.min_spend || existing?.min_spend || 0)),
+    usage_limit: Math.max(0, Number(input.limit ?? input.usage_limit ?? existing?.usage_limit ?? 0)),
     used_by: Array.isArray(input.used_by) ? input.used_by.map(Number) : (Array.isArray(existing?.used_by) ? existing.used_by : []),
     description: String(input.description || input.deskripsi || existing?.description || ''),
     active: input.active === undefined ? (existing?.active ?? true) : Boolean(input.active),
-    expires_at: input.expires_at || input.expired_at || existing?.expires_at || null,
+    start_at: input.start_at || input.mulai || existing?.start_at || null,
+    expires_at: input.expires_at || input.end_at || input.expired_at || existing?.expires_at || null,
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('vouchers').upsert(payload, { onConflict: 'code' }).select('*').single();
@@ -315,15 +322,22 @@ async function updateVoucher(code, updates = {}) {
   const current = await getVoucher(currentCode);
   if (!current) return null;
   const nextCode = String(updates.kode || updates.code || currentCode).trim().toUpperCase();
+  const discountType = updates.discount_type !== undefined || updates.tipe_diskon !== undefined ? (String(updates.discount_type || updates.tipe_diskon).toLowerCase() === 'percent' ? 'percent' : 'amount') : (current.discount_type || 'amount');
+  const discountValue = updates.discount_value !== undefined || updates.potongan !== undefined || updates.discount !== undefined ? Number(updates.discount_value ?? updates.potongan ?? updates.discount) : Number(current.discount_value ?? current.discount ?? 0);
   const payload = {
     code: nextCode,
     products: updates.produk !== undefined || updates.products !== undefined ? parseVoucherProducts(updates.produk ?? updates.products) : (Array.isArray(current.products) ? current.products : []),
-    discount: updates.potongan !== undefined || updates.discount !== undefined ? Number(updates.potongan ?? updates.discount) : Number(current.discount || 0),
-    usage_limit: updates.limit !== undefined || updates.usage_limit !== undefined ? Number(updates.limit ?? updates.usage_limit) : Number(current.usage_limit || 0),
+    discount: discountValue,
+    discount_type: discountType,
+    discount_value: discountValue,
+    min_qty: updates.min_qty !== undefined ? Math.max(1, Number(updates.min_qty || 1)) : Math.max(1, Number(current.min_qty || 1)),
+    min_spend: updates.min_spend !== undefined ? Math.max(0, Number(updates.min_spend || 0)) : Math.max(0, Number(current.min_spend || 0)),
+    usage_limit: updates.limit !== undefined || updates.usage_limit !== undefined ? Math.max(0, Number(updates.limit ?? updates.usage_limit ?? 0)) : Number(current.usage_limit || 0),
     used_by: Array.isArray(current.used_by) ? current.used_by : [],
     description: updates.description !== undefined || updates.deskripsi !== undefined ? String(updates.description ?? updates.deskripsi) : String(current.description || ''),
     active: updates.active === undefined ? (current.active ?? true) : Boolean(updates.active),
-    expires_at: updates.expires_at !== undefined || updates.expired_at !== undefined ? (updates.expires_at || updates.expired_at || null) : (current.expires_at || null),
+    start_at: updates.start_at !== undefined || updates.mulai !== undefined ? (updates.start_at || updates.mulai || null) : (current.start_at || null),
+    expires_at: updates.expires_at !== undefined || updates.end_at !== undefined || updates.expired_at !== undefined ? (updates.expires_at || updates.end_at || updates.expired_at || null) : (current.expires_at || null),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('vouchers').upsert(payload, { onConflict: 'code' }).select('*').single();
@@ -347,157 +361,24 @@ async function listVouchers(limit = 100) {
   return data || [];
 }
 
-async function getMonthlyRekap(month, year) {
-  const todayKey = wibDateKey(new Date());
-  const [currentY, currentM] = todayKey.split('-').map(Number);
-  const m = Number(month || currentM);
-  const y = Number(year || currentY);
-  const startKey = `${y}-${String(m).padStart(2, '0')}-01`;
-  const endKey = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
-  const start = wibKeyStartUtc(startKey);
-  const end = wibKeyStartUtc(endKey);
-  const { data, error } = await sb()
-    .from('transactions')
-    .select('*')
-    .gte('created_at', start.toISOString())
-    .lt('created_at', end.toISOString())
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  const rows = data || [];
-  const total_price = rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
-  const quantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-  const byProduct = new Map();
-  rows.forEach((row) => {
-    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
-    const current = byProduct.get(key) || { code: row.product_code || '-', name: row.product_name || '-', variant: row.variant_name || '', quantity: 0, total_price: 0 };
-    current.quantity += Number(row.quantity || 0);
-    current.total_price += Number(row.total_price || 0);
-    byProduct.set(key, current);
-  });
-  return { month: m, year: y, orders: rows.length, quantity, total_price, by_product: Array.from(byProduct.values()).sort((a, b) => b.total_price - a.total_price), rows };
+function voucherDiscountAmount(voucher, subtotal) {
+  const raw = Number(voucher?.discount_value ?? voucher?.discount ?? 0);
+  if (String(voucher?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * raw / 100));
+  return Math.min(Number(subtotal || 0), raw);
 }
 
-async function getShopSettings() {
-  const { data, error } = await sb().from('shop_settings').select('key,value');
-  if (error) throw error;
-  const out = { store_name: '', store_description: '', logo_url: '', banner_url: '', start_media_type: 'none', start_media_value: '', start_media_caption: '', customer_service_link: '', group_link: '' };
-  (data || []).forEach((row) => { out[row.key] = row.value; });
-  return out;
-}
-
-async function saveShopSettings(input = {}) {
-  const rows = ['store_name', 'store_description', 'logo_url', 'banner_url', 'start_media_type', 'start_media_value', 'start_media_caption', 'customer_service_link', 'group_link']
-    .filter((key) => input[key] !== undefined)
-    .map((key) => ({ key, value: String(input[key] || ''), updated_at: new Date().toISOString() }));
-  if (!rows.length) return getShopSettings();
-  const { error } = await sb().from('shop_settings').upsert(rows, { onConflict: 'key' });
-  if (error) throw error;
-  return getShopSettings();
-}
-
-async function getAnalytics() {
-  // Analytics are grouped by Asia/Jakarta calendar days, not UTC days.
-  // This prevents purchases made today in Indonesia from appearing in yesterday's bar.
-  const todayKey = wibDateKey(new Date());
-  const firstKey = addDaysKey(todayKey, -6);
-  const start = wibKeyStartUtc(firstKey);
-  const end = wibKeyStartUtc(addDaysKey(todayKey, 1));
-  const { data, error } = await sb()
-    .from('transactions')
-    .select('*')
-    .gte('created_at', start.toISOString())
-    .lt('created_at', end.toISOString())
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  const rows = data || [];
-  const daily = Array.from({ length: 7 }, (_, i) => {
-    const key = addDaysKey(firstKey, i);
-    return { date: key, label: wibKeyLabel(key), orders: 0, revenue: 0, quantity: 0 };
-  });
-  const dailyMap = new Map(daily.map((item) => [item.date, item]));
-  const topMap = new Map();
-  rows.forEach((row) => {
-    const keyDate = wibDateKey(row.created_at);
-    const bucket = dailyMap.get(keyDate);
-    if (bucket) {
-      bucket.orders += 1;
-      bucket.revenue += Number(row.total_price || 0);
-      bucket.quantity += Number(row.quantity || 0);
-    }
-    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
-    const item = topMap.get(key) || { code: row.product_code || '-', name: row.product_name || '-', variant: row.variant_name || '', orders: 0, quantity: 0, revenue: 0 };
-    item.orders += 1;
-    item.quantity += Number(row.quantity || 0);
-    item.revenue += Number(row.total_price || 0);
-    topMap.set(key, item);
-  });
-  return {
-    period: '7d-wib',
-    timezone: 'Asia/Jakarta',
-    today: todayKey,
-    today_revenue: daily[daily.length - 1]?.revenue || 0,
-    daily,
-    top_products: Array.from(topMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10),
-    total_orders: rows.length,
-    total_revenue: rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0),
-    total_quantity: rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
-  };
-}
-
-async function upsertPendingOrder(input) {
-  const payload = {
-    telegram_id: Number(input.telegram_id),
-    product_code: String(input.product_code).toUpperCase(),
-    variant_key: String(input.variant_key || '').trim().toUpperCase(),
-    variant_name: String(input.variant_name || '').trim(),
-    unit_price: Number(input.unit_price || 0),
-    quantity: Number(input.quantity || 1),
-    voucher_code: input.voucher_code || '',
-    invoice_ref: input.invoice_ref || null,
-    amount: Number(input.amount || 0),
-    fee: Number(input.fee || 0),
-    status: input.status || 'draft',
-    expires_at: input.expires_at || null,
-    updated_at: new Date().toISOString()
-  };
-  const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
-  if (error) throw error;
-  return data;
-}
-
-async function getPendingOrder(telegramId) {
-  const { data, error } = await sb().from('pending_orders').select('*').eq('telegram_id', Number(telegramId)).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-async function deletePendingOrder(telegramId) {
-  const { error } = await sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
-  if (error) throw error;
-}
-
-async function applyVoucherUsage(code, telegramId) {
-  const voucher = await getVoucher(code);
-  if (!voucher) return null;
-  const usedBy = Array.isArray(voucher.used_by) ? voucher.used_by : [];
-  const { data, error } = await sb()
-    .from('vouchers')
-    .update({ usage_limit: Number(voucher.usage_limit || 0) - 1, used_by: [...usedBy, Number(telegramId)] })
-    .eq('code', voucher.code)
-    .select('*')
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-function voucherIsValid(voucher, productCode, telegramId) {
+function voucherIsValid(voucher, productCode, telegramId, quantity = 1, subtotal = 0) {
   if (!voucher) return false;
   const products = Array.isArray(voucher.products) ? voucher.products : [];
   const usedBy = Array.isArray(voucher.used_by) ? voucher.used_by : [];
   const productAllowed = products.length === 0 || products.map((p) => String(p).toUpperCase()).includes(String(productCode).toUpperCase());
-  const notExpired = !voucher.expires_at || new Date(voucher.expires_at).getTime() > Date.now();
+  const now = Date.now();
+  const afterStart = !voucher.start_at || new Date(voucher.start_at).getTime() <= now;
+  const notExpired = !voucher.expires_at || new Date(voucher.expires_at).getTime() > now;
   const active = voucher.active === undefined ? true : Boolean(voucher.active);
-  return active && notExpired && productAllowed && Number(voucher.usage_limit || 0) > 0 && !usedBy.map(Number).includes(Number(telegramId));
+  const enoughQty = Number(quantity || 1) >= Number(voucher.min_qty || 1);
+  const enoughSpend = Number(subtotal || 0) >= Number(voucher.min_spend || 0);
+  return active && afterStart && notExpired && productAllowed && enoughQty && enoughSpend && Number(voucher.usage_limit || 0) > 0 && !usedBy.map(Number).includes(Number(telegramId));
 }
 
 async function listTransactions(limit = 50) {
@@ -1137,6 +1018,7 @@ module.exports = {
   deletePendingOrder,
   getVoucher,
   voucherIsValid,
+  voucherDiscountAmount,
   listTransactions,
   listTransactionsByUser,
   completeOrder,

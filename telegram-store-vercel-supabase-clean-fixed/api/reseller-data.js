@@ -299,12 +299,25 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'add-voucher') {
-      const code = String(body.kode || '').trim().toUpperCase();
+      const code = String(body.kode || body.code || '').trim().toUpperCase();
       const produk = String(body.produk || body.products || 'semua').trim();
-      const potongan = numberOf(body.potongan || body.discount);
+      const discountValue = numberOf(body.discount_value || body.potongan || body.discount);
       const limit = numberOf(body.limit || body.usage_limit);
-      if (!code || !potongan || !limit) return json(res, 400, { ok: false, error: 'Kode, potongan, dan limit voucher wajib diisi.' });
-      const voucher = await db.addVoucher({ kode: code, produk, potongan, limit, description: body.description || '', active: body.active === undefined ? true : boolOf(body.active), expires_at: body.expires_at || null });
+      if (!code || !discountValue || !limit) return json(res, 400, { ok: false, error: 'Kode, nilai diskon, dan limit voucher wajib diisi.' });
+      const voucher = await db.addVoucher({
+        kode: code,
+        produk,
+        discount_type: body.discount_type || 'amount',
+        discount_value: discountValue,
+        potongan: discountValue,
+        min_qty: body.min_qty || 1,
+        min_spend: body.min_spend || 0,
+        limit,
+        description: body.description || '',
+        active: body.active === undefined ? true : boolOf(body.active),
+        start_at: body.start_at || null,
+        expires_at: body.expires_at || body.end_at || null
+      });
       return json(res, 200, { ok: true, data: voucher });
     }
 
@@ -314,11 +327,16 @@ module.exports = async function handler(req, res) {
       const voucher = await db.updateVoucher(code, {
         kode: body.kode_baru || body.new_code || body.kode,
         produk: body.produk || body.products,
-        potongan: body.potongan || body.discount,
+        discount_type: body.discount_type || 'amount',
+        discount_value: body.discount_value || body.potongan || body.discount,
+        potongan: body.discount_value || body.potongan || body.discount,
+        min_qty: body.min_qty || 1,
+        min_spend: body.min_spend || 0,
         limit: body.limit || body.usage_limit,
         description: body.description || body.deskripsi,
         active: boolOf(body.active),
-        expires_at: body.expires_at || null
+        start_at: body.start_at || null,
+        expires_at: body.expires_at || body.end_at || null
       });
       if (!voucher) return json(res, 404, { ok: false, error: 'Voucher tidak ditemukan.' });
       return json(res, 200, { ok: true, data: voucher });
