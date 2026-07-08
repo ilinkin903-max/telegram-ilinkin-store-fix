@@ -1,1 +1,1 @@
-Admin UI v34 - product description in bot confirmation
+Admin UI v35 - description placement and no terms in confirmation

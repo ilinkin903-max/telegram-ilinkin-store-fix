@@ -496,7 +496,7 @@ async function sendProductList(chatId, query = null) {
     if (query?.message?.message_id) return editMessage(query, empty, { reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]] } });
     return tg.sendMessage(chatId, empty);
   }
-  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk. Deskripsi dan syarat ketentuan akan tampil sebelum pembayaran.';
+  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk. Deskripsi produk akan tampil sebelum pembayaran.';
   const options = { parse_mode: 'Markdown', reply_markup: productButtons(products) };
   if (query?.message?.message_id) return editMessage(query, text, options);
   return tg.sendMessage(chatId, text, options);
@@ -547,7 +547,6 @@ Promo Otomatis: *${promo.name || promo.code}* (-${formatRupiah(promo.discount_am
   const total = Math.max(0, subtotal - Number(promo?.discount_amount || 0));
   const bulk = formatBulkText(product, variant);
   const desc = formatProductInfoText(variantDescription(product, variant));
-  const terms = formatProductInfoText(variantTerms(product, variant));
   return `*KONFIRMASI PESANAN*
 ` +
     `=======================
@@ -556,23 +555,21 @@ Promo Otomatis: *${promo.name || promo.code}* (-${formatRupiah(promo.discount_am
 ` +
     `Varian: *${escapeMarkdownText(variant ? variant.name : (order.variant_name || 'Default'))}*
 ` +
+    `-----------------------
+` +
+    `*DESKRIPSI PRODUK*
+${desc}
+` +
+    `-----------------------
+` +
     `Harga Satuan: *${formatRupiah(unit)}*
 ` +
     `Harga Grosir:
 ${bulk}
 ` +
-    `Deskripsi Produk:
-${desc}
-
-` +
-    `Syarat & Ketentuan:
-${terms}
-` +
     `-----------------------
 ` +
     `Stok Tersedia: *${availableStockForOrder(product, order)}*
-` +
-    `-----------------------
 ` +
     `Jumlah Pesanan: *${quantity}*
 ` +
@@ -890,7 +887,7 @@ async function handleProductSelection(query, code) {
     rows.push([{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]);
     return editMessage(query, `📦 *${escapeMarkdownText(product.nama)}*
 =======================
-Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi dan syarat ketentuan akan tampil di halaman konfirmasi sebelum pembayaran.`, {
+Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi produk akan tampil di halaman konfirmasi sebelum pembayaran.`, {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: rows }
     });
