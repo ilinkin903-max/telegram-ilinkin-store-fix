@@ -564,15 +564,21 @@ async function recordPollAnswer(answer = {}) {
 }
 
 async function listBroadcastPolls(limit = 50) {
-  const { data, error } = await sb().from('broadcast_polls')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(Number(limit) || 50);
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await sb().from('broadcast_polls')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(Number(limit) || 50);
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('listBroadcastPolls:', error.message);
+    return [];
+  }
 }
 
 async function getBroadcastPollResult(id) {
+  try {
   const poll = await getBroadcastPoll(id);
   if (!poll) return null;
   const [{ data: answers, error: answerError }, { data: messages, error: messageError }] = await Promise.all([
@@ -624,6 +630,10 @@ async function getBroadcastPollResult(id) {
     answer_count: answerRows.length,
     message_count: (messages || []).length
   };
+  } catch (error) {
+    console.error('getBroadcastPollResult:', error.message);
+    return null;
+  }
 }
 
 async function deleteBroadcastPoll(id) {
@@ -642,11 +652,16 @@ function cutoffIso(days) {
 }
 
 async function countRows(table, apply) {
-  let query = sb().from(table).select('*', { count: 'exact', head: true });
-  if (typeof apply === 'function') query = apply(query);
-  const { count, error } = await query;
-  if (error) throw error;
-  return count || 0;
+  try {
+    let query = sb().from(table).select('*', { count: 'exact', head: true });
+    if (typeof apply === 'function') query = apply(query);
+    const { count, error } = await query;
+    if (error) throw error;
+    return count || 0;
+  } catch (error) {
+    console.error('countRows:', table, error.message);
+    return 0;
+  }
 }
 
 async function getMaintenanceStats() {

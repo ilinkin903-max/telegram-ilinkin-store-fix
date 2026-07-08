@@ -162,7 +162,21 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
   function toast(msg, err){ var el=document.getElementById('toast'); el.textContent=msg; el.className='toast'+(err?' error':''); el.style.display='block'; setTimeout(function(){el.style.display='none';},3500); }
   function headers(){ return { 'Content-Type':'application/json','X-Telegram-Init-Data':initData }; }
-  async function api(action, body, query){ var url='/api/reseller-data?action='+encodeURIComponent(action); if(query){ Object.keys(query).forEach(function(k){ if(query[k]) url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(query[k]); }); } var r=await fetch(url,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined}); var j=await r.json(); if(!j.ok) throw new Error(j.error||'Gagal memuat data'); return j; }
+  async function api(action, body, query){
+    var url='/api/reseller-data?action='+encodeURIComponent(action);
+    if(query){ Object.keys(query).forEach(function(k){ if(query[k]!==undefined && query[k]!==null && query[k] !== '') url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(query[k]); }); }
+    var r=await fetch(url,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined});
+    var text=await r.text();
+    var j=null;
+    try{ j=text?JSON.parse(text):{}; }
+    catch(e){ throw new Error((text||'Server error').slice(0,160)); }
+    if(!r.ok || !j.ok) throw new Error(j.error||('Gagal memuat data '+action));
+    return j;
+  }
+  async function apiSafe(action, fallback, query){
+    try{ var r=await api(action, null, query); return r.data===undefined?fallback:r.data; }
+    catch(e){ console.warn('MiniApp load optional failed:', action, e.message); return fallback; }
+  }
   function formData(form){ var d=Object.fromEntries(new FormData(form).entries()); Object.keys(d).forEach(function(k){ if(d[k]==='') delete d[k]; }); return d; }
   function formDataRaw(form){ return Object.fromEntries(new FormData(form).entries()); }
   function switchTab(id){ document.querySelectorAll('.tile[data-tab]').forEach(function(x){x.classList.remove('active'); x.setAttribute('aria-selected','false');}); document.querySelectorAll('.section').forEach(function(x){x.classList.remove('active');}); document.querySelectorAll('.tile[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); var section=document.getElementById(id); if(section) section.classList.add('active'); try{ localStorage.setItem('admin_active_tab', id); }catch(e){} window.scrollTo(0,0); }
@@ -575,7 +589,15 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var hr=document.getElementById('hourlyStats'); if(hr){ hr.innerHTML=(d.hourly||[]).filter(function(x){return x.orders>0;}).map(function(x){return '<span class="chip yellow">'+String(x.hour).padStart(2,'0')+'.00: '+x.orders+' order / '+rupiah(x.revenue)+'</span>';}).join(' ')||'<div class="empty">Belum ada data jam ramai.</div>'; }
   }
 
-  async function load(){ try{ var all=await Promise.all([api('stats'),api('products'),api('orders'),api('users'),api('vouchers'),api('settings'),api('analytics'),api('polls'),api('maintenance-stats'),api('backup-logs'),api('promos'),api('deep-stats')]); state.stats=all[0].data; state.products=all[1].data; state.orders=all[2].data; state.users=all[3].data; state.vouchers=all[4].data; state.settings=all[5].data; state.analytics=all[6].data; state.polls=all[7].data||[]; state.maintenance=all[8].data||{}; state.backups=all[9].data||[]; state.promos=all[10].data||[]; state.deepStats=all[11].data||{}; renderHeader(); renderStats(); renderCharts(); renderProducts(); renderOrders(); renderUsers(); renderVouchers(); renderPolls(); renderMaintenance(); renderBackup(); renderPromos(); renderDeepStats(); }catch(e){ toast(e.message,true); renderStats(); renderProducts(); renderMaintenance(); } }
+  async function load(){
+    try{
+      var all=await Promise.all([
+        apiSafe('stats',{}), apiSafe('products',[]), apiSafe('orders',[]), apiSafe('users',[]), apiSafe('vouchers',[]), apiSafe('settings',{}), apiSafe('analytics',{}), apiSafe('polls',[]), apiSafe('maintenance-stats',{}), apiSafe('backup-logs',[]), apiSafe('promos',[]), apiSafe('deep-stats',{})
+      ]);
+      state.stats=all[0]||{}; state.products=all[1]||[]; state.orders=all[2]||[]; state.users=all[3]||[]; state.vouchers=all[4]||[]; state.settings=all[5]||{}; state.analytics=all[6]||{}; state.polls=all[7]||[]; state.maintenance=all[8]||{}; state.backups=all[9]||[]; state.promos=all[10]||[]; state.deepStats=all[11]||{};
+      renderHeader(); renderStats(); renderCharts(); renderProducts(); renderOrders(); renderUsers(); renderVouchers(); renderPolls(); renderMaintenance(); renderBackup(); renderPromos(); renderDeepStats();
+    }catch(e){ toast(e.message,true); renderStats(); renderProducts(); renderMaintenance(); }
+  }
   async function post(action,data){ try{ var r=await api(action,data); toast('Berhasil diproses'); await load(); return r; }catch(e){ toast(e.message,true); throw e; } }
   document.querySelectorAll('.tile[data-tab]').forEach(function(btn){btn.onclick=function(){switchTab(btn.dataset.tab);};}); try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)) switchTab(lastTab); }catch(e){}
   document.getElementById('search').oninput=renderProducts;
