@@ -1,39 +1,70 @@
-# Update v25 - Maintenance Database
-
-Versi ini menambahkan tab **Maintenance** di Mini App untuk membersihkan data lama agar Supabase Free tetap ringan.
-
-Fitur maintenance:
-- hapus pending order expired
-- hapus pending order lama
-- hapus polling lama beserta hasilnya
-- hapus detail jawaban polling lama
-- kosongkan produk terkirim lama tanpa menghapus invoice
-- hapus user tanpa transaksi lama
-- hapus voucher nonaktif/expired
-- hapus transaksi lama permanen, gunakan hati-hati
-
-Tidak perlu SQL baru. Upload isi ZIP ke GitHub, redeploy Vercel, lalu set webhook ulang.
-
----
-
-# Telegram Store Vercel Supabase - Admin UI v23
-
-Update v23:
-- Broadcast polling sekarang memakai mode global/forward dari polling asli.
-- User melihat hasil polling keseluruhan, bukan hasil pribadi 100%.
-- Admin tetap perlu konfirmasi broadcast polling dari preview.
-- Hasil polling tetap tersimpan di Supabase dan bisa dihapus dari Mini App atau command /polling.
+# Admin UI v26 - Backup, Import, Promo Otomatis, Statistik Lanjutan
 
 ## Cara pasang
-1. Upload isi ZIP ke GitHub.
-2. Jalankan SQL update di Supabase dari `supabase/update-owner-tools.sql`.
-3. Redeploy Vercel.
-4. Buka ulang webhook: `/api/set-webhook?secret=WEBHOOK_SECRET`.
 
-## Cara broadcast polling global
-1. Kirim atau forward polling ke bot.
-2. Bot menampilkan preview.
-3. Klik Broadcast Polling.
-4. Polling dikirim dengan forward agar hasil vote user menjadi satu/global.
+1. Upload semua isi folder/ZIP ini ke GitHub.
+2. Redeploy project di Vercel.
+3. Jalankan SQL update di Supabase:
 
-Catatan: polling lama yang dibuat sebelum v23 tidak punya source message, jadi sebaiknya buat polling baru setelah update ini.
+```sql
+-- Buka file supabase/update-owner-tools.sql lalu jalankan semua isinya di SQL Editor.
+```
+
+4. Setelah Vercel Ready, pasang ulang webhook:
+
+```text
+https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=abc123
+```
+
+Ganti `abc123` sesuai `WEBHOOK_SECRET` kamu.
+
+## Fitur Backup
+
+Mini App > tab **Backup**:
+
+- **Download Backup**: download file JSON ke perangkat admin.
+- **Kirim Backup ke Telegram**: bot mengirim file backup ke OWNER_ID.
+- **Import Backup**: paste isi file JSON backup lalu import.
+
+Auto backup harian dikirim ke owner sekitar jam 00.00 WIB lewat endpoint:
+
+```text
+/api/backup-cron
+```
+
+`vercel.json` sudah ditambahkan Cron:
+
+```json
+{"path":"/api/backup-cron","schedule":"0 17 * * *"}
+```
+
+## Fitur Promo Otomatis
+
+Mini App > tab **Promo**:
+
+- Bisa buat promo nominal atau persen.
+- Bisa target semua produk atau kode produk tertentu.
+- Bisa min jumlah, min belanja, periode mulai/berakhir, dan limit pemakaian.
+- Promo otomatis dipakai saat checkout jika user tidak memakai voucher manual.
+
+## Statistik Lebih Dalam
+
+Mini App > tab **Statistik+**:
+
+- Omset hari ini
+- Omset bulan ini
+- Total omset
+- Rata-rata order
+- Total item terjual
+- Conversion estimate
+- Promo aktif
+- Pending order
+- Stok hampir habis
+- Top user
+- Jam ramai order
+
+## Catatan
+
+- Jalankan `supabase/update-owner-tools.sql` agar tabel `auto_promos` dan `backup_logs` tersedia.
+- Jangan simpan gambar langsung di database. Gunakan URL gambar.
+- Sebelum import backup, sebaiknya download backup terbaru dulu.

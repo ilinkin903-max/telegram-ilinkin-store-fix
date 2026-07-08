@@ -1,6 +1,11 @@
-Admin UI v25 - Maintenance Database
-- Menambahkan tab Maintenance Database di Mini App.
-- Bisa hapus pending order expired/lama.
-- Bisa hapus polling lama dan detail jawaban polling lama.
-- Bisa kosongkan produk terkirim lama tanpa menghapus invoice.
-- Bisa hapus user tanpa transaksi lama, voucher nonaktif/expired, dan transaksi lama permanen.
+Admin UI v26 - Backup, Import, Promo Otomatis, Statistik Lanjutan
+
+Fitur baru:
+- Auto backup harian via Vercel Cron ke Telegram owner sekitar 00.00 WIB.
+- Backup manual: download JSON dan kirim ke Telegram owner.
+- Import backup JSON dari Mini App.
+- Promo otomatis saat checkout berdasarkan produk, jumlah, minimal belanja, periode, limit.
+- Statistik lebih dalam: omzet hari ini/bulan/total, AOV, conversion estimate, stok kritis, top user, jam ramai.
+- Maintenance Database tetap tersedia.
+
+Wajib jalankan supabase/update-owner-tools.sql setelah update.

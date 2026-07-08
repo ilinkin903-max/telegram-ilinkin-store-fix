@@ -506,11 +506,14 @@ async function sendHistory(chatId, userId, query = null) {
   return tg.sendMessage(chatId, text, options);
 }
 
-function confirmationText(product, order) {
+function confirmationText(product, order, promo) {
   const variant = selectedVariant(product, order);
   const unit = orderUnitPrice(product, order);
   const quantity = Number(order.quantity || 1);
-  const total = quantity * unit;
+  const subtotal = quantity * unit;
+  const promoLine = promo && promo.discount_amount ? `
+Promo Otomatis: *${promo.name || promo.code}* (-${formatRupiah(promo.discount_amount)})` : '';
+  const total = Math.max(0, subtotal - Number(promo?.discount_amount || 0));
   const bulk = formatBulkText(product, variant);
   return `*KONFIRMASI PESANAN*
 ` +
@@ -530,6 +533,8 @@ ${bulk}
     `-----------------------
 ` +
     `Jumlah Pesanan: *${quantity}*
+` +
+    `Subtotal: *${formatRupiah(subtotal)}*${promoLine}
 ` +
     `Total Dibayar: *${formatRupiah(total)}*
 ` +
@@ -886,7 +891,9 @@ async function showConfirmation(query, edit = false) {
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, harap ulangi pilih produk!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
-  const text = confirmationText(product, order);
+  const subtotal = Number(order.quantity || 1) * orderUnitPrice(product, order);
+  const promo = await db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), subtotal).catch(() => null);
+  const text = confirmationText(product, order, promo);
   const options = { parse_mode: 'Markdown', reply_markup: quantityKeyboard() };
   if (edit && query.message?.message_id) return editMessage(query, text, options);
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
@@ -923,8 +930,14 @@ async function createPayment(query) {
 
   const unit = orderUnitPrice(product, order);
   let harga = Number(order.quantity || 1) * unit;
+  let promoApplied = null;
   const voucher = order.voucher_code ? await db.getVoucher(order.voucher_code) : null;
-  if (db.voucherIsValid(voucher, product.kode, userId)) harga -= Number(voucher.discount || 0);
+  if (db.voucherIsValid(voucher, product.kode, userId)) {
+    harga -= Number(voucher.discount || 0);
+  } else {
+    promoApplied = await db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), harga).catch(() => null);
+    if (promoApplied?.discount_amount) harga -= Number(promoApplied.discount_amount || 0);
+  }
   if (harga < 0) harga = 0;
 
   const fee = randomFee();
@@ -941,7 +954,7 @@ async function createPayment(query) {
 
   const qrText = response.data?.payment?.payment_number || response.data?.payment_number || response.data?.qr_string;
   if (!qrText) throw new Error('Pakasir tidak mengirim data QRIS.');
-  await db.upsertPendingOrder({ ...order, invoice_ref: invoiceRef, amount: totalAmount, fee, expires_at: expiresAt, status: 'awaiting_payment' });
+  await db.upsertPendingOrder({ ...order, voucher_code: promoApplied ? `AUTO_PROMO:${promoApplied.code}` : order.voucher_code, invoice_ref: invoiceRef, amount: totalAmount, fee, expires_at: expiresAt, status: 'awaiting_payment' });
 
   const buffer = await QRCode.toBuffer(qrText, { type: 'png' });
   const caption = `💸 *PEMBAYARAN OTOMATIS*\n` +
@@ -950,6 +963,7 @@ async function createPayment(query) {
     `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
     `Harga Satuan: *${formatRupiah(unit)}*\n` +
     `Jumlah Beli: *${order.quantity}*\n` +
+    (promoApplied ? `Promo: *${promoApplied.name || promoApplied.code}* (-${formatRupiah(promoApplied.discount_amount)})\n` : '') +
     `Fee: *${formatRupiah(fee)}*\n` +
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
     `Expired: *10 menit*\n` +

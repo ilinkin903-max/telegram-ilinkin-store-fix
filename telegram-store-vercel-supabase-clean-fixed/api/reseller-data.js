@@ -162,6 +162,14 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
     if (req.method === 'GET' && action === 'maintenance-stats') return json(res, 200, { ok: true, data: await db.getMaintenanceStats() });
+    if (req.method === 'GET' && action === 'backup-export') {
+      const data = await db.exportBackupData();
+      await db.addBackupLog({ type: 'manual-download', status: 'success', filename: `backup-${Date.now()}.json`, size_bytes: JSON.stringify(data).length });
+      return json(res, 200, { ok: true, data });
+    }
+    if (req.method === 'GET' && action === 'backup-logs') return json(res, 200, { ok: true, data: await db.listBackupLogs(30) });
+    if (req.method === 'GET' && action === 'deep-stats') return json(res, 200, { ok: true, data: await db.getDeepStats() });
+    if (req.method === 'GET' && action === 'promos') return json(res, 200, { ok: true, data: await db.listAutoPromos(200) });
     if (req.method === 'GET' && action === 'poll-result') {
       const id = String(req.query?.id || '').trim();
       if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
@@ -171,6 +179,32 @@ module.exports = async function handler(req, res) {
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method tidak didukung.' });
 
     const body = bodyOf(req);
+
+    if (action === 'backup-send') {
+      const backup = await db.exportBackupData();
+      const content = JSON.stringify(backup, null, 2);
+      const filename = `backup-${new Date().toISOString().slice(0, 10)}-${Date.now()}.json`;
+      await tg.sendDocument(require('../lib/config').config.ownerId, filename, content, { caption: '✅ Backup manual database bot.' });
+      const log = await db.addBackupLog({ type: 'manual-telegram', status: 'success', filename, size_bytes: content.length });
+      return json(res, 200, { ok: true, data: log });
+    }
+
+    if (action === 'backup-import') {
+      const payload = typeof body.backup === 'string' ? JSON.parse(body.backup) : (body.backup || body);
+      const includeTransactions = body.include_transactions === true || String(body.include_transactions || '').toLowerCase() === 'true';
+      const result = await db.importBackupData(payload, { include_transactions: includeTransactions });
+      return json(res, 200, { ok: true, data: result });
+    }
+
+    if (action === 'promo-save') {
+      const promo = await db.saveAutoPromo(body);
+      return json(res, 200, { ok: true, data: promo });
+    }
+
+    if (action === 'promo-delete') {
+      await db.deleteAutoPromo(body.code || body.kode);
+      return json(res, 200, { ok: true });
+    }
 
     if (action === 'save-settings') {
       const data = await db.saveShopSettings({

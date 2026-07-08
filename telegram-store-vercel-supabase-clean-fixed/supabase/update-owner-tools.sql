@@ -83,3 +83,35 @@ alter table public.broadcast_polls add column if not exists source_poll_id text;
 alter table public.broadcast_polls add column if not exists broadcast_mode text not null default 'sendpoll';
 
 create index if not exists broadcast_poll_answers_poll_idx on public.broadcast_poll_answers (poll_id);
+
+-- Auto Backup, Import Log, dan Promo Otomatis.
+create table if not exists public.backup_logs (
+  id bigserial primary key,
+  type text not null default 'manual',
+  status text not null default 'success',
+  filename text not null default '',
+  size_bytes integer not null default 0,
+  note text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.auto_promos (
+  code text primary key,
+  name text not null,
+  description text not null default '',
+  products jsonb not null default '[]'::jsonb,
+  discount_type text not null default 'amount',
+  discount_value integer not null default 0,
+  min_qty integer not null default 1,
+  min_spend integer not null default 0,
+  usage_limit integer not null default 0,
+  used_count integer not null default 0,
+  active boolean not null default true,
+  start_at timestamptz,
+  end_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists auto_promos_active_idx on public.auto_promos (active);
+create index if not exists backup_logs_created_idx on public.backup_logs (created_at desc);

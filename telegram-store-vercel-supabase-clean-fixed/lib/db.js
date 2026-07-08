@@ -566,7 +566,11 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     updated_at: new Date().toISOString()
   }, { onConflict: 'telegram_id' });
 
-  if (order.voucher_code) await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
+  if (order.voucher_code) {
+    const promoMatch = String(order.voucher_code || '').match(/^AUTO_PROMO:(.+)$/);
+    if (promoMatch) await applyAutoPromoUsage(promoMatch[1]).catch(() => null);
+    else await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
+  }
   await deletePendingOrder(order.telegram_id);
   return { delivered, transaction };
 }
@@ -888,6 +892,226 @@ async function cleanupDatabase(input = {}) {
   throw new Error('Target maintenance tidak dikenal.');
 }
 
+
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs'];
+
+async function safeSelectAll(table) {
+  try {
+    const { data, error } = await sb().from(table).select('*');
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    return [];
+  }
+}
+
+async function exportBackupData() {
+  const tables = {};
+  for (const table of BACKUP_TABLES) tables[table] = await safeSelectAll(table);
+  return {
+    app: 'telegram-store-vercel-supabase',
+    version: 'v26-backup-promo-stats',
+    generated_at: new Date().toISOString(),
+    tables
+  };
+}
+
+async function addBackupLog(input = {}) {
+  const payload = {
+    type: String(input.type || 'manual'),
+    status: String(input.status || 'success'),
+    filename: String(input.filename || ''),
+    size_bytes: Number(input.size_bytes || 0),
+    note: String(input.note || ''),
+    created_at: new Date().toISOString()
+  };
+  try {
+    const { data, error } = await sb().from('backup_logs').insert(payload).select('*').single();
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Gagal simpan backup log:', error.message);
+    return payload;
+  }
+}
+
+async function listBackupLogs(limit = 30) {
+  try {
+    const { data, error } = await sb().from('backup_logs').select('*').order('created_at', { ascending: false }).limit(Number(limit) || 30);
+    if (error) throw error;
+    return data || [];
+  } catch (error) { return []; }
+}
+
+async function upsertRows(table, rows = [], conflict = '') {
+  const clean = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!clean.length) return 0;
+  // Supabase payload limit guard: import in small chunks.
+  let count = 0;
+  for (let i = 0; i < clean.length; i += 200) {
+    const part = clean.slice(i, i + 200);
+    const query = sb().from(table);
+    const { error } = conflict ? await query.upsert(part, { onConflict: conflict }) : await query.insert(part);
+    if (error) {
+      // If an old backup contains duplicates, continue with best effort where possible.
+      console.error(`Import ${table} gagal:`, error.message);
+      throw error;
+    }
+    count += part.length;
+  }
+  return count;
+}
+
+async function importBackupData(backup = {}, options = {}) {
+  const tables = backup.tables || backup || {};
+  const result = {};
+  if (tables.bot_users) result.bot_users = await upsertRows('bot_users', tables.bot_users, 'telegram_id');
+  if (tables.products) result.products = await upsertRows('products', tables.products, 'code');
+  if (tables.vouchers) result.vouchers = await upsertRows('vouchers', tables.vouchers, 'code');
+  if (tables.shop_settings) result.shop_settings = await upsertRows('shop_settings', tables.shop_settings, 'key');
+  if (tables.pending_orders) result.pending_orders = await upsertRows('pending_orders', tables.pending_orders, 'telegram_id');
+  if (tables.auto_promos) result.auto_promos = await upsertRows('auto_promos', tables.auto_promos, 'code');
+
+  // Transactions are imported only when explicitly requested, to prevent double totals.
+  if (options.include_transactions && tables.transactions) {
+    const rows = (tables.transactions || []).filter((x) => x.order_ref || x.id);
+    result.transactions = await upsertRows('transactions', rows, rows.some((x) => x.order_ref) ? 'order_ref' : 'id');
+  }
+  await addBackupLog({ type: 'import', status: 'success', note: `Import selesai: ${Object.keys(result).map(k => `${k}=${result[k]}`).join(', ')}` });
+  return result;
+}
+
+function parsePromoProducts(value) {
+  if (Array.isArray(value)) return value.map((x) => String(x).trim().toUpperCase()).filter(Boolean);
+  const raw = String(value || '').trim();
+  if (!raw || raw === '-' || raw.toLowerCase() === 'semua' || raw.toLowerCase() === 'all') return [];
+  return raw.split(/[|,\n]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+}
+
+function normalizePromo(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    products: Array.isArray(row.products) ? row.products : [],
+    active: row.active !== false,
+    min_qty: Number(row.min_qty || 1),
+    min_spend: Number(row.min_spend || 0),
+    discount_value: Number(row.discount_value || 0),
+    usage_limit: Number(row.usage_limit || 0),
+    used_count: Number(row.used_count || 0)
+  };
+}
+
+async function listAutoPromos(limit = 100) {
+  try {
+    const { data, error } = await sb().from('auto_promos').select('*').order('updated_at', { ascending: false }).limit(Number(limit) || 100);
+    if (error) throw error;
+    return (data || []).map(normalizePromo);
+  } catch (error) {
+    console.error('listAutoPromos:', error.message);
+    return [];
+  }
+}
+
+async function saveAutoPromo(input = {}) {
+  const code = String(input.code || input.kode || '').trim().toUpperCase() || `PROMO-${Date.now()}`;
+  const payload = {
+    code,
+    name: String(input.name || input.nama || code).trim(),
+    description: String(input.description || input.deskripsi || ''),
+    products: parsePromoProducts(input.products || input.produk),
+    discount_type: String(input.discount_type || input.tipe || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
+    discount_value: Number(input.discount_value || input.discount || input.potongan || 0),
+    min_qty: Math.max(1, Number(input.min_qty || input.min_jumlah || 1)),
+    min_spend: Math.max(0, Number(input.min_spend || input.min_belanja || 0)),
+    usage_limit: Math.max(0, Number(input.usage_limit || input.limit || 0)),
+    active: input.active === undefined ? true : (input.active === true || String(input.active).toLowerCase() === 'true' || String(input.active) === '1' || String(input.active).toLowerCase() === 'on'),
+    start_at: input.start_at || input.mulai || null,
+    end_at: input.end_at || input.berakhir || null,
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('auto_promos').upsert(payload, { onConflict: 'code' }).select('*').single();
+  if (error) throw error;
+  return normalizePromo(data);
+}
+
+async function deleteAutoPromo(code) {
+  const { error } = await sb().from('auto_promos').delete().ilike('code', String(code || '').trim());
+  if (error) throw error;
+}
+
+function promoIsActive(row, productCode, quantity, subtotal) {
+  const p = normalizePromo(row);
+  if (!p || !p.active || Number(p.discount_value || 0) <= 0) return false;
+  const now = Date.now();
+  if (p.start_at && new Date(p.start_at).getTime() > now) return false;
+  if (p.end_at && new Date(p.end_at).getTime() < now) return false;
+  if (p.usage_limit > 0 && p.used_count >= p.usage_limit) return false;
+  const products = Array.isArray(p.products) ? p.products.map((x) => String(x).toUpperCase()) : [];
+  if (products.length && !products.includes(String(productCode || '').toUpperCase())) return false;
+  if (Number(quantity || 1) < Number(p.min_qty || 1)) return false;
+  if (Number(subtotal || 0) < Number(p.min_spend || 0)) return false;
+  return true;
+}
+
+function promoDiscountAmount(promo, subtotal) {
+  const value = Number(promo?.discount_value || 0);
+  if (String(promo?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * value / 100));
+  return Math.min(Number(subtotal || 0), value);
+}
+
+async function getBestAutoPromo(productCode, telegramId, quantity, subtotal) {
+  const promos = await listAutoPromos(200);
+  const candidates = promos.filter((p) => promoIsActive(p, productCode, quantity, subtotal)).map((p) => ({ ...p, discount_amount: promoDiscountAmount(p, subtotal) })).filter((p) => p.discount_amount > 0);
+  candidates.sort((a, b) => b.discount_amount - a.discount_amount || String(a.code).localeCompare(String(b.code)));
+  return candidates[0] || null;
+}
+
+async function applyAutoPromoUsage(code) {
+  if (!code) return;
+  const current = (await listAutoPromos(200)).find((x) => String(x.code).toUpperCase() === String(code).toUpperCase());
+  if (!current) return;
+  await sb().from('auto_promos').update({ used_count: Number(current.used_count || 0) + 1, updated_at: new Date().toISOString() }).eq('code', current.code);
+}
+
+async function getDeepStats() {
+  const [products, users, transactions, pendingOrders, promos] = await Promise.all([
+    listProducts(), listUsers(1000), listTransactions(1000), safeSelectAll('pending_orders'), listAutoPromos(100)
+  ]);
+  const now = new Date();
+  const todayKey = wibDateKey(now);
+  const monthKey = todayKey.slice(0, 7);
+  const revenue = transactions.reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const todayRevenue = transactions.filter((x) => wibDateKey(x.created_at) === todayKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const monthRevenue = transactions.filter((x) => wibDateKey(x.created_at).slice(0, 7) === monthKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const qtySold = transactions.reduce((s, x) => s + Number(x.quantity || 0), 0);
+  const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active })).filter((p) => p.active !== false && p.stock <= 5).sort((a, b) => a.stock - b.stock).slice(0, 20);
+  const topUsers = users.slice().sort((a, b) => Number(b.spending || 0) - Number(a.spending || 0)).slice(0, 10);
+  const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: 0 }));
+  transactions.forEach((trx) => {
+    const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }).format(new Date(trx.created_at || Date.now())));
+    if (byHour[h]) { byHour[h].orders += 1; byHour[h].revenue += Number(trx.total_price || 0); }
+  });
+  const conversion = pendingOrders.length ? Math.round((transactions.length / (transactions.length + pendingOrders.length)) * 1000) / 10 : 100;
+  return {
+    generated_at: new Date().toISOString(),
+    revenue_total: revenue,
+    revenue_today: todayRevenue,
+    revenue_month: monthRevenue,
+    orders_total: transactions.length,
+    quantity_sold: qtySold,
+    average_order_value: transactions.length ? Math.round(revenue / transactions.length) : 0,
+    users_total: users.length,
+    products_total: products.length,
+    active_promos: promos.filter((p) => p.active).length,
+    low_stock: lowStock,
+    top_users: topUsers,
+    hourly: byHour,
+    conversion_rate: conversion,
+    pending_orders: pendingOrders.length
+  };
+}
+
 module.exports = {
   upsertUser,
   getStats,
@@ -932,5 +1156,15 @@ module.exports = {
   getBroadcastPollResult,
   deleteBroadcastPoll,
   getMaintenanceStats,
-  cleanupDatabase
+  cleanupDatabase,
+  exportBackupData,
+  importBackupData,
+  addBackupLog,
+  listBackupLogs,
+  getDeepStats,
+  listAutoPromos,
+  saveAutoPromo,
+  deleteAutoPromo,
+  getBestAutoPromo,
+  applyAutoPromoUsage
 };

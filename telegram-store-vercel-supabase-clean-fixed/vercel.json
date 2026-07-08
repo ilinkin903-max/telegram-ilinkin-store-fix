@@ -18,5 +18,11 @@
       "source": "/webhook",
       "destination": "/api/telegram"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/backup-cron",
+      "schedule": "0 17 * * *"
+    }
   ]
 }
