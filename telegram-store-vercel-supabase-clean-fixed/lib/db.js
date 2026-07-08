@@ -409,6 +409,56 @@ async function getMonthlyRekap(month, year) {
   };
 }
 
+
+async function getShopSettings() {
+  const defaults = {
+    store_name: '',
+    store_description: '',
+    logo_url: '',
+    banner_url: '',
+    start_media_type: 'none',
+    start_media_value: '',
+    start_media_caption: '',
+    customer_service_link: '',
+    group_link: ''
+  };
+  const { data, error } = await sb().from('shop_settings').select('key,value');
+  if (error) {
+    // If the table has not been created yet, keep the bot and Mini App alive.
+    if (String(error.code || '') === '42P01' || /shop_settings/i.test(String(error.message || ''))) return defaults;
+    throw error;
+  }
+  const out = { ...defaults };
+  (data || []).forEach((row) => {
+    let value = row.value;
+    // Supabase jsonb may return strings, objects, or null depending on the client/version.
+    if (value && typeof value === 'object' && !Array.isArray(value)) value = value.value ?? value.text ?? value.url ?? value;
+    out[row.key] = value == null ? '' : value;
+  });
+  return out;
+}
+
+async function saveShopSettings(input = {}) {
+  const allowed = [
+    'store_name',
+    'store_description',
+    'logo_url',
+    'banner_url',
+    'start_media_type',
+    'start_media_value',
+    'start_media_caption',
+    'customer_service_link',
+    'group_link'
+  ];
+  const rows = allowed
+    .filter((key) => input[key] !== undefined)
+    .map((key) => ({ key, value: String(input[key] || ''), updated_at: new Date().toISOString() }));
+  if (!rows.length) return getShopSettings();
+  const { error } = await sb().from('shop_settings').upsert(rows, { onConflict: 'key' });
+  if (error) throw error;
+  return getShopSettings();
+}
+
 function voucherDiscountAmount(voucher, subtotal) {
   const raw = Number(voucher?.discount_value ?? voucher?.discount ?? 0);
   if (String(voucher?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * raw / 100));

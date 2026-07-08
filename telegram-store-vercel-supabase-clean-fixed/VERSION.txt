@@ -1,1 +1,2 @@
-Admin UI v31 - fix getMonthlyRekap runtime error
+Admin UI v32 - getShopSettings fix
+Fix getShopSettings/saveShopSettings undefined causing /api/telegram and /api/reseller-data 500.
