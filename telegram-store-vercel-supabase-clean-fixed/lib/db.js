@@ -361,6 +361,54 @@ async function listVouchers(limit = 100) {
   return data || [];
 }
 
+async function getMonthlyRekap(month, year) {
+  const todayKey = wibDateKey(new Date());
+  const [currentY, currentM] = todayKey.split('-').map(Number);
+  const m = Number(month || currentM);
+  const y = Number(year || currentY);
+  const startKey = `${y}-${String(m).padStart(2, '0')}-01`;
+  const endKey = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  const start = wibKeyStartUtc(startKey);
+  const end = wibKeyStartUtc(endKey);
+
+  const { data, error } = await sb()
+    .from('transactions')
+    .select('*')
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  const rows = data || [];
+  const total_price = rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0);
+  const quantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  const byProduct = new Map();
+
+  rows.forEach((row) => {
+    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
+    const current = byProduct.get(key) || {
+      code: row.product_code || '-',
+      name: row.product_name || '-',
+      variant: row.variant_name || '',
+      quantity: 0,
+      total_price: 0
+    };
+    current.quantity += Number(row.quantity || 0);
+    current.total_price += Number(row.total_price || 0);
+    byProduct.set(key, current);
+  });
+
+  return {
+    month: m,
+    year: y,
+    orders: rows.length,
+    quantity,
+    total_price,
+    by_product: Array.from(byProduct.values()).sort((a, b) => b.total_price - a.total_price),
+    rows
+  };
+}
+
 function voucherDiscountAmount(voucher, subtotal) {
   const raw = Number(voucher?.discount_value ?? voucher?.discount ?? 0);
   if (String(voucher?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * raw / 100));

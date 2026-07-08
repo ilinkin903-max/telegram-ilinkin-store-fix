@@ -1,1 +1,1 @@
-Admin UI v30 stable hotfix - lazy webhook require + safe /start fallback
+Admin UI v31 - fix getMonthlyRekap runtime error
