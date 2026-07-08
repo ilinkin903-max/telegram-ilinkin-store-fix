@@ -36,6 +36,22 @@ function escapeHtml(value) {
     .replace(/\"/g, '&quot;');
 }
 
+function escapeMarkdownText(value) {
+  return String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/`/g, '\\`')
+    .replace(/\[/g, '\\[');
+}
+
+function formatProductInfoText(value, maxLength = 900) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text || text === '-') return '-';
+  const clean = text.length > maxLength ? text.slice(0, maxLength).trim() + '\n...' : text;
+  return escapeMarkdownText(clean);
+}
+
 async function sendProductUpdated(chatId, product, label) {
   if (!product) return tg.sendMessage(chatId, '⚠️ Produk tidak ditemukan. Cek kembali kode produk.' );
   return tg.sendMessage(chatId, `✅ ${label} berhasil.\n\nProduk: *${product.nama}*\nKode: \`${product.kode}\`\nHarga: *${formatRupiah(product.harga)}*\nStok: *${product.data.length}*`, { parse_mode: 'Markdown' });
@@ -480,7 +496,7 @@ async function sendProductList(chatId, query = null) {
     if (query?.message?.message_id) return editMessage(query, empty, { reply_markup: { inline_keyboard: [[{ text: '🔙 Kembali', callback_data: 'kembaliawal' }]] } });
     return tg.sendMessage(chatId, empty);
   }
-  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk. Jika ada varian, pilih varian lalu langsung atur jumlah beli.';
+  const text = '*DAFTAR PRODUK*\n=======================\nPilih produk. Deskripsi dan syarat ketentuan akan tampil sebelum pembayaran.';
   const options = { parse_mode: 'Markdown', reply_markup: productButtons(products) };
   if (query?.message?.message_id) return editMessage(query, text, options);
   return tg.sendMessage(chatId, text, options);
@@ -530,18 +546,29 @@ function confirmationText(product, order, promo) {
 Promo Otomatis: *${promo.name || promo.code}* (-${formatRupiah(promo.discount_amount)})` : '';
   const total = Math.max(0, subtotal - Number(promo?.discount_amount || 0));
   const bulk = formatBulkText(product, variant);
+  const desc = formatProductInfoText(variantDescription(product, variant));
+  const terms = formatProductInfoText(variantTerms(product, variant));
   return `*KONFIRMASI PESANAN*
 ` +
     `=======================
 ` +
-    `Produk: *${product.nama}*
+    `Produk: *${escapeMarkdownText(product.nama)}*
 ` +
-    `Varian: *${variant ? variant.name : (order.variant_name || 'Default')}*
+    `Varian: *${escapeMarkdownText(variant ? variant.name : (order.variant_name || 'Default'))}*
 ` +
     `Harga Satuan: *${formatRupiah(unit)}*
 ` +
     `Harga Grosir:
 ${bulk}
+` +
+    `Deskripsi Produk:
+${desc}
+
+` +
+    `Syarat & Ketentuan:
+${terms}
+` +
+    `-----------------------
 ` +
     `Stok Tersedia: *${availableStockForOrder(product, order)}*
 ` +
@@ -861,9 +888,9 @@ async function handleProductSelection(query, code) {
       callback_data: `variant:${product.kode}:${index}`
     }]));
     rows.push([{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]);
-    return editMessage(query, `📦 *${product.nama}*
+    return editMessage(query, `📦 *${escapeMarkdownText(product.nama)}*
 =======================
-Pilih varian produk yang ingin dibeli. Setelah memilih varian, kamu langsung mengatur jumlah beli.`, {
+Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi dan syarat ketentuan akan tampil di halaman konfirmasi sebelum pembayaran.`, {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: rows }
     });

@@ -1,2 +1,1 @@
-Admin UI v33 - Analytics + pending order hotfix
-Fixes missing getAnalytics/upsertPendingOrder/getPendingOrder/deletePendingOrder exports causing 500 errors.
+Admin UI v34 - product description in bot confirmation
