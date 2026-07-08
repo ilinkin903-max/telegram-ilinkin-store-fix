@@ -410,6 +410,95 @@ async function getMonthlyRekap(month, year) {
 }
 
 
+
+async function getAnalytics() {
+  // Analytics are grouped by Asia/Jakarta calendar days, not UTC days.
+  const todayKey = wibDateKey(new Date());
+  const firstKey = addDaysKey(todayKey, -6);
+  const start = wibKeyStartUtc(firstKey);
+  const end = wibKeyStartUtc(addDaysKey(todayKey, 1));
+  const { data, error } = await sb()
+    .from('transactions')
+    .select('*')
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString())
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  const rows = data || [];
+  const daily = Array.from({ length: 7 }, (_, i) => {
+    const key = addDaysKey(firstKey, i);
+    return { date: key, label: wibKeyLabel(key), orders: 0, revenue: 0, quantity: 0 };
+  });
+  const dailyMap = new Map(daily.map((item) => [item.date, item]));
+  const topMap = new Map();
+  rows.forEach((row) => {
+    const keyDate = wibDateKey(row.created_at);
+    const bucket = dailyMap.get(keyDate);
+    if (bucket) {
+      bucket.orders += 1;
+      bucket.revenue += Number(row.total_price || 0);
+      bucket.quantity += Number(row.quantity || 0);
+    }
+    const key = `${row.product_code || row.product_name || '-'}:${row.variant_key || row.variant_name || ''}`;
+    const item = topMap.get(key) || {
+      code: row.product_code || '',
+      name: row.product_name || '-',
+      variant: row.variant_name || '',
+      orders: 0,
+      quantity: 0,
+      revenue: 0
+    };
+    item.orders += 1;
+    item.quantity += Number(row.quantity || 0);
+    item.revenue += Number(row.total_price || 0);
+    topMap.set(key, item);
+  });
+  return {
+    period: '7d-wib',
+    timezone: 'Asia/Jakarta',
+    today: todayKey,
+    today_revenue: daily[daily.length - 1]?.revenue || 0,
+    daily,
+    top_products: Array.from(topMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10),
+    total_orders: rows.length,
+    total_revenue: rows.reduce((sum, row) => sum + Number(row.total_price || 0), 0),
+    total_quantity: rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
+  };
+}
+
+async function upsertPendingOrder(input) {
+  const payload = {
+    telegram_id: Number(input.telegram_id),
+    product_code: String(input.product_code || '').toUpperCase(),
+    variant_key: String(input.variant_key || '').trim().toUpperCase(),
+    variant_name: String(input.variant_name || '').trim(),
+    unit_price: Number(input.unit_price || 0),
+    quantity: Number(input.quantity || 1),
+    voucher_code: input.voucher_code || '',
+    invoice_ref: input.invoice_ref || null,
+    amount: Number(input.amount || 0),
+    fee: Number(input.fee || 0),
+    status: input.status || 'draft',
+    expires_at: input.expires_at || null,
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingOrder(telegramId) {
+  const { data, error } = await sb().from('pending_orders').select('*').eq('telegram_id', Number(telegramId)).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function deletePendingOrder(telegramId) {
+  const { error } = await sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
+  if (error) throw error;
+}
+
+
 async function getShopSettings() {
   const defaults = {
     store_name: '',

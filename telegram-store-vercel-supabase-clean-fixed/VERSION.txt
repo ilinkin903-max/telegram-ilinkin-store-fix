@@ -1,2 +1,2 @@
-Admin UI v32 - getShopSettings fix
-Fix getShopSettings/saveShopSettings undefined causing /api/telegram and /api/reseller-data 500.
+Admin UI v33 - Analytics + pending order hotfix
+Fixes missing getAnalytics/upsertPendingOrder/getPendingOrder/deletePendingOrder exports causing 500 errors.
