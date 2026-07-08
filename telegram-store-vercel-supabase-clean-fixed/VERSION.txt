@@ -1,11 +1,9 @@
-Admin UI v26 - Backup, Import, Promo Otomatis, Statistik Lanjutan
+Admin UI v27 - Promo Voucher Merge + Statistik Text Fix
 
-Fitur baru:
-- Auto backup harian via Vercel Cron ke Telegram owner sekitar 00.00 WIB.
-- Backup manual: download JSON dan kirim ke Telegram owner.
-- Import backup JSON dari Mini App.
-- Promo otomatis saat checkout berdasarkan produk, jumlah, minimal belanja, periode, limit.
-- Statistik lebih dalam: omzet hari ini/bulan/total, AOV, conversion estimate, stok kritis, top user, jam ramai.
-- Maintenance Database tetap tersedia.
-
-Wajib jalankan supabase/update-owner-tools.sql setelah update.
+Perubahan:
+- Teks blok Statistik Lengkap dibuat hitam dan lebih terbaca.
+- Menu Stats diganti menjadi Dashboard.
+- Menu Statistik+ diganti menjadi Statistik Lengkap.
+- Voucher digabung ke menu Promo & Voucher.
+- Dalam Promo & Voucher tersedia Voucher Manual dan Promo Otomatis.
+- Menu Promo & Voucher tetap hijau saat tidak aktif, dan kuning saat aktif.
