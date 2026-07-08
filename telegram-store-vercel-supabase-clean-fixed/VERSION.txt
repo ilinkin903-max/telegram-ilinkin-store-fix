@@ -1,1 +1,1 @@
-Admin UI v29 - Mini App JSON Error Fix
+Admin UI v30 stable hotfix - lazy webhook require + safe /start fallback

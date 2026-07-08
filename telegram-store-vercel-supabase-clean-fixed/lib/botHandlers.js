@@ -306,8 +306,13 @@ async function buildHomeText(from) {
 }
 
 async function editHome(query, req) {
-  await db.upsertUser(query.from);
-  const text = await buildHomeText(query.from);
+  await db.upsertUser(query.from).catch((e) => console.error('upsert user gagal:', e.message));
+  let text;
+  try { text = await buildHomeText(query.from); }
+  catch (e) {
+    console.error('build home gagal:', e.message);
+    text = `Halo, *${query.from.first_name || 'Kak'}* 👋\n\nSelamat datang di *${config.botName}*\n\nSilahkan pilih tombol dibawah ini!`;
+  }
   const settings = await db.getShopSettings().catch(() => ({}));
   return editMessage(query, text, {
     parse_mode: 'Markdown',
@@ -316,14 +321,24 @@ async function editHome(query, req) {
 }
 
 async function sendHome(chatId, from, req) {
-  await db.upsertUser(from);
-  const stats = await db.getStats();
-  const text = `Halo, *${from.first_name || 'Kak'}* 👋\n\n` +
-    `Selamat datang di *${config.botName}*\n` +
-    `- 👥 Total User: *${stats.users} User*\n` +
-    `- 🛍️ Total Transaksi: *${stats.orders} Transaksi*\n` +
-    `- 📦 Stok Tersedia: *${stats.stokTersedia}*\n` +
-    `- 📦 Stok Terjual: *${stats.stokTerjual}*\n\n` +
+  await db.upsertUser(from).catch((e) => console.error('upsert user gagal:', e.message));
+  let stats = { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 };
+  try { stats = await db.getStats(); }
+  catch (e) { console.error('getStats gagal:', e.message); }
+  const text = `Halo, *${from.first_name || 'Kak'}* 👋
+
+` +
+    `Selamat datang di *${config.botName}*
+` +
+    `- 👥 Total User: *${stats.users || 0} User*
+` +
+    `- 🛍️ Total Transaksi: *${stats.orders || 0} Transaksi*
+` +
+    `- 📦 Stok Tersedia: *${stats.stokTersedia || 0}*
+` +
+    `- 📦 Stok Terjual: *${stats.stokTerjual || 0}*
+
+` +
     `Silahkan pilih tombol dibawah ini!`;
 
   const settings = await db.getShopSettings().catch(() => ({}));
