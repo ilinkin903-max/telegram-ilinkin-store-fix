@@ -122,3 +122,25 @@ create table if not exists public.auto_promos (
 
 create index if not exists auto_promos_active_idx on public.auto_promos (active);
 create index if not exists backup_logs_created_idx on public.backup_logs (created_at desc);
+
+-- Counter riwayat agar Total Transaksi tidak turun ketika tabel transactions dibersihkan.
+-- Aman dijalankan berkali-kali. Nilai akan memakai angka terbesar antara counter tersimpan dan isi tabel transactions saat ini.
+insert into public.shop_settings (key, value, updated_at)
+select
+  'historical_stats',
+  jsonb_build_object(
+    'orders_total', coalesce(count(*), 0),
+    'revenue_total', coalesce(sum(coalesce(total_price, 0)), 0),
+    'quantity_sold', coalesce(sum(coalesce(quantity, 0)), 0),
+    'updated_at', now()::text
+  ),
+  now()
+from public.transactions
+on conflict (key) do update set
+  value = jsonb_build_object(
+    'orders_total', greatest(coalesce((public.shop_settings.value->>'orders_total')::numeric, 0), coalesce((excluded.value->>'orders_total')::numeric, 0)),
+    'revenue_total', greatest(coalesce((public.shop_settings.value->>'revenue_total')::numeric, 0), coalesce((excluded.value->>'revenue_total')::numeric, 0)),
+    'quantity_sold', greatest(coalesce((public.shop_settings.value->>'quantity_sold')::numeric, 0), coalesce((excluded.value->>'quantity_sold')::numeric, 0)),
+    'updated_at', now()::text
+  ),
+  updated_at = now();

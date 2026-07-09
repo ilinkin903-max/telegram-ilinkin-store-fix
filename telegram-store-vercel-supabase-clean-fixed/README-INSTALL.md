@@ -68,3 +68,18 @@ Mini App > tab **Statistik+**:
 - Jalankan `supabase/update-owner-tools.sql` agar tabel `auto_promos` dan `backup_logs` tersedia.
 - Jangan simpan gambar langsung di database. Gunakan URL gambar.
 - Sebelum import backup, sebaiknya download backup terbaru dulu.
+
+## v36 - Total Transaksi Riwayat
+
+Update ini menambahkan counter riwayat `historical_stats` di tabel `shop_settings`.
+
+Tujuannya:
+- Total Transaksi di dashboard tidak turun ketika transaksi lama dibersihkan lewat Maintenance.
+- Setiap order baru akan menambah counter riwayat otomatis.
+- Sebelum transaksi lama dihapus, sistem menyimpan angka total terakhir lebih dulu.
+
+Jika Total Transaksi sempat turun ke 14 dan ingin dikembalikan minimal ke 196, jalankan file SQL:
+
+`supabase/restore-total-transaksi-196.sql`
+
+Setelah itu deploy v36, lalu buka ulang webhook.

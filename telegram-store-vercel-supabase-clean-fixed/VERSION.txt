@@ -1,1 +1,1 @@
-Admin UI v35 - description placement and no terms in confirmation
+Admin UI v36 - Total Transaksi Riwayat Aman Maintenance
