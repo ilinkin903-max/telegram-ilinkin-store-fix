@@ -3,6 +3,7 @@ const QRCode = require('qrcode');
 const { config, getMiniAppUrl } = require('./config');
 const tg = require('./telegram');
 const db = require('./db');
+const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
 function isOwner(userId) {
@@ -11,6 +12,34 @@ function isOwner(userId) {
 
 function ownerOnlyMessage() {
   return '⚠️ Hanya bisa diakses oleh owner!';
+}
+
+async function getRentalLicense(force = false) {
+  return license.checkLicense({ force }).catch((error) => ({
+    enabled: true,
+    active: false,
+    status: 'check_error',
+    reason: error.message || 'Gagal cek lisensi.'
+  }));
+}
+
+async function sendLicenseStatus(chatId, force = true) {
+  const info = await getRentalLicense(force);
+  return tg.sendMessage(chatId, license.licenseText(info));
+}
+
+async function ensureLicenseActive(chatId, options = {}) {
+  const info = await getRentalLicense(Boolean(options.force));
+  if (!info.enabled || info.active) return true;
+  const text = license.blockedText(info);
+  if (options.query && options.query.message && options.query.message.message_id) {
+    return editMessage(options.query, text).then(() => false).catch(async () => {
+      await tg.sendMessage(chatId, text);
+      return false;
+    });
+  }
+  await tg.sendMessage(chatId, text);
+  return false;
 }
 
 function parseCommandBody(text, command) {
@@ -539,7 +568,7 @@ async function sendHistory(chatId, userId, query = null) {
 
 async function sendHelp(chatId, from) {
   const ownerLine = isOwner(from.id)
-    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/reseller - Buka Admin Dashboard\n/debugowner - Cek konfigurasi owner\n/rekap - Rekap penjualan bulanan'
+    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/reseller - Buka Admin Dashboard\n/debugowner - Cek konfigurasi owner\n/lisensi - Cek masa aktif bot\n/rekap - Rekap penjualan bulanan'
     : '';
   const text = `❓ *BANTUAN BOT*\n` +
     `=======================\n` +
@@ -547,7 +576,7 @@ async function sendHelp(chatId, from) {
     `/start - Buka menu utama\n` +
     `/produk - Lihat daftar produk\n` +
     `/cekorder - Cek pesanan/riwayat transaksi\n` +
-    `/help - Tampilkan bantuan\n\n` +
+    `/help - Tampilkan bantuan\n/lisensi - Cek masa aktif bot\n\n` +
     `*Cara Order:*\n` +
     `1. Ketik /start atau /produk\n` +
     `2. Pilih produk/varian\n` +
@@ -688,6 +717,7 @@ async function sendOwnerMenu(chatId) {
     `/delvoucher *( Hapus Voucher Bot )*\n` +
     `/rekap *( Rekap Bulanan )*\n` +
     `/reseller *( Reseller Panel Mini App )*\n` +
+    `/lisensi *( Cek masa aktif bot )*\n` +
     `=======================\n\n` +
     `*Format cepat:*\n` +
     `/addproduk Nama|Kode|Harga|Deskripsi|SnK\n` +
@@ -723,18 +753,34 @@ async function handleTextMessage(msg, req) {
 
   const lower = text.toLowerCase();
 
-  if (lower.startsWith('/start') || lower.startsWith('/menu')) return sendHome(chatId, from, req);
   if (lower.startsWith('/getid')) return tg.sendMessage(chatId, `ID Telegram kamu: ${from.id}`);
+  if (lower.startsWith('/lisensi') || lower.startsWith('/license') || lower.startsWith('/masaaktif')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    return sendLicenseStatus(chatId, true);
+  }
+  if (lower.startsWith('/debugowner')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    const miniAppUrl = getMiniAppUrl(req) || '-';
+    const lic = await getRentalLicense(true);
+    return tg.sendMessage(chatId, `DEBUG OWNER
+User ID: ${from.id}
+OWNER_ID env: ${config.ownerId}
+Is owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}
+MINIAPP_URL: ${miniAppUrl}
+LICENSE_MANAGER_URL: ${config.licenseManagerUrl || '-'}
+LICENSE_STATUS: ${lic.status || '-'}
+LICENSE_ACTIVE: ${lic.active ? 'YA' : 'TIDAK'}
+LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
+  }
+
+  if (!(await ensureLicenseActive(chatId))) return;
+
+  if (lower.startsWith('/start') || lower.startsWith('/menu')) return sendHome(chatId, from, req);
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
   if (lower.startsWith('/cekorder') || lower.startsWith('/cekpesanan') || lower.startsWith('/riwayat')) return sendCheckOrder(chatId, from.id);
   if (lower.startsWith('/polling')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     return sendPollingList(chatId);
-  }
-  if (lower.startsWith('/debugowner')) {
-    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
-    const miniAppUrl = getMiniAppUrl(req) || '-';
-    return tg.sendMessage(chatId, `DEBUG OWNER\nUser ID: ${from.id}\nOWNER_ID env: ${config.ownerId}\nIs owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}\nMINIAPP_URL: ${miniAppUrl}`);
   }
   if (lower.startsWith('/produk') || lower.startsWith('/listproduk')) return sendProductList(chatId);
   if (lower.startsWith('/ownermenu')) {
@@ -1238,6 +1284,8 @@ async function handleCallbackQuery(query, req) {
     await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
     return sendPollingList(query.message.chat.id);
   }
+
+  if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
 
   if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id, query);
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);

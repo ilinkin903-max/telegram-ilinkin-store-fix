@@ -1,6 +1,7 @@
 const { assertOwnerMiniApp } = require('../lib/miniappAuth');
 const db = require('../lib/db');
 const tg = require('../lib/telegram');
+const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
 
 function json(res, status, payload) {
@@ -152,6 +153,7 @@ module.exports = async function handler(req, res) {
     assertOwnerMiniApp(req);
     const action = req.query?.action || '';
 
+    if (req.method === 'GET' && action === 'license-status') return json(res, 200, { ok: true, data: await license.checkLicense({ force: true }) });
     if (req.method === 'GET' && action === 'stats') return json(res, 200, { ok: true, data: await db.getStats() });
     if (req.method === 'GET' && action === 'products') return json(res, 200, { ok: true, data: await db.listProducts() });
     if (req.method === 'GET' && action === 'orders') return json(res, 200, { ok: true, data: await db.listTransactions(100) });

@@ -17,6 +17,12 @@ const config = {
   publicUrl: required('PUBLIC_URL'),
   miniAppUrl: required('MINIAPP_URL'),
   webhookSecret: required('WEBHOOK_SECRET', ''),
+  licenseManagerUrl: required('LICENSE_MANAGER_URL', required('RENTAL_MANAGER_URL', '')),
+  licenseApiSecret: required('LICENSE_API_SECRET', ''),
+  licenseBotUsername: required('LICENSE_BOT_USERNAME', required('BOT_USERNAME', '')),
+  licenseCode: required('LICENSE_CODE', ''),
+  licenseCheckEnabled: required('LICENSE_CHECK_ENABLED', ''),
+  licenseFailClosed: required('LICENSE_FAIL_CLOSED', 'false'),
   miniAppDevMode: process.env.MINIAPP_DEV_MODE === 'true'
 };
 

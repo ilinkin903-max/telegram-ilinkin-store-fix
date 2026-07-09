@@ -21,3 +21,22 @@ Cara pasang:
 Catatan:
 - /debugowner akan menolak user non-owner.
 - Jika ingin command muncul di menu Telegram, tambahkan command melalui @BotFather.
+
+## v38 - Integrasi Lisensi Bot Sewa
+
+Tambahan ENV untuk bot auto order yang ingin dikontrol oleh iLink.in Manager:
+
+```env
+LICENSE_MANAGER_URL=https://telegram-i-linkin-manager.vercel.app
+LICENSE_API_SECRET=ilinkin-license-secret-2026
+LICENSE_BOT_USERNAME=username_bot_auto_order_ini_tanpa_at
+LICENSE_CHECK_ENABLED=true
+LICENSE_FAIL_CLOSED=false
+```
+
+Catatan:
+- Jika `LICENSE_MANAGER_URL` dan `LICENSE_API_SECRET` kosong, bot berjalan seperti biasa tanpa cek lisensi.
+- `/lisensi`, `/license`, dan `/masaaktif` hanya bisa dipakai owner.
+- Mini App admin memiliki menu baru **Lisensi** untuk melihat kode aktivasi, masa aktif, dan sisa hari.
+- Jika status lisensi expired/revoked/not_found, pembeli tidak bisa lanjut order.
+- `LICENSE_FAIL_CLOSED=false` membuat bot tetap jalan jika server Manager sedang error. Untuk sewa yang sangat ketat boleh ubah ke `true`.
