@@ -40,3 +40,9 @@ Catatan:
 - Mini App admin memiliki menu baru **Lisensi** untuk melihat kode aktivasi, masa aktif, dan sisa hari.
 - Jika status lisensi expired/revoked/not_found, pembeli tidak bisa lanjut order.
 - `LICENSE_FAIL_CLOSED=false` membuat bot tetap jalan jika server Manager sedang error. Untuk sewa yang sangat ketat boleh ubah ke `true`.
+
+
+## Catatan v39
+- Bot auto order sekarang mendeteksi username asli dari Telegram getMe, jadi tidak mudah salah karena ENV LICENSE_BOT_USERNAME.
+- Kosongkan LICENSE_BOT_USERNAME jika ragu.
+- /debugowner menampilkan BOT_USERNAME env, LICENSE_BOT_USERNAME env, dan username asli dari Telegram.

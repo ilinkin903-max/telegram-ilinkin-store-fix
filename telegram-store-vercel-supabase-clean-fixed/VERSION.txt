@@ -1,1 +1,1 @@
-Admin UI v38 - Rental License Integration
+Admin UI v39 - License Username Fix

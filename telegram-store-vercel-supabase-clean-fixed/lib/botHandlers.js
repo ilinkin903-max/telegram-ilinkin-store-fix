@@ -761,11 +761,15 @@ async function handleTextMessage(msg, req) {
   if (lower.startsWith('/debugowner')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const miniAppUrl = getMiniAppUrl(req) || '-';
+    const resolvedUsername = await license.resolveBotUsername().catch(() => config.licenseBotUsername || config.botUsername || '-');
     const lic = await getRentalLicense(true);
     return tg.sendMessage(chatId, `DEBUG OWNER
 User ID: ${from.id}
 OWNER_ID env: ${config.ownerId}
 Is owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}
+BOT_USERNAME env: ${config.botUsername || '-'}
+LICENSE_BOT_USERNAME env: ${config.licenseBotUsername || '-'}
+BOT_USERNAME nyata dari Telegram: ${resolvedUsername || '-'}
 MINIAPP_URL: ${miniAppUrl}
 LICENSE_MANAGER_URL: ${config.licenseManagerUrl || '-'}
 LICENSE_STATUS: ${lic.status || '-'}
@@ -773,11 +777,30 @@ LICENSE_ACTIVE: ${lic.active ? 'YA' : 'TIDAK'}
 LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   }
 
-  if (!(await ensureLicenseActive(chatId))) return;
+  // Command owner/admin tetap harus bisa dibuka walaupun lisensi belum aktif,
+  // supaya owner bisa debug, buka panel, dan memperbaiki konfigurasi.
+  if (lower.startsWith('/ownermenu')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    return sendOwnerMenu(chatId);
+  }
+  if (lower.startsWith('/reseller')) {
+    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
+    const miniAppUrl = getMiniAppUrl(req);
+    if (!miniAppUrl) return tg.sendMessage(chatId, '⚠️ MINIAPP_URL / PUBLIC_URL belum diatur di Vercel.');
+    return tg.sendMessage(chatId, `Reseller Panel Mini App\n\nBuka panel untuk mengelola dashboard, produk, stok, voucher, users, broadcast, gambar toko, dan grafik.`, {
+      reply_markup: { inline_keyboard: [[{ text: 'Buka Reseller Panel', web_app: { url: miniAppUrl } }], [{ text: 'Buka Link Panel', url: miniAppUrl }]] }
+    });
+  }
 
-  if (lower.startsWith('/start') || lower.startsWith('/menu')) return sendHome(chatId, from, req);
+  if (lower.startsWith('/start') || lower.startsWith('/menu')) {
+    if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
+    return sendHome(chatId, from, req);
+  }
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
   if (lower.startsWith('/cekorder') || lower.startsWith('/cekpesanan') || lower.startsWith('/riwayat')) return sendCheckOrder(chatId, from.id);
+
+  if (!(await ensureLicenseActive(chatId))) return;
+
   if (lower.startsWith('/polling')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     return sendPollingList(chatId);
