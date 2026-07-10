@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { config, getMiniAppUrl } = require('./config');
 const tg = require('./telegram');
@@ -12,6 +13,28 @@ function isOwner(userId) {
 
 function ownerOnlyMessage() {
   return '⚠️ Hanya bisa diakses oleh owner!';
+}
+
+function shortHash(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
+}
+
+async function claimBroadcastOrTell(chatId, keySource, label = 'broadcast') {
+  const claimKey = `broadcast_job:${shortHash(keySource)}`;
+  const ok = await db.claimOnce(claimKey, 6 * 60 * 60, { label }).catch((e) => {
+    console.error('Gagal membuat broadcast lock:', e.message);
+    return true;
+  });
+  if (!ok) {
+    await tg.sendMessage(chatId, `⚠️ ${label} ini sedang diproses atau sudah pernah dikirim.\n\nAgar tidak terkirim berulang, bot menolak proses ganda. Kalau ingin kirim ulang, buat/perintah broadcast baru.`).catch(() => null);
+    return null;
+  }
+  return claimKey;
+}
+
+async function markBroadcastDone(claimKey, result = {}) {
+  if (!claimKey) return;
+  await db.markClaimDone(claimKey, result).catch((e) => console.error('Gagal menandai broadcast selesai:', e.message));
 }
 
 async function getRentalLicense(force = false) {
@@ -953,7 +976,10 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const replyPhoto = msg.reply_to_message?.photo?.slice(-1)?.[0]?.file_id;
     const finalPhoto = replyPhoto || photo;
     if (!finalPhoto) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bcphoto URL_GAMBAR_ATAU_FILE_ID|Caption\n\nAtau reply gambar dengan /bcphoto Caption');
+    const claimKey = await claimBroadcastOrTell(chatId, `bcphoto:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${finalPhoto}:${replyPhoto ? raw : caption}`, 'Broadcast gambar');
+    if (!claimKey) return;
     const result = await broadcastToUsers({ type: 'photo', photo: finalPhoto, caption: replyPhoto ? raw : caption });
+    await markBroadcastDone(claimKey, result);
     return tg.sendMessage(chatId, `✅ Broadcast gambar selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
   }
 
@@ -961,7 +987,10 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const sticker = msg.reply_to_message?.sticker?.file_id || parseCommandBody(text, 'bcsticker').trim();
     if (!sticker) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bcsticker FILE_ID\n\nAtau reply stiker dengan /bcsticker');
+    const claimKey = await claimBroadcastOrTell(chatId, `bcsticker:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${sticker}`, 'Broadcast stiker');
+    if (!claimKey) return;
     const result = await broadcastToUsers({ type: 'sticker', sticker });
+    await markBroadcastDone(claimKey, result);
     return tg.sendMessage(chatId, `✅ Broadcast stiker selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
   }
 
@@ -972,13 +1001,16 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const replySticker = msg.reply_to_message?.sticker?.file_id;
     const replyPoll = msg.reply_to_message?.poll ? msg.reply_to_message : null;
     let result;
+    if (replyPoll) return preparePollPreview(chatId, from, replyPoll);
+    const claimKey = await claimBroadcastOrTell(chatId, `bc:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${body}:${replyPhoto || replySticker || ''}`, 'Broadcast');
+    if (!claimKey) return;
     if (replyPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto, caption: body });
     else if (replySticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker, message: body });
-    else if (replyPoll) return preparePollPreview(chatId, from, replyPoll);
     else {
       if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker/polling dengan /bc Caption');
       result = await broadcastToUsers({ type: 'text', message: body });
     }
+    await markBroadcastDone(claimKey, result);
     return tg.sendMessage(chatId, `✅ Broadcast selesai. Tipe: *${result.type}* | Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
   }
 
@@ -1286,7 +1318,17 @@ async function handleCallbackQuery(query, req) {
     const pollId = cmd.slice('bcpoll_send:'.length);
     const pollRecord = await db.getBroadcastPoll(pollId);
     if (!pollRecord) return tg.answerCallbackQuery(query.id, { text: 'Polling tidak ditemukan.', show_alert: true });
+    if (String(pollRecord.status || '').toLowerCase() === 'sent') {
+      return editMessage(query, `✅ Polling ini sudah pernah dibroadcast.\nTerkirim: ${pollRecord.total_sent || 0}\nGagal: ${pollRecord.total_failed || 0}\n\nBot menolak pengiriman ulang agar polling tidak terkirim berulang.`);
+    }
+    if (String(pollRecord.status || '').toLowerCase() === 'sending') {
+      return editMessage(query, '⏳ Broadcast polling sedang diproses. Mohon tunggu, jangan klik tombol berulang.');
+    }
+    const claimKey = await claimBroadcastOrTell(query.message.chat.id, `bcpoll:${pollId}`, 'Broadcast polling');
+    if (!claimKey) return;
+    await db.updateBroadcastPoll(pollId, { status: 'sending' }).catch(() => null);
     const result = await broadcastPollRecordToUsers(pollRecord);
+    await markBroadcastDone(claimKey, result);
     const modeInfo = 'Mode: polling global dari bot. User melihat hasil keseluruhan dan admin bisa melihat suara masuk.';
     return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n${modeInfo}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
   }

@@ -5,6 +5,77 @@ function sb() {
   return getSupabase();
 }
 
+function isMissingTableError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return code === '42P01' || message.includes('does not exist') || message.includes('schema cache');
+}
+
+async function claimOnce(rawKey, ttlSeconds = 3600, meta = {}) {
+  const key = String(rawKey || '').trim().slice(0, 220);
+  if (!key) return true;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + Number(ttlSeconds || 3600) * 1000).toISOString();
+  const payload = {
+    key,
+    value: {
+      status: 'processing',
+      claimed_at: now.toISOString(),
+      expires_at: expiresAt,
+      ...meta
+    },
+    updated_at: now.toISOString()
+  };
+
+  async function tryInsert() {
+    return sb().from('shop_settings').insert(payload).select('key').single();
+  }
+
+  let { error } = await tryInsert();
+  if (!error) return true;
+  if (isMissingTableError(error)) return true;
+
+  const isDuplicate = String(error.code || '') === '23505' || /duplicate key/i.test(String(error.message || ''));
+  if (!isDuplicate) {
+    console.error('claimOnce gagal:', error.message || error);
+    // Jangan matikan fitur utama hanya karena lock gagal.
+    return true;
+  }
+
+  const { data: existing, error: readError } = await sb().from('shop_settings').select('value,updated_at').eq('key', key).maybeSingle();
+  if (readError) {
+    if (isMissingTableError(readError)) return true;
+    console.error('claimOnce read gagal:', readError.message || readError);
+    return false;
+  }
+
+  const existingExpires = existing?.value?.expires_at || null;
+  const expired = existingExpires ? new Date(existingExpires).getTime() < Date.now() : (existing?.updated_at ? new Date(existing.updated_at).getTime() < Date.now() - Number(ttlSeconds || 3600) * 1000 : false);
+  if (!expired) return false;
+
+  await sb().from('shop_settings').delete().eq('key', key);
+  ({ error } = await tryInsert());
+  if (!error) return true;
+  if (isMissingTableError(error)) return true;
+  return false;
+}
+
+async function markClaimDone(rawKey, meta = {}) {
+  const key = String(rawKey || '').trim().slice(0, 220);
+  if (!key) return null;
+  const { data, error } = await sb().from('shop_settings').update({
+    value: {
+      status: 'done',
+      done_at: new Date().toISOString(),
+      ...meta
+    },
+    updated_at: new Date().toISOString()
+  }).eq('key', key).select('key').maybeSingle();
+  if (error && !isMissingTableError(error)) console.error('markClaimDone gagal:', error.message || error);
+  return data;
+}
+
+
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 function wibDateKey(value = new Date()) {
@@ -1310,6 +1381,8 @@ async function getDeepStats() {
 }
 
 module.exports = {
+  claimOnce,
+  markClaimDone,
   upsertUser,
   getStats,
   ensureHistoricalStatsFromCurrentTransactions,

@@ -1,1 +1,1 @@
-Admin UI v39 - License Username Fix
+Admin UI v40 - Broadcast Anti Repeat Hotfix

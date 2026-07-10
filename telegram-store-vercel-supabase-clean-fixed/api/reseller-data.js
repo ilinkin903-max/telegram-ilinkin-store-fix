@@ -1,6 +1,7 @@
 const { assertOwnerMiniApp } = require('../lib/miniappAuth');
 const db = require('../lib/db');
 const tg = require('../lib/telegram');
+const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
 
@@ -114,7 +115,23 @@ function parseVariantPayload(body) {
   return [];
 }
 
+
+function shortHash(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
+}
+
 async function broadcast(payload = {}) {
+  const typeForLock = String(payload.type || 'text').toLowerCase();
+  const lockSource = JSON.stringify({
+    type: typeForLock,
+    message: String(payload.message || '').trim(),
+    caption: String(payload.caption || '').trim(),
+    photo: String(payload.photo || payload.image_url || '').trim(),
+    sticker: String(payload.sticker || payload.sticker_file_id || '').trim()
+  });
+  const claimKey = `broadcast_job:miniapp:${shortHash(lockSource)}`;
+  const locked = await db.claimOnce(claimKey, 5 * 60, { label: 'Mini App Broadcast' }).catch(() => true);
+  if (!locked) throw new Error('Broadcast ini sedang diproses atau baru saja dikirim. Bot menolak proses ganda agar pesan tidak terkirim berulang.');
   const users = await db.listUsers(1000);
   const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
   const type = String(payload.type || 'text').toLowerCase();
@@ -145,7 +162,9 @@ async function broadcast(payload = {}) {
     const results = await Promise.allSettled(part.map(sendOne));
     results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
   }
-  return { total: targets.length, sent, failed, type };
+  const result = { total: targets.length, sent, failed, type };
+  await db.markClaimDone(claimKey, result).catch(() => null);
+  return result;
 }
 
 module.exports = async function handler(req, res) {
