@@ -53,3 +53,8 @@ Catatan:
 - Lisensi, Maintenance, Backup, dan Statistik Lengkap dipindahkan ke dalam menu Toko.
 - Toko sekarang memiliki submenu internal: Identitas Toko, Lisensi, Maintenance, Backup, Statistik Lengkap.
 - Tidak ada perubahan SQL tambahan.
+
+## v43 - Dashboard & Submenu Toko
+- Dashboard dibuat lebih rapi di HP: blok grafik dan Produk Terlaris tidak melebar keluar layar.
+- Klik submenu Toko sekarang memakai animasi scroll halus ke tujuan submenu.
+- Label submenu di Promo & Voucher diubah menjadi 'Buat Promo / Voucher'.

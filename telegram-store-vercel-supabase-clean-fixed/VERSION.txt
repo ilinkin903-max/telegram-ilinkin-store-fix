@@ -5,3 +5,6 @@ Perubahan:
 - Promo & Voucher dibuat lebih ringkas dengan sub menu daftar dan buat/edit.
 - Grafik omset 7 hari diperbaiki agar label tanggal dan omzet terlihat di HP.
 - Tidak perlu SQL tambahan.
+
+
+v43 - Dashboard mobile tidy + smooth Store submenu + label Buat Promo/Voucher.
