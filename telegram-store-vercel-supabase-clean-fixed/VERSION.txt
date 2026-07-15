@@ -1,1 +1,7 @@
-Admin UI v41 - Toko Submenu Ringkas
+Admin UI v42 - Global Search Promo Submenu Chart Mobile Fix
+
+Perubahan:
+- Kolom pencarian global untuk produk, penjualan, users, promo & voucher.
+- Promo & Voucher dibuat lebih ringkas dengan sub menu daftar dan buat/edit.
+- Grafik omset 7 hari diperbaiki agar label tanggal dan omzet terlihat di HP.
+- Tidak perlu SQL tambahan.
