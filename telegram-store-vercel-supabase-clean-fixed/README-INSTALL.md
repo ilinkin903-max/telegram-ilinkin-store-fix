@@ -46,3 +46,10 @@ Catatan:
 - Bot auto order sekarang mendeteksi username asli dari Telegram getMe, jadi tidak mudah salah karena ENV LICENSE_BOT_USERNAME.
 - Kosongkan LICENSE_BOT_USERNAME jika ragu.
 - /debugowner menampilkan BOT_USERNAME env, LICENSE_BOT_USERNAME env, dan username asli dari Telegram.
+
+
+## v41 - Menu Toko Ringkas
+- Menu utama Mini App dibuat lebih ringkas.
+- Lisensi, Maintenance, Backup, dan Statistik Lengkap dipindahkan ke dalam menu Toko.
+- Toko sekarang memiliki submenu internal: Identitas Toko, Lisensi, Maintenance, Backup, Statistik Lengkap.
+- Tidak ada perubahan SQL tambahan.

@@ -1,1 +1,1 @@
-Admin UI v40 - Broadcast Anti Repeat Hotfix
+Admin UI v41 - Toko Submenu Ringkas
