@@ -1,3 +1,12 @@
+Admin UI v44 - Product & Users Mobile Compact Fix
+
+Perubahan:
+- Kartu Produk di HP dibuat lebih pendek dan rapi.
+- Chip varian/harga grosir dapat digeser horizontal agar kartu tidak memanjang ke bawah.
+- Tombol Edit, Stok, Kelola, dan Hapus disusun satu baris pada layar kecil.
+- Tabel Users berubah menjadi kartu responsif di HP agar ID, username, transaksi, dan spending tidak terpecah vertikal.
+- Tidak perlu SQL tambahan.
+
 Admin UI v42 - Global Search Promo Submenu Chart Mobile Fix
 
 Perubahan:

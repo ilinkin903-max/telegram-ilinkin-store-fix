@@ -58,3 +58,11 @@ Catatan:
 - Dashboard dibuat lebih rapi di HP: blok grafik dan Produk Terlaris tidak melebar keluar layar.
 - Klik submenu Toko sekarang memakai animasi scroll halus ke tujuan submenu.
 - Label submenu di Promo & Voucher diubah menjadi 'Buat Promo / Voucher'.
+
+## v44 - Produk & Users Responsif di HP
+- Kartu produk dibuat lebih ringkas agar tidak memanjang ke bawah.
+- Daftar varian/harga grosir dapat digeser horizontal.
+- Empat tombol aksi produk disusun satu baris pada layar kecil.
+- Tabel Users otomatis berubah menjadi kartu responsif di layar HP, sehingga data tidak pecah menjadi huruf/angka vertikal.
+- Tidak ada perubahan SQL tambahan.
+
