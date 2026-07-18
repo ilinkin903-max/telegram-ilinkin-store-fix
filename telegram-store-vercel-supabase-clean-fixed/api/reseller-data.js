@@ -122,18 +122,25 @@ function shortHash(value) {
 
 async function broadcast(payload = {}) {
   const typeForLock = String(payload.type || 'text').toLowerCase();
-  const lockSource = JSON.stringify({
+  const requestId = String(payload.request_id || payload.requestId || '').trim();
+  const lockSource = requestId || JSON.stringify({
     type: typeForLock,
     message: String(payload.message || '').trim(),
     caption: String(payload.caption || '').trim(),
     photo: String(payload.photo || payload.image_url || '').trim(),
     sticker: String(payload.sticker || payload.sticker_file_id || '').trim()
   });
+  // request_id dibuat baru setiap kali owner menekan Kirim. Dengan begitu konten/foto/stiker
+  // yang sama boleh dikirim ulang, sementara retry HTTP dari permintaan yang sama tetap aman.
   const claimKey = `broadcast_job:miniapp:${shortHash(lockSource)}`;
-  const locked = await db.claimOnce(claimKey, 5 * 60, { label: 'Mini App Broadcast' }).catch(() => true);
-  if (!locked) throw new Error('Broadcast ini sedang diproses atau baru saja dikirim. Bot menolak proses ganda agar pesan tidak terkirim berulang.');
+  const locked = await db.claimOnce(claimKey, requestId ? 6 * 60 * 60 : 30, { label: 'Mini App Broadcast', request_id: requestId || null }).catch(() => true);
+  if (!locked) {
+    const error = new Error('Permintaan broadcast yang sama sedang diproses. Tunggu hasil pengiriman pertama.');
+    error.statusCode = 409;
+    throw error;
+  }
   const users = await db.listUsers(1000);
-  const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
+  const targets = [...new Set(users.map((u) => Number(u.telegram_id)).filter(Boolean))];
   const type = String(payload.type || 'text').toLowerCase();
   const message = String(payload.message || '').trim();
   const caption = String(payload.caption || '').trim();
@@ -141,6 +148,7 @@ async function broadcast(payload = {}) {
   const sticker = String(payload.sticker || payload.sticker_file_id || '').trim();
   let sent = 0;
   let failed = 0;
+  const errors = [];
 
   async function sendOne(id) {
     if (type === 'photo') {
@@ -160,9 +168,12 @@ async function broadcast(payload = {}) {
   for (let i = 0; i < targets.length; i += 10) {
     const part = targets.slice(i, i + 10);
     const results = await Promise.allSettled(part.map(sendOne));
-    results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
+    results.forEach((r) => {
+      if (r.status === 'fulfilled') sent += 1;
+      else { failed += 1; if (errors.length < 3) errors.push(String(r.reason?.message || r.reason || 'Gagal mengirim')); }
+    });
   }
-  const result = { total: targets.length, sent, failed, type };
+  const result = { total: targets.length, sent, failed, type, errors };
   await db.markClaimDone(claimKey, result).catch(() => null);
   return result;
 }
@@ -218,7 +229,12 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'promo-save') {
-      const promo = await db.saveAutoPromo(body);
+      const code = String(body.code || body.kode || '').trim().toUpperCase();
+      const discountValue = numberOf(body.discount_value || body.discount || body.potongan);
+      if (!code || discountValue <= 0) {
+        return json(res, 400, { ok: false, error: 'Kode dan nilai diskon promo otomatis wajib diisi lebih dari 0.' });
+      }
+      const promo = await db.saveAutoPromo({ ...body, code, discount_value: discountValue });
       return json(res, 200, { ok: true, data: promo });
     }
 

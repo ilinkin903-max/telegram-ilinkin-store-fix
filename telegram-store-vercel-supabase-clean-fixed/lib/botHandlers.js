@@ -19,14 +19,19 @@ function shortHash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
 }
 
-async function claimBroadcastOrTell(chatId, keySource, label = 'broadcast') {
+async function claimBroadcastOrTell(chatId, keySource, label = 'broadcast', options = {}) {
   const claimKey = `broadcast_job:${shortHash(keySource)}`;
   const ok = await db.claimOnce(claimKey, 6 * 60 * 60, { label }).catch((e) => {
     console.error('Gagal membuat broadcast lock:', e.message);
     return true;
   });
   if (!ok) {
-    await tg.sendMessage(chatId, `⚠️ ${label} ini sedang diproses atau sudah pernah dikirim.\n\nAgar tidak terkirim berulang, bot menolak proses ganda. Kalau ingin kirim ulang, buat/perintah broadcast baru.`).catch(() => null);
+    // Telegram dapat mengirim ulang update webhook yang sama saat proses broadcast lama.
+    // Duplikat update yang sama cukup diabaikan. Owner tetap bisa mengirim ulang media
+    // dengan command/message baru karena message_id-nya berbeda.
+    if (!options.silentDuplicate) {
+      await tg.sendMessage(chatId, `⏳ ${label} yang sama sedang diproses. Untuk kirim ulang, kirim command baru.`).catch(() => null);
+    }
     return null;
   }
   return claimKey;
@@ -111,7 +116,7 @@ async function sendProductUpdated(chatId, product, label) {
 
 async function broadcastToUsers(payload = {}) {
   const users = await db.listUsers(1000);
-  const targets = users.map((u) => Number(u.telegram_id)).filter(Boolean);
+  const targets = [...new Set(users.map((u) => Number(u.telegram_id)).filter(Boolean))];
   const type = String(payload.type || 'text').toLowerCase();
   const message = String(payload.message || '').trim();
   const caption = String(payload.caption || '').trim();
@@ -121,6 +126,7 @@ async function broadcastToUsers(payload = {}) {
   const messageId = payload.message_id || payload.messageId;
   let sent = 0;
   let failed = 0;
+  const errors = [];
 
   async function sendOne(id) {
     if (type === 'copy') {
@@ -146,9 +152,12 @@ async function broadcastToUsers(payload = {}) {
   for (let i = 0; i < targets.length; i += 10) {
     const part = targets.slice(i, i + 10);
     const results = await Promise.allSettled(part.map(sendOne));
-    results.forEach((r) => { if (r.status === 'fulfilled') sent += 1; else failed += 1; });
+    results.forEach((r) => {
+      if (r.status === 'fulfilled') sent += 1;
+      else { failed += 1; if (errors.length < 3) errors.push(String(r.reason?.message || r.reason || 'Gagal mengirim')); }
+    });
   }
-  return { total: targets.length, sent, failed, type };
+  return { total: targets.length, sent, failed, type, errors };
 }
 
 
@@ -662,7 +671,7 @@ function confirmationText(product, order, promo) {
   const quantity = Number(order.quantity || 1);
   const subtotal = quantity * unit;
   const promoLine = promo && promo.discount_amount ? `
-Promo Otomatis: *${promo.name || promo.code}* (-${formatRupiah(promo.discount_amount)})` : '';
+Promo Otomatis: *${escapeMarkdownText(promo.name || promo.code)}* (-${formatRupiah(promo.discount_amount)})` : '';
   const total = Math.max(0, subtotal - Number(promo?.discount_amount || 0));
   const bulk = formatBulkText(product, variant);
   const desc = formatProductInfoText(variantDescription(product, variant));
@@ -770,6 +779,21 @@ async function handleTextMessage(msg, req) {
   // It is NOT broadcast automatically anymore. Admin must confirm first.
   if (!text && msg.poll && isOwner(from.id)) {
     return preparePollPreview(chatId, from, msg);
+  }
+  if (!text && isOwner(from.id) && msg.photo?.length) {
+    const fileId = msg.photo.slice(-1)[0]?.file_id || '-';
+    return tg.sendMessage(chatId, `🖼 Gambar diterima.
+
+Reply gambar ini dengan /bcphoto Caption atau /bc Caption untuk broadcast.
+
+File ID: \`${escapeMarkdownText(fileId)}\``, { parse_mode: 'Markdown' });
+  }
+  if (!text && isOwner(from.id) && msg.sticker?.file_id) {
+    return tg.sendMessage(chatId, `🎟 Stiker diterima.
+
+Reply stiker ini dengan /bcsticker atau /bc untuk broadcast.
+
+File ID: \`${escapeMarkdownText(msg.sticker.file_id)}\``, { parse_mode: 'Markdown' });
   }
 
   if (!text) return;
@@ -974,45 +998,66 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const raw = parseCommandBody(text, 'bcphoto');
     const [photo, caption] = splitFirstPipe(raw);
     const replyPhoto = msg.reply_to_message?.photo?.slice(-1)?.[0]?.file_id;
-    const finalPhoto = replyPhoto || photo;
-    if (!finalPhoto) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bcphoto URL_GAMBAR_ATAU_FILE_ID|Caption\n\nAtau reply gambar dengan /bcphoto Caption');
-    const claimKey = await claimBroadcastOrTell(chatId, `bcphoto:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${finalPhoto}:${replyPhoto ? raw : caption}`, 'Broadcast gambar');
+    const currentPhoto = msg.photo?.slice(-1)?.[0]?.file_id;
+    const finalPhoto = replyPhoto || currentPhoto || photo;
+    const finalCaption = (replyPhoto || currentPhoto) ? raw : caption;
+    if (!finalPhoto) return tg.sendMessage(chatId, `⚠️ Cara Penggunaan:
+/bcphoto URL_GAMBAR_ATAU_FILE_ID|Caption
+
+Atau reply/kirim gambar dengan caption /bcphoto Caption`);
+    const claimKey = await claimBroadcastOrTell(chatId, `bcphoto:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${finalPhoto}:${finalCaption}`, 'Broadcast gambar', { silentDuplicate: true });
     if (!claimKey) return;
-    const result = await broadcastToUsers({ type: 'photo', photo: finalPhoto, caption: replyPhoto ? raw : caption });
+    const result = await broadcastToUsers({ type: 'photo', photo: finalPhoto, caption: finalCaption });
     await markBroadcastDone(claimKey, result);
-    return tg.sendMessage(chatId, `✅ Broadcast gambar selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+    const errorInfo = result.errors?.length ? `
+Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
+    return tg.sendMessage(chatId, `✅ Broadcast gambar selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.${errorInfo}`, { parse_mode: 'Markdown' });
   }
+
 
   if (lower.startsWith('/bcsticker')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
-    const sticker = msg.reply_to_message?.sticker?.file_id || parseCommandBody(text, 'bcsticker').trim();
-    if (!sticker) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bcsticker FILE_ID\n\nAtau reply stiker dengan /bcsticker');
-    const claimKey = await claimBroadcastOrTell(chatId, `bcsticker:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${sticker}`, 'Broadcast stiker');
+    const sticker = msg.reply_to_message?.sticker?.file_id || msg.sticker?.file_id || parseCommandBody(text, 'bcsticker').trim();
+    if (!sticker) return tg.sendMessage(chatId, `⚠️ Cara Penggunaan:
+/bcsticker FILE_ID
+
+Atau reply/kirim stiker dengan /bcsticker`);
+    const claimKey = await claimBroadcastOrTell(chatId, `bcsticker:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${sticker}`, 'Broadcast stiker', { silentDuplicate: true });
     if (!claimKey) return;
     const result = await broadcastToUsers({ type: 'sticker', sticker });
     await markBroadcastDone(claimKey, result);
-    return tg.sendMessage(chatId, `✅ Broadcast stiker selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+    const errorInfo = result.errors?.length ? `
+Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
+    return tg.sendMessage(chatId, `✅ Broadcast stiker selesai. Terkirim: *${result.sent}*, gagal: *${result.failed}*.${errorInfo}`, { parse_mode: 'Markdown' });
   }
+
 
   if (lower.startsWith('/bc')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const body = parseCommandBody(text, 'bc');
     const replyPhoto = msg.reply_to_message?.photo?.slice(-1)?.[0]?.file_id;
+    const currentPhoto = msg.photo?.slice(-1)?.[0]?.file_id;
     const replySticker = msg.reply_to_message?.sticker?.file_id;
+    const currentSticker = msg.sticker?.file_id;
     const replyPoll = msg.reply_to_message?.poll ? msg.reply_to_message : null;
     let result;
     if (replyPoll) return preparePollPreview(chatId, from, replyPoll);
-    const claimKey = await claimBroadcastOrTell(chatId, `bc:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${body}:${replyPhoto || replySticker || ''}`, 'Broadcast');
+    const mediaRef = replyPhoto || currentPhoto || replySticker || currentSticker || '';
+    if (!body && !mediaRef) return tg.sendMessage(chatId, `⚠️ Cara Penggunaan:
+/bc Pesan
+
+Bisa juga reply/kirim gambar atau reply stiker dengan /bc Caption`);
+    const claimKey = await claimBroadcastOrTell(chatId, `bc:${chatId}:${msg.message_id}:${msg.reply_to_message?.message_id || ''}:${body}:${mediaRef}`, 'Broadcast', { silentDuplicate: true });
     if (!claimKey) return;
-    if (replyPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto, caption: body });
-    else if (replySticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker, message: body });
-    else {
-      if (!body) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/bc Pesan\n\nBisa juga reply gambar/stiker/polling dengan /bc Caption');
-      result = await broadcastToUsers({ type: 'text', message: body });
-    }
+    if (replyPhoto || currentPhoto) result = await broadcastToUsers({ type: 'photo', photo: replyPhoto || currentPhoto, caption: body });
+    else if (replySticker || currentSticker) result = await broadcastToUsers({ type: 'sticker', sticker: replySticker || currentSticker, message: body });
+    else result = await broadcastToUsers({ type: 'text', message: body });
     await markBroadcastDone(claimKey, result);
-    return tg.sendMessage(chatId, `✅ Broadcast selesai. Tipe: *${result.type}* | Terkirim: *${result.sent}*, gagal: *${result.failed}*.`, { parse_mode: 'Markdown' });
+    const errorInfo = result.errors?.length ? `
+Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
+    return tg.sendMessage(chatId, `✅ Broadcast selesai. Tipe: *${result.type}* | Terkirim: *${result.sent}*, gagal: *${result.failed}*.${errorInfo}`, { parse_mode: 'Markdown' });
   }
+
 
   if (lower.startsWith('/rekap')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
@@ -1143,16 +1188,30 @@ async function createPayment(query) {
   if (availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
   const unit = orderUnitPrice(product, order);
-  let harga = Number(order.quantity || 1) * unit;
+  const quantity = Math.max(1, Number(order.quantity || 1));
+  const subtotal = quantity * unit;
+  let harga = subtotal;
   let promoApplied = null;
-  const voucher = order.voucher_code ? await db.getVoucher(order.voucher_code) : null;
-  if (db.voucherIsValid(voucher, product.kode, userId, Number(order.quantity || 1), harga)) {
-    harga -= db.voucherDiscountAmount(voucher, harga);
+  let voucherApplied = null;
+  let appliedDiscount = 0;
+
+  // Kode AUTO_PROMO hanya penanda transaksi sebelumnya, bukan voucher manual.
+  // Saat tombol bayar ditekan ulang, promo dihitung kembali agar status/jadwal/limit terbaru tetap berlaku.
+  const manualVoucherCode = String(order.voucher_code || '').startsWith('AUTO_PROMO:')
+    ? ''
+    : String(order.voucher_code || '').trim();
+  const voucher = manualVoucherCode ? await db.getVoucher(manualVoucherCode) : null;
+
+  if (db.voucherIsValid(voucher, product.kode, userId, quantity, subtotal)) {
+    voucherApplied = voucher;
+    appliedDiscount = db.voucherDiscountAmount(voucher, subtotal);
   } else {
-    promoApplied = await db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), harga).catch(() => null);
-    if (promoApplied?.discount_amount) harga -= Number(promoApplied.discount_amount || 0);
+    promoApplied = await db.getBestAutoPromo(product.kode, userId, quantity, subtotal).catch(() => null);
+    appliedDiscount = promoApplied ? Number(promoApplied.discount_amount || 0) : 0;
   }
-  if (harga < 0) harga = 0;
+
+  appliedDiscount = Math.min(subtotal, Math.max(0, Number(appliedDiscount || 0)));
+  harga = Math.max(0, subtotal - appliedDiscount);
 
   const fee = randomFee();
   const invoiceRef = randomRef();
@@ -1168,16 +1227,24 @@ async function createPayment(query) {
 
   const qrText = response.data?.payment?.payment_number || response.data?.payment_number || response.data?.qr_string;
   if (!qrText) throw new Error('Pakasir tidak mengirim data QRIS.');
-  await db.upsertPendingOrder({ ...order, voucher_code: promoApplied ? `AUTO_PROMO:${promoApplied.code}` : order.voucher_code, invoice_ref: invoiceRef, amount: totalAmount, fee, expires_at: expiresAt, status: 'awaiting_payment' });
+  const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
+  await db.upsertPendingOrder({ ...order, quantity, voucher_code: appliedCode, invoice_ref: invoiceRef, amount: totalAmount, fee, expires_at: expiresAt, status: 'awaiting_payment' });
 
   const buffer = await QRCode.toBuffer(qrText, { type: 'png' });
+  const discountLine = voucherApplied
+    ? `Voucher: *${escapeMarkdownText(voucherApplied.code)}* (-${formatRupiah(appliedDiscount)})\n`
+    : (promoApplied
+      ? `Promo Otomatis: *${escapeMarkdownText(promoApplied.name || promoApplied.code)}* (-${formatRupiah(appliedDiscount)})\n`
+      : '');
   const caption = `💸 *PEMBAYARAN OTOMATIS*\n` +
     `=======================\n` +
     `Invoice: *${invoiceRef}*\n` +
-    `Produk: *${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}*\n` +
+    `Produk: *${escapeMarkdownText(product.nama)}${order.variant_name ? ' - ' + escapeMarkdownText(order.variant_name) : ''}*\n` +
     `Harga Satuan: *${formatRupiah(unit)}*\n` +
-    `Jumlah Beli: *${order.quantity}*\n` +
-    (promoApplied ? `Promo: *${promoApplied.name || promoApplied.code}* (-${formatRupiah(promoApplied.discount_amount)})\n` : '') +
+    `Jumlah Beli: *${quantity}*\n` +
+    `Subtotal: *${formatRupiah(subtotal)}*\n` +
+    discountLine +
+    (appliedDiscount > 0 ? `Setelah Diskon: *${formatRupiah(harga)}*\n` : '') +
     `Fee: *${formatRupiah(fee)}*\n` +
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
     `Expired: *10 menit*\n` +

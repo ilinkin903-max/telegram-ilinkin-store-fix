@@ -1,19 +1,13 @@
-Admin UI v44 - Product & Users Mobile Compact Fix
+Admin UI v45 - Promo Otomatis, Status Expired, dan Broadcast Media Fix
 
 Perubahan:
-- Kartu Produk di HP dibuat lebih pendek dan rapi.
-- Chip varian/harga grosir dapat digeser horizontal agar kartu tidak memanjang ke bawah.
-- Tombol Edit, Stok, Kelola, dan Hapus disusun satu baris pada layar kecil.
-- Tabel Users berubah menjadi kartu responsif di HP agar ID, username, transaksi, dan spending tidak terpecah vertikal.
+- Perhitungan promo otomatis diperbaiki agar potongan benar-benar mengurangi subtotal saat checkout.
+- Jadwal promo/voucher dari input datetime-local dibaca sebagai WIB, sehingga tidak bergeser 7 jam di Vercel.
+- Promo dan voucher yang expired, belum mulai, limit habis, atau dinonaktifkan tampil sebagai OFF beserta keterangannya.
+- Validasi target produk, minimal jumlah, minimal belanja, limit pemakaian, diskon nominal, dan diskon persen diperkuat.
+- Pemakaian voucher sekarang tercatat dengan benar setelah transaksi selesai.
+- Broadcast gambar dan stiker dapat dikirim ulang melalui command/message baru tanpa dianggap sudah pernah dikirim.
+- Retry webhook Telegram yang sama diabaikan tanpa mengirim peringatan duplikat ke owner.
+- Mini App memakai request_id unik pada setiap klik Kirim Broadcast dan menampilkan contoh error Telegram jika ada pengiriman gagal.
+- Tampilan Produk dan Users responsif dari v44 tetap dipertahankan.
 - Tidak perlu SQL tambahan.
-
-Admin UI v42 - Global Search Promo Submenu Chart Mobile Fix
-
-Perubahan:
-- Kolom pencarian global untuk produk, penjualan, users, promo & voucher.
-- Promo & Voucher dibuat lebih ringkas dengan sub menu daftar dan buat/edit.
-- Grafik omset 7 hari diperbaiki agar label tanggal dan omzet terlihat di HP.
-- Tidak perlu SQL tambahan.
-
-
-v43 - Dashboard mobile tidy + smooth Store submenu + label Buat Promo/Voucher.

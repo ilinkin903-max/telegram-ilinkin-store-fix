@@ -1,5 +1,6 @@
 const { getSupabase } = require('./supabase');
 const { splitStock } = require('./utils');
+const { boolValue, normalizeDateTime, discountAmount, targetProducts, promoState, promoEligible } = require('./promoUtils');
 
 function sb() {
   return getSupabase();
@@ -443,24 +444,41 @@ async function deleteUser(telegramId) {
 }
 
 function parseVoucherProducts(value) {
-  if (Array.isArray(value)) return value.map((x) => String(x).trim().toUpperCase()).filter(Boolean);
-  const raw = String(value || '').trim();
-  if (!raw || raw === '-' || raw.toLowerCase() === 'all' || raw.toLowerCase() === 'semua') return [];
-  return raw.split(/[|,\n]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+  return targetProducts(value);
+}
+
+function normalizeVoucher(row) {
+  if (!row) return null;
+  const usedBy = Array.isArray(row.used_by) ? row.used_by.map(Number).filter(Number.isFinite) : [];
+  const normalized = {
+    ...row,
+    products: parseVoucherProducts(row.products),
+    used_by: usedBy,
+    active: boolValue(row.active, true),
+    discount_type: String(row.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
+    discount_value: Number(row.discount_value ?? row.discount ?? 0),
+    min_qty: Math.max(1, Number(row.min_qty || 1)),
+    min_spend: Math.max(0, Number(row.min_spend || 0)),
+    usage_limit: Math.max(0, Number(row.usage_limit || 0)),
+    start_at: normalizeDateTime(row.start_at),
+    expires_at: normalizeDateTime(row.expires_at)
+  };
+  return { ...normalized, ...promoState(normalized, { usedCount: usedBy.length }) };
 }
 
 async function getVoucher(code) {
   if (!code) return null;
   const { data, error } = await sb().from('vouchers').select('*').ilike('code', String(code).trim()).limit(1).maybeSingle();
   if (error) throw error;
-  return data;
+  return normalizeVoucher(data);
 }
 
 async function addVoucher(input) {
   const code = String(input.kode || input.code || '').trim().toUpperCase();
   const existing = code ? await getVoucher(code).catch(() => null) : null;
   const discountType = String(input.discount_type || input.tipe_diskon || existing?.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount';
-  const discountValue = Number(input.discount_value ?? input.potongan ?? input.discount ?? existing?.discount_value ?? existing?.discount ?? 0);
+  let discountValue = Number(input.discount_value ?? input.potongan ?? input.discount ?? existing?.discount_value ?? existing?.discount ?? 0);
+  if (discountType === 'percent') discountValue = Math.min(100, Math.max(0, discountValue));
   const payload = {
     code,
     products: parseVoucherProducts(input.produk ?? input.products),
@@ -472,14 +490,14 @@ async function addVoucher(input) {
     usage_limit: Math.max(0, Number(input.limit ?? input.usage_limit ?? existing?.usage_limit ?? 0)),
     used_by: Array.isArray(input.used_by) ? input.used_by.map(Number) : (Array.isArray(existing?.used_by) ? existing.used_by : []),
     description: String(input.description || input.deskripsi || existing?.description || ''),
-    active: input.active === undefined ? (existing?.active ?? true) : Boolean(input.active),
-    start_at: input.start_at || input.mulai || existing?.start_at || null,
-    expires_at: input.expires_at || input.end_at || input.expired_at || existing?.expires_at || null,
+    active: input.active === undefined ? boolValue(existing?.active, true) : boolValue(input.active, true),
+    start_at: normalizeDateTime(input.start_at ?? input.mulai ?? existing?.start_at),
+    expires_at: normalizeDateTime(input.expires_at ?? input.end_at ?? input.expired_at ?? existing?.expires_at),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('vouchers').upsert(payload, { onConflict: 'code' }).select('*').single();
   if (error) throw error;
-  return data;
+  return normalizeVoucher(data);
 }
 
 async function updateVoucher(code, updates = {}) {
@@ -489,7 +507,8 @@ async function updateVoucher(code, updates = {}) {
   if (!current) return null;
   const nextCode = String(updates.kode || updates.code || currentCode).trim().toUpperCase();
   const discountType = updates.discount_type !== undefined || updates.tipe_diskon !== undefined ? (String(updates.discount_type || updates.tipe_diskon).toLowerCase() === 'percent' ? 'percent' : 'amount') : (current.discount_type || 'amount');
-  const discountValue = updates.discount_value !== undefined || updates.potongan !== undefined || updates.discount !== undefined ? Number(updates.discount_value ?? updates.potongan ?? updates.discount) : Number(current.discount_value ?? current.discount ?? 0);
+  let discountValue = updates.discount_value !== undefined || updates.potongan !== undefined || updates.discount !== undefined ? Number(updates.discount_value ?? updates.potongan ?? updates.discount) : Number(current.discount_value ?? current.discount ?? 0);
+  if (discountType === 'percent') discountValue = Math.min(100, Math.max(0, discountValue));
   const payload = {
     code: nextCode,
     products: updates.produk !== undefined || updates.products !== undefined ? parseVoucherProducts(updates.produk ?? updates.products) : (Array.isArray(current.products) ? current.products : []),
@@ -501,15 +520,15 @@ async function updateVoucher(code, updates = {}) {
     usage_limit: updates.limit !== undefined || updates.usage_limit !== undefined ? Math.max(0, Number(updates.limit ?? updates.usage_limit ?? 0)) : Number(current.usage_limit || 0),
     used_by: Array.isArray(current.used_by) ? current.used_by : [],
     description: updates.description !== undefined || updates.deskripsi !== undefined ? String(updates.description ?? updates.deskripsi) : String(current.description || ''),
-    active: updates.active === undefined ? (current.active ?? true) : Boolean(updates.active),
-    start_at: updates.start_at !== undefined || updates.mulai !== undefined ? (updates.start_at || updates.mulai || null) : (current.start_at || null),
-    expires_at: updates.expires_at !== undefined || updates.end_at !== undefined || updates.expired_at !== undefined ? (updates.expires_at || updates.end_at || updates.expired_at || null) : (current.expires_at || null),
+    active: updates.active === undefined ? boolValue(current.active, true) : boolValue(updates.active, true),
+    start_at: updates.start_at !== undefined || updates.mulai !== undefined ? normalizeDateTime(updates.start_at ?? updates.mulai) : normalizeDateTime(current.start_at),
+    expires_at: updates.expires_at !== undefined || updates.end_at !== undefined || updates.expired_at !== undefined ? normalizeDateTime(updates.expires_at ?? updates.end_at ?? updates.expired_at) : normalizeDateTime(current.expires_at),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('vouchers').upsert(payload, { onConflict: 'code' }).select('*').single();
   if (error) throw error;
   if (nextCode !== currentCode) await deleteVoucher(currentCode);
-  return data;
+  return normalizeVoucher(data);
 }
 
 async function deleteVoucher(code) {
@@ -524,7 +543,7 @@ async function listVouchers(limit = 100) {
     .order('created_at', { ascending: false })
     .limit(Number(limit) || 100);
   if (error) throw error;
-  return data || [];
+  return (data || []).map(normalizeVoucher);
 }
 
 async function getMonthlyRekap(month, year) {
@@ -715,23 +734,33 @@ async function saveShopSettings(input = {}) {
 }
 
 function voucherDiscountAmount(voucher, subtotal) {
-  const raw = Number(voucher?.discount_value ?? voucher?.discount ?? 0);
-  if (String(voucher?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * raw / 100));
-  return Math.min(Number(subtotal || 0), raw);
+  return discountAmount(voucher, subtotal);
 }
 
 function voucherIsValid(voucher, productCode, telegramId, quantity = 1, subtotal = 0) {
-  if (!voucher) return false;
-  const products = Array.isArray(voucher.products) ? voucher.products : [];
-  const usedBy = Array.isArray(voucher.used_by) ? voucher.used_by : [];
-  const productAllowed = products.length === 0 || products.map((p) => String(p).toUpperCase()).includes(String(productCode).toUpperCase());
-  const now = Date.now();
-  const afterStart = !voucher.start_at || new Date(voucher.start_at).getTime() <= now;
-  const notExpired = !voucher.expires_at || new Date(voucher.expires_at).getTime() > now;
-  const active = voucher.active === undefined ? true : Boolean(voucher.active);
-  const enoughQty = Number(quantity || 1) >= Number(voucher.min_qty || 1);
-  const enoughSpend = Number(subtotal || 0) >= Number(voucher.min_spend || 0);
-  return active && afterStart && notExpired && productAllowed && enoughQty && enoughSpend && Number(voucher.usage_limit || 0) > 0 && !usedBy.map(Number).includes(Number(telegramId));
+  const normalized = normalizeVoucher(voucher);
+  if (!normalized) return false;
+  const usedBy = Array.isArray(normalized.used_by) ? normalized.used_by.map(Number) : [];
+  const usageLimit = Math.max(0, Number(normalized.usage_limit || 0));
+  // Voucher manual wajib memiliki limit > 0 dan tidak boleh melewati jumlah pemakaian.
+  if (usageLimit <= 0 || usedBy.length >= usageLimit) return false;
+  if (usedBy.includes(Number(telegramId))) return false;
+  return promoEligible(normalized, { productCode, quantity, subtotal, usedCount: usedBy.length });
+}
+
+async function applyVoucherUsage(code, telegramId) {
+  const voucher = await getVoucher(code);
+  if (!voucher) return null;
+  const userId = Number(telegramId);
+  const usedBy = Array.isArray(voucher.used_by) ? voucher.used_by.map(Number).filter(Number.isFinite) : [];
+  if (userId && !usedBy.includes(userId)) usedBy.push(userId);
+  const { data, error } = await sb().from('vouchers')
+    .update({ used_by: usedBy, updated_at: new Date().toISOString() })
+    .ilike('code', String(voucher.code || code).trim())
+    .select('*')
+    .maybeSingle();
+  if (error) throw error;
+  return normalizeVoucher(data);
 }
 
 async function listTransactions(limit = 50) {
@@ -1241,24 +1270,25 @@ async function importBackupData(backup = {}, options = {}) {
 }
 
 function parsePromoProducts(value) {
-  if (Array.isArray(value)) return value.map((x) => String(x).trim().toUpperCase()).filter(Boolean);
-  const raw = String(value || '').trim();
-  if (!raw || raw === '-' || raw.toLowerCase() === 'semua' || raw.toLowerCase() === 'all') return [];
-  return raw.split(/[|,\n]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+  return targetProducts(value);
 }
 
 function normalizePromo(row) {
   if (!row) return null;
-  return {
+  const normalized = {
     ...row,
-    products: Array.isArray(row.products) ? row.products : [],
-    active: row.active !== false,
-    min_qty: Number(row.min_qty || 1),
-    min_spend: Number(row.min_spend || 0),
-    discount_value: Number(row.discount_value || 0),
-    usage_limit: Number(row.usage_limit || 0),
-    used_count: Number(row.used_count || 0)
+    products: parsePromoProducts(row.products),
+    active: boolValue(row.active, true),
+    discount_type: String(row.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
+    min_qty: Math.max(1, Number(row.min_qty || 1)),
+    min_spend: Math.max(0, Number(row.min_spend || 0)),
+    discount_value: Math.max(0, Number(row.discount_value || 0)),
+    usage_limit: Math.max(0, Number(row.usage_limit || 0)),
+    used_count: Math.max(0, Number(row.used_count || 0)),
+    start_at: normalizeDateTime(row.start_at),
+    end_at: normalizeDateTime(row.end_at)
   };
+  return { ...normalized, ...promoState(normalized, { usedCount: normalized.used_count }) };
 }
 
 async function listAutoPromos(limit = 100) {
@@ -1273,24 +1303,34 @@ async function listAutoPromos(limit = 100) {
 }
 
 async function saveAutoPromo(input = {}) {
-  const code = String(input.code || input.kode || '').trim().toUpperCase() || `PROMO-${Date.now()}`;
+  const currentCode = String(input.current_code || input.kode_lama || '').trim().toUpperCase();
+  const code = String(input.code || input.kode || currentCode).trim().toUpperCase() || `PROMO-${Date.now()}`;
+  const current = currentCode
+    ? (await listAutoPromos(200)).find((x) => String(x.code).toUpperCase() === currentCode)
+    : (await listAutoPromos(200)).find((x) => String(x.code).toUpperCase() === code);
+  const rawDiscount = input.discount_value ?? input.discount ?? input.potongan ?? current?.discount_value ?? 0;
+  const discountType = String(input.discount_type ?? input.tipe ?? current?.discount_type ?? 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount';
   const payload = {
     code,
-    name: String(input.name || input.nama || code).trim(),
-    description: String(input.description || input.deskripsi || ''),
-    products: parsePromoProducts(input.products || input.produk),
-    discount_type: String(input.discount_type || input.tipe || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
-    discount_value: Number(input.discount_value || input.discount || input.potongan || 0),
-    min_qty: Math.max(1, Number(input.min_qty || input.min_jumlah || 1)),
-    min_spend: Math.max(0, Number(input.min_spend || input.min_belanja || 0)),
-    usage_limit: Math.max(0, Number(input.usage_limit || input.limit || 0)),
-    active: input.active === undefined ? true : (input.active === true || String(input.active).toLowerCase() === 'true' || String(input.active) === '1' || String(input.active).toLowerCase() === 'on'),
-    start_at: input.start_at || input.mulai || null,
-    end_at: input.end_at || input.berakhir || null,
+    name: String(input.name ?? input.nama ?? current?.name ?? code).trim(),
+    description: String(input.description ?? input.deskripsi ?? current?.description ?? ''),
+    products: parsePromoProducts(input.products ?? input.produk ?? current?.products),
+    discount_type: discountType,
+    discount_value: Math.max(0, Number(rawDiscount || 0)),
+    min_qty: Math.max(1, Number(input.min_qty ?? input.min_jumlah ?? current?.min_qty ?? 1)),
+    min_spend: Math.max(0, Number(input.min_spend ?? input.min_belanja ?? current?.min_spend ?? 0)),
+    usage_limit: Math.max(0, Number(input.usage_limit ?? input.limit ?? current?.usage_limit ?? 0)),
+    used_count: Math.max(0, Number(current?.used_count || 0)),
+    active: input.active === undefined ? boolValue(current?.active, true) : boolValue(input.active, true),
+    start_at: input.start_at !== undefined || input.mulai !== undefined ? normalizeDateTime(input.start_at ?? input.mulai) : normalizeDateTime(current?.start_at),
+    end_at: input.end_at !== undefined || input.berakhir !== undefined || input.expires_at !== undefined ? normalizeDateTime(input.end_at ?? input.berakhir ?? input.expires_at) : normalizeDateTime(current?.end_at),
     updated_at: new Date().toISOString()
   };
+  if (!payload.name) payload.name = code;
+  if (payload.discount_type === 'percent') payload.discount_value = Math.min(100, payload.discount_value);
   const { data, error } = await sb().from('auto_promos').upsert(payload, { onConflict: 'code' }).select('*').single();
   if (error) throw error;
+  if (currentCode && currentCode !== code) await deleteAutoPromo(currentCode);
   return normalizePromo(data);
 }
 
@@ -1300,23 +1340,17 @@ async function deleteAutoPromo(code) {
 }
 
 function promoIsActive(row, productCode, quantity, subtotal) {
-  const p = normalizePromo(row);
-  if (!p || !p.active || Number(p.discount_value || 0) <= 0) return false;
-  const now = Date.now();
-  if (p.start_at && new Date(p.start_at).getTime() > now) return false;
-  if (p.end_at && new Date(p.end_at).getTime() < now) return false;
-  if (p.usage_limit > 0 && p.used_count >= p.usage_limit) return false;
-  const products = Array.isArray(p.products) ? p.products.map((x) => String(x).toUpperCase()) : [];
-  if (products.length && !products.includes(String(productCode || '').toUpperCase())) return false;
-  if (Number(quantity || 1) < Number(p.min_qty || 1)) return false;
-  if (Number(subtotal || 0) < Number(p.min_spend || 0)) return false;
-  return true;
+  const promo = normalizePromo(row);
+  return Boolean(promo && promoEligible(promo, {
+    productCode,
+    quantity,
+    subtotal,
+    usedCount: promo.used_count
+  }));
 }
 
 function promoDiscountAmount(promo, subtotal) {
-  const value = Number(promo?.discount_value || 0);
-  if (String(promo?.discount_type || 'amount') === 'percent') return Math.min(Number(subtotal || 0), Math.floor(Number(subtotal || 0) * value / 100));
-  return Math.min(Number(subtotal || 0), value);
+  return discountAmount(promo, subtotal);
 }
 
 async function getBestAutoPromo(productCode, telegramId, quantity, subtotal) {
@@ -1371,7 +1405,7 @@ async function getDeepStats() {
     average_order_value: ordersTotal ? Math.round(revenue / ordersTotal) : 0,
     users_total: users.length,
     products_total: products.length,
-    active_promos: promos.filter((p) => p.active).length,
+    active_promos: promos.filter((p) => p.effective_active).length,
     low_stock: lowStock,
     top_users: topUsers,
     hourly: byHour,
@@ -1409,6 +1443,7 @@ module.exports = {
   getVoucher,
   voucherIsValid,
   voucherDiscountAmount,
+  applyVoucherUsage,
   listTransactions,
   listTransactionsByUser,
   completeOrder,
@@ -1438,5 +1473,9 @@ module.exports = {
   saveAutoPromo,
   deleteAutoPromo,
   getBestAutoPromo,
-  applyAutoPromoUsage
+  applyAutoPromoUsage,
+  normalizeVoucher,
+  normalizePromo,
+  promoIsActive,
+  promoDiscountAmount
 };

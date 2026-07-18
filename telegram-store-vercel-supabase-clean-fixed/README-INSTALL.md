@@ -66,3 +66,14 @@ Catatan:
 - Tabel Users otomatis berubah menjadi kartu responsif di layar HP, sehingga data tidak pecah menjadi huruf/angka vertikal.
 - Tidak ada perubahan SQL tambahan.
 
+
+## v45 - Promo Otomatis, Expired OFF, dan Broadcast Media
+- Promo otomatis sekarang dihitung dari subtotal asli dan potongannya benar-benar diterapkan pada pembayaran.
+- Ringkasan pembayaran menampilkan subtotal, nama promo/voucher, nominal potongan, harga setelah diskon, fee, dan total bayar.
+- Waktu mulai/berakhir yang diisi dari panel dibaca sebagai WIB agar tidak bergeser saat dijalankan di Vercel.
+- Voucher atau promo yang expired otomatis tampil **OFF — EXPIRED**. Status terjadwal, limit habis, dan nonaktif juga diberi keterangan.
+- Voucher mencatat pemakaian user setelah transaksi selesai dan tidak dapat dipakai melewati limit.
+- Broadcast gambar/stiker yang sama boleh dikirim ulang selama menggunakan klik Kirim atau command/message baru.
+- Duplikat webhook dari Telegram tidak lagi memunculkan pesan "sudah pernah dikirim" kepada owner.
+- Jika broadcast gagal pada sebagian user, panel/Telegram menampilkan contoh error agar penyebabnya lebih mudah diperiksa.
+- Tidak ada perubahan SQL tambahan. Upload isi ZIP ke repository lalu deploy ulang di Vercel.

@@ -576,15 +576,44 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var t=x.discount_type||'amount'; var v=x.discount_value || x.discount || 0;
     return t==='percent' ? (v+'%') : rupiah(v);
   }
+  function promoStatus(x,type){
+    x=x||{};
+    var now=Date.now();
+    var end=x.end_at||x.expires_at||'';
+    var endTime=end?new Date(end).getTime():NaN;
+    var startTime=x.start_at?new Date(x.start_at).getTime():NaN;
+    var expired=x.is_expired===true || (!isNaN(endTime) && endTime<=now);
+    var scheduled=x.is_scheduled===true || (!isNaN(startTime) && startTime>now);
+    var used=type==='auto'?Number(x.used_count||0):((x.used_by&&x.used_by.length)||0);
+    var limit=Number(x.usage_limit||0);
+    var limitReached=x.limit_reached===true || (limit>0 && used>=limit);
+    var configured=x.active!==false;
+    // Hitung ulang terhadap jam browser agar status berubah OFF saat halaman tetap terbuka melewati waktu expired.
+    var on=configured&&!expired&&!scheduled&&!limitReached;
+    if(x.effective_active===false) on=false;
+    var reason=expired?'EXPIRED':(scheduled?'TERJADWAL':(limitReached?'LIMIT HABIS':(!configured?'NONAKTIF':(!on?'TIDAK AKTIF':''))));
+    return {on:on,expired:expired,scheduled:scheduled,limitReached:limitReached,reason:reason,used:used,limit:limit};
+  }
+  function promoDateText(value){ if(!value) return ''; var d=new Date(value); if(isNaN(d.getTime())) return String(value); return d.toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}); }
   function getUnifiedPromoRows(){ var vouchers=(state.vouchers||[]).map(function(v){return {type:'voucher',label:'Voucher Manual',row:v};}); var promos=(state.promos||[]).map(function(p){return {type:'auto',label:'Promo Otomatis',row:p};}); return vouchers.concat(promos).sort(function(a,b){return String(b.row.updated_at||b.row.created_at||'').localeCompare(String(a.row.updated_at||a.row.created_at||''));}); }
-  function promoMatches(item,q){ var x=(item&&item.row)||{}; return textMatch([item&&item.label,x.code,x.name,x.description,x.discount_type,x.discount_value,x.min_qty,x.min_spend,x.usage_limit,(x.products||[]).join(' '),x.active===false?'off':'on'],q); }
+  function promoMatches(item,q){ var x=(item&&item.row)||{}; var st=promoStatus(x,item&&item.type); return textMatch([item&&item.label,x.code,x.name,x.description,x.discount_type,x.discount_value,x.min_qty,x.min_spend,x.usage_limit,(x.products||[]).join(' '),st.on?'on':'off',st.reason],q); }
   function renderUnifiedPromos(){
     var el=document.getElementById('promoUnifiedList'); if(!el) return;
     var q=searchQuery(); var rows=getUnifiedPromoRows().filter(function(item){return promoMatches(item,q);}); updateSearchCounter();
-    el.innerHTML=rows.map(function(item){ var x=item.row; var target=(x.products&&x.products.length)?x.products.join(', '):'Semua produk'; var min='Min '+(x.min_qty||1)+' pcs / '+rupiah(x.min_spend||0); var limit=(x.usage_limit?x.usage_limit:'∞'); var used=item.type==='auto'?(x.used_count||0):((x.used_by&&x.used_by.length)||0); var end=x.end_at||x.expires_at||''; return '<div class="voucherCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="rowBetween"><div><span class="voucherCode">'+esc(x.code)+'</span> <span class="chip '+(item.type==='voucher'?'purple':'yellow')+'">'+esc(item.label)+'</span> '+(x.active===false?'<span class="chip red">OFF</span>':'<span class="chip green">ON</span>')+'</div><div class="actions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div></div><div class="voucherMeta"><span class="chip yellow">Diskon '+esc(unifiedDiscountText(x))+'</span><span class="chip purple">'+esc(min)+'</span><span class="chip green">Target '+esc(target)+'</span><span class="chip orange">Dipakai '+esc(used)+'/'+esc(limit)+'</span></div><p class="help">'+esc(x.name||x.description||'Tanpa deskripsi')+(x.description&&x.name?' — '+esc(x.description):'')+'</p>'+(x.start_at||end?'<small>Berlaku: '+esc(x.start_at||'sekarang')+' s/d '+esc(end||'tanpa batas')+'</small>':'')+'</div>'; }).join('')||'<div class="empty">Belum ada promo atau voucher.</div>';
+    el.innerHTML=rows.map(function(item){
+      var x=item.row; var st=promoStatus(x,item.type);
+      var target=(x.products&&x.products.length)?x.products.join(', '):'Semua produk';
+      var min='Min '+(x.min_qty||1)+' pcs / '+rupiah(x.min_spend||0);
+      var limit=(x.usage_limit?x.usage_limit:'∞');
+      var end=x.end_at||x.expires_at||'';
+      var statusHtml=st.on?'<span class="chip green">ON</span>':'<span class="chip red">OFF</span>';
+      if(!st.on&&st.reason) statusHtml+=' <span class="chip orange">'+esc(st.reason)+'</span>';
+      return '<div class="voucherCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="rowBetween"><div><span class="voucherCode">'+esc(x.code)+'</span> <span class="chip '+(item.type==='voucher'?'purple':'yellow')+'">'+esc(item.label)+'</span> '+statusHtml+'</div><div class="actions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div></div><div class="voucherMeta"><span class="chip yellow">Diskon '+esc(unifiedDiscountText(x))+'</span><span class="chip purple">'+esc(min)+'</span><span class="chip green">Target '+esc(target)+'</span><span class="chip orange">Dipakai '+esc(st.used)+'/'+esc(limit)+'</span></div><p class="help">'+esc(x.name||x.description||'Tanpa deskripsi')+(x.description&&x.name?' — '+esc(x.description):'')+'</p>'+(x.start_at||end?'<small>Berlaku: '+esc(promoDateText(x.start_at)||'sekarang')+' s/d '+esc(promoDateText(end)||'tanpa batas')+'</small>':'')+'</div>';
+    }).join('')||'<div class="empty">Belum ada promo atau voucher.</div>';
     document.querySelectorAll('[data-edit-unified]').forEach(function(btn){btn.onclick=function(){ var parts=btn.dataset.editUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); var item=(type==='voucher'?state.vouchers:state.promos).find(function(x){return String(x.code).toUpperCase()===String(code).toUpperCase();}); fillPromoUnified(type,item); };});
     document.querySelectorAll('[data-delete-unified]').forEach(function(btn){btn.onclick=async function(){ var parts=btn.dataset.deleteUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); if(!confirm('Hapus '+(type==='voucher'?'voucher':'promo')+' '+code+'?')) return; await post(type==='voucher'?'delete-voucher':'promo-delete', type==='voucher'?{kode:code}:{code:code}); };});
   }
+
   function renderVouchers(){ renderUnifiedPromos(); }
 
   async function openPollResult(id){
@@ -674,7 +703,17 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var addVariantToggle=document.getElementById('addVariantToggle'); if(addVariantToggle) addVariantToggle.onchange=toggleAddVariantBuilder;
   var addVariantRowBtn=document.getElementById('addVariantRow'); if(addVariantRowBtn) addVariantRowBtn.onclick=function(){ addVariantRow(); };
   document.getElementById('settingsForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.store_description=''; d.logo_url=''; d.banner_url=''; await post('save-settings',d);};
-  document.getElementById('broadcastForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); if(d.type==='photo' && !String(d.photo||'').trim()) return toast('URL/file_id gambar wajib diisi untuk broadcast gambar', true); if(d.type==='sticker' && !String(d.sticker||'').trim()) return toast('File ID stiker wajib diisi untuk broadcast stiker', true); if(d.type==='text' && !String(d.message||'').trim()) return toast('Pesan teks wajib diisi', true); var r=await post('broadcast',d); if(r.data) toast('Broadcast terkirim '+r.data.sent+', gagal '+r.data.failed);};
+  document.getElementById('broadcastForm').onsubmit=async function(e){
+    e.preventDefault();
+    var d=formDataRaw(e.target);
+    if(d.type==='photo' && !String(d.photo||'').trim()) return toast('URL/file_id gambar wajib diisi untuk broadcast gambar', true);
+    if(d.type==='sticker' && !String(d.sticker||'').trim()) return toast('File ID stiker wajib diisi untuk broadcast stiker', true);
+    if(d.type==='text' && !String(d.message||'').trim()) return toast('Pesan teks wajib diisi', true);
+    d.request_id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('bc-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+    var btn=e.target.querySelector('button[type="submit"]'); if(btn&&btn.disabled) return; if(btn){btn.disabled=true;btn.textContent='Mengirim...';}
+    try{ var r=await post('broadcast',d); if(r.data){ var extra=(r.data.errors&&r.data.errors.length)?' | Error: '+r.data.errors[0]:''; toast('Broadcast terkirim '+r.data.sent+', gagal '+r.data.failed+extra, r.data.failed>0); } }
+    finally{ if(btn){btn.disabled=false;btn.textContent='Kirim Broadcast';} }
+  };
 
   var downloadBackup=document.getElementById('downloadBackup'); if(downloadBackup) downloadBackup.onclick=async function(){ var r=await api('backup-export'); var text=JSON.stringify(r.data,null,2); var blob=new Blob([text],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='backup-bot-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); toast('Backup berhasil diunduh'); await load(); };
   var sendBackupTelegram=document.getElementById('sendBackupTelegram'); if(sendBackupTelegram) sendBackupTelegram.onclick=async function(){ await post('backup-send',{}); toast('Backup dikirim ke Telegram owner'); };
@@ -684,6 +723,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
   var maintenanceForm=document.getElementById('maintenanceForm'); if(maintenanceForm) maintenanceForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var label=e.target.target.options[e.target.target.selectedIndex].text; var days=d.days||30; var warn='Jalankan maintenance: '+label+'?\n\nUmur data minimal: '+days+' hari.\nData yang dihapus tidak bisa dikembalikan.'; if(d.target==='transactions-old') warn='PERINGATAN: ini akan menghapus detail transaksi lama permanen. Total Transaksi dashboard tetap tersimpan, tapi detail order lama hilang. Pastikan sudah backup/export.\n\n'+warn; if(confirm(warn)){ var r=await post('maintenance-cleanup',d); if(r.data) toast((r.data.message||'Maintenance selesai')+' Terproses: '+(r.data.affected||0)); } };
   load();
+  setInterval(function(){ if(document.getElementById('promos')&&document.getElementById('promos').classList.contains('active')) renderUnifiedPromos(); },30000);
 })();
 </script>
 </body>
