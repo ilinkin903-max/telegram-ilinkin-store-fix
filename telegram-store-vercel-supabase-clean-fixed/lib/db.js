@@ -737,7 +737,7 @@ function voucherDiscountAmount(voucher, subtotal) {
   return discountAmount(voucher, subtotal);
 }
 
-function voucherIsValid(voucher, productCode, telegramId, quantity = 1, subtotal = 0) {
+function voucherIsValid(voucher, productCode, telegramId, quantity = 1, subtotal = 0, variantKeyValue = '') {
   const normalized = normalizeVoucher(voucher);
   if (!normalized) return false;
   const usedBy = Array.isArray(normalized.used_by) ? normalized.used_by.map(Number) : [];
@@ -745,7 +745,7 @@ function voucherIsValid(voucher, productCode, telegramId, quantity = 1, subtotal
   // Voucher manual wajib memiliki limit > 0 dan tidak boleh melewati jumlah pemakaian.
   if (usageLimit <= 0 || usedBy.length >= usageLimit) return false;
   if (usedBy.includes(Number(telegramId))) return false;
-  return promoEligible(normalized, { productCode, quantity, subtotal, usedCount: usedBy.length });
+  return promoEligible(normalized, { productCode, variantKey: variantKeyValue, quantity, subtotal, usedCount: usedBy.length });
 }
 
 async function applyVoucherUsage(code, telegramId) {
@@ -1339,10 +1339,11 @@ async function deleteAutoPromo(code) {
   if (error) throw error;
 }
 
-function promoIsActive(row, productCode, quantity, subtotal) {
+function promoIsActive(row, productCode, quantity, subtotal, variantKeyValue = '') {
   const promo = normalizePromo(row);
   return Boolean(promo && promoEligible(promo, {
     productCode,
+    variantKey: variantKeyValue,
     quantity,
     subtotal,
     usedCount: promo.used_count
@@ -1353,9 +1354,9 @@ function promoDiscountAmount(promo, subtotal) {
   return discountAmount(promo, subtotal);
 }
 
-async function getBestAutoPromo(productCode, telegramId, quantity, subtotal) {
+async function getBestAutoPromo(productCode, telegramId, quantity, subtotal, variantKeyValue = '') {
   const promos = await listAutoPromos(200);
-  const candidates = promos.filter((p) => promoIsActive(p, productCode, quantity, subtotal)).map((p) => ({ ...p, discount_amount: promoDiscountAmount(p, subtotal) })).filter((p) => p.discount_amount > 0);
+  const candidates = promos.filter((p) => promoIsActive(p, productCode, quantity, subtotal, variantKeyValue)).map((p) => ({ ...p, discount_amount: promoDiscountAmount(p, subtotal) })).filter((p) => p.discount_amount > 0);
   candidates.sort((a, b) => b.discount_amount - a.discount_amount || String(a.code).localeCompare(String(b.code)));
   return candidates[0] || null;
 }

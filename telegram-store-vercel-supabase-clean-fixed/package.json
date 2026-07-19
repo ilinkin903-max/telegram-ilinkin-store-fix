@@ -1,6 +1,6 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "description": "Telegram store bot for Vercel with Supabase database and reseller Mini App.",
   "scripts": {

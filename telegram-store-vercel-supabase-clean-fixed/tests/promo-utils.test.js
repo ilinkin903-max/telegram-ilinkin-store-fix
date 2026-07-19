@@ -76,3 +76,55 @@ test('voucher valid sampai limit tercapai dan tidak bisa dipakai user yang sama'
   assert.equal(db.voucherIsValid({ ...voucher, used_by: [100, 200] }, 'GEMINI', 300, 1, 10000), false);
   assert.equal(db.voucherIsValid({ ...voucher, expires_at: '2000-01-01T00:00:00.000Z' }, 'GEMINI', 200, 1, 10000), false);
 });
+
+test('promo dan voucher dapat menargetkan varian tertentu tanpa mengubah schema database', () => {
+  const promo = {
+    active: true,
+    products: ['GEMINI::18-BULAN-INVITE'],
+    discount_type: 'amount',
+    discount_value: 4000,
+    min_qty: 1,
+    min_spend: 0,
+    start_at: '2020-01-01T00:00:00.000Z',
+    end_at: '2099-01-01T00:00:00.000Z'
+  };
+
+  assert.equal(promoEligible(promo, {
+    productCode: 'GEMINI',
+    variantKey: '18-BULAN-INVITE',
+    quantity: 1,
+    subtotal: 16000
+  }), true);
+
+  assert.equal(promoEligible(promo, {
+    productCode: 'GEMINI',
+    variantKey: '18-BULAN',
+    quantity: 1,
+    subtotal: 45000
+  }), false);
+
+  assert.equal(promoEligible({ ...promo, products: ['GEMINI'] }, {
+    productCode: 'GEMINI',
+    variantKey: '18-BULAN',
+    quantity: 1,
+    subtotal: 45000
+  }), true);
+});
+
+test('voucher varian tertentu hanya valid pada varian yang dipilih', () => {
+  const voucher = {
+    code: 'INVITEONLY',
+    active: true,
+    products: ['GEMINI::18-BULAN-INVITE'],
+    discount_type: 'amount',
+    discount_value: 1000,
+    min_qty: 1,
+    min_spend: 0,
+    usage_limit: 10,
+    used_by: [],
+    expires_at: '2099-01-01T00:00:00.000Z'
+  };
+
+  assert.equal(db.voucherIsValid(voucher, 'GEMINI', 200, 1, 16000, '18-BULAN-INVITE'), true);
+  assert.equal(db.voucherIsValid(voucher, 'GEMINI', 200, 1, 45000, '18-BULAN'), false);
+});

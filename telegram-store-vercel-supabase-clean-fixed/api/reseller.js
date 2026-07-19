@@ -22,6 +22,15 @@ module.exports = async function handler(req, res) {
       #productList{gap:12px}.product{min-height:0;padding:12px;gap:9px;overflow-wrap:normal}.productTop{gap:9px;align-items:flex-start}.productImg,.productFallback{width:56px;height:56px;flex:0 0 56px}.product h3{font-size:17px;line-height:1.15}.product .subtle{font-size:12px;line-height:1.3}.statusToggle{flex:0 0 auto;margin-left:4px;padding:5px 9px;font-size:10px;box-shadow:2px 2px 0 #050505}.price{font-size:23px;line-height:1.1;margin-top:1px}.product .chips{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:1px 1px 5px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.product .chip{flex:0 0 auto;white-space:nowrap;font-size:10px;padding:4px 6px}.product .actions{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.product .btn.small{min-width:0;padding:10px 3px;font-size:10px;line-height:1;box-shadow:2px 2px 0 #050505}
       #users .panel{padding:12px;overflow:visible}.userTools{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:1px 1px 5px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.userTools .btn{flex:0 0 auto;padding:9px 10px;font-size:10px;white-space:nowrap}.userTable,.userTable tbody,.userTable tr,.userTable td{display:block;width:100%}.userTable{border-collapse:separate;border-spacing:0}.userTable thead{display:none}.userTable tbody{display:grid;gap:10px}.userTable tr{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;overflow:hidden}.userTable td{border:0;border-bottom:2px solid #050505;padding:9px 10px;display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;align-items:start;line-height:1.3;overflow-wrap:anywhere}.userTable td::before{content:attr(data-label);font-size:10px;text-transform:uppercase;color:#555;letter-spacing:.03em}.userTable td:last-child{border-bottom:0;display:block}.userTable td:last-child::before{display:none}.userTable td:last-child .btn{width:100%;padding:10px}.userTable .userEmptyRow{display:block}.userTable .userEmptyRow td{display:block;border:0;text-align:center}.userTable .userEmptyRow td::before{display:none}
     }
+
+
+    /* v46: tampilan lebih ringkas, menu tidak dobel, dan target promo per varian. */
+    :root{--line:2px solid #050505;--shadow:4px 4px 0 #050505;--soft:2px 2px 0 #050505;--radius:12px}
+    body{font-weight:700}.btn,.tile,.label,.sectionTitle,.product h3,.voucherCode{font-weight:900}
+    .wrap{padding-top:12px}.hero{padding:18px 20px;margin-top:4px}.hero h1{font-size:30px}.navTiles{gap:8px;padding:8px;background:#fff}.tile{min-width:102px;min-height:62px;padding:10px 9px;font-size:12px}.tile .ico{margin-bottom:4px}.panel,.product,.miniCard{padding:16px}.sectionTitle{margin-bottom:6px}.sectionToolbar{display:flex;align-items:center;justify-content:space-between;gap:14px}.sectionToolbar .sectionTitle,.sectionToolbar .help{margin-top:0}.sectionToolbar .help{margin-bottom:0}.sectionToolbar .btn{flex:0 0 auto}.backButton{margin-bottom:14px}.broadcastGrid{align-items:start}.formDivider{border-top:2px dashed #111;margin:8px 0 2px;padding-top:14px;text-transform:uppercase;font-size:13px}
+    .promoTargetBox{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff7c4;padding:14px}.promoTargetHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.promoTargetHead p{margin:4px 0 0}.compactSwitch{font-size:12px;white-space:nowrap}.compactSwitch .toggleTrack{width:48px;height:26px}.compactSwitch .toggleTrack:after{width:14px;height:14px}.compactSwitch input:checked+.toggleTrack:after{transform:translateX(21px)}.promoTargetBuilder{margin-top:12px}.promoTargetControls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}.promoTargetControls .btn{min-height:47px}.promoTargetList{display:grid;gap:8px;margin-top:10px}.promoTargetItem{display:flex;align-items:center;justify-content:space-between;gap:10px;border:2px solid #000;border-radius:10px;background:#fff;padding:9px 10px}.promoTargetItem span{min-width:0;overflow-wrap:anywhere}.promoTargetItem button{border:2px solid #000;border-radius:8px;background:var(--red);color:#fff;padding:6px 9px;font-weight:900;cursor:pointer}.promoTargetEmpty{border:2px dashed #555;border-radius:10px;background:#fff;padding:12px;color:#555;font-size:12px}.rowBetween{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.voucherCard .rowBetween{align-items:flex-start}.voucherCard .actions{margin-top:0}.storeSubGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+    @media(max-width:760px){.forms,.dashboardGrid,.broadcastGrid{grid-template-columns:1fr}.storeSubGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.promoTargetControls{grid-template-columns:1fr 1fr}.promoTargetControls .btn{grid-column:1/-1}.sectionToolbar{align-items:flex-start}.sectionToolbar .btn{padding:10px 12px}}
+    @media(max-width:620px){.wrap{padding:8px 10px 70px}.hero{padding:16px;margin-bottom:14px}.hero h1{font-size:27px}.statsGrid{gap:7px;margin-top:12px}.stat{min-height:58px;padding:8px}.navTiles{margin:10px 0 14px}.tile{min-width:88px;min-height:56px;padding:8px 7px;font-size:10px}.tile .ico{font-size:17px}.panel,.product,.miniCard{padding:12px}.sectionToolbar{flex-direction:column}.sectionToolbar .btn{width:100%}.row,.row3{grid-template-columns:1fr}.promoTargetHead{flex-direction:column}.compactSwitch{width:100%;justify-content:space-between;border-top:2px dashed #111;padding-top:10px}.promoTargetControls{grid-template-columns:1fr}.promoTargetControls .btn{grid-column:auto}.storeSubGrid{grid-template-columns:1fr 1fr}.voucherCard .rowBetween{display:block}.voucherCard .rowBetween .actions{margin-top:10px}.broadcastGrid .panel{margin-bottom:12px}}
 </style>
 </head>
 <body>
@@ -36,16 +45,14 @@ module.exports = async function handler(req, res) {
   <input id="search" class="search" placeholder="Cari produk, penjualan, user, promo, voucher..." />
   <div id="productCounter" class="count">Pencarian berlaku untuk Produk, Penjualan, Users, Promo & Voucher.</div>
 
-  <nav class="navTiles" id="navTiles">
+  <nav class="navTiles" id="navTiles" aria-label="Menu utama">
     <button class="tile active" data-tab="dashboard"><span class="ico">📊</span>Dashboard</button>
     <button class="tile" data-tab="products"><span class="ico">📦</span>Produk</button>
     <button class="tile" data-tab="orders"><span class="ico">🧾</span>Penjualan</button>
-    <button class="tile" data-tab="addProduct"><span class="ico">➕</span>Tambah</button>
     <button class="tile" data-tab="users"><span class="ico">👥</span>Users</button>
     <button class="tile" data-tab="broadcast"><span class="ico">📣</span>Broadcast</button>
-    <button class="tile" data-tab="polling"><span class="ico">📊</span>Polling</button>
-    <button class="tile" data-tab="promos"><span class="ico">🎟</span>Promo & Voucher</button>
-    <button class="tile" data-tab="settings"><span class="ico">🏪</span>Toko</button>
+    <button class="tile" data-tab="promos"><span class="ico">🎟</span>Promo</button>
+    <button class="tile" data-tab="settings"><span class="ico">⚙️</span>Pengaturan</button>
   </nav>
 
   <section id="dashboard" class="section active">
@@ -65,9 +72,16 @@ module.exports = async function handler(req, res) {
     </div>
   </section>
 
-  <section id="products" class="section"><div id="productList" class="grid"></div></section>
+  <section id="products" class="section">
+    <div class="panel sectionToolbar">
+      <div><h2 class="sectionTitle">Produk</h2><p class="help">Kelola produk, varian, harga, status, dan stok dari satu halaman.</p></div>
+      <button class="btn lime" type="button" data-tab="addProduct">+ Tambah Produk</button>
+    </div>
+    <div id="productList" class="grid"></div>
+  </section>
 
   <section id="addProduct" class="section">
+    <button class="btn yellow backButton" data-tab="products" type="button">← Kembali ke Produk</button>
     <div class="panel addPanel">
       <h2 class="sectionTitle">Tambah Produk</h2>
       <p class="help">Isi data utama produk. Jika produk punya pilihan paket, aktifkan varian agar harga, stok, dan grosir tiap varian terpisah.</p>
@@ -108,8 +122,22 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
   <section id="orders" class="section"><div class="panel"><h2 class="sectionTitle">Penjualan</h2><div id="orderList" class="orderGrid"></div></div></section>
   <section id="users" class="section"><div class="panel tableWrap"><h2 class="sectionTitle">Users</h2><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><table class="table userTable"><thead><tr><th>ID</th><th>User</th><th>Transaksi</th><th>Spending</th><th>Aksi</th></tr></thead><tbody id="userList"></tbody></table></div></section>
-  <section id="broadcast" class="section"><div class="panel broadcastPanel"><h2 class="sectionTitle">Broadcast</h2><form id="broadcastForm" class="form"><select class="select" name="type"><option value="text">Teks</option><option value="photo">Gambar URL / file_id</option><option value="sticker">Stiker file_id</option></select><textarea class="textarea" name="message" placeholder="Contoh teks/caption: Stok Canva sudah ready, cek sekarang."></textarea><input class="input" name="photo" placeholder="Untuk tipe gambar: URL https://... atau file_id foto Telegram"><input class="input" name="sticker" placeholder="Untuk tipe stiker: file_id stiker, contoh CAACAg..."><p class="help">Jika pilih Gambar, isi kolom gambar. Jika pilih Stiker, isi kolom stiker. Caption bisa diisi di pesan.</p><button class="btn red" type="submit">Kirim Broadcast</button></form></div></section>
-  <section id="polling" class="section"><div class="panel pollPanel"><h2 class="sectionTitle">Hasil Polling</h2><p class="help">Polling yang dikirim/forward ke bot akan masuk sebagai draft preview. Setelah dibroadcast, hasil voting tampil di sini. Hapus polling lama untuk menghemat database.</p><div id="pollList"></div></div></section>
+  <section id="broadcast" class="section">
+    <div class="forms broadcastGrid">
+      <div class="panel broadcastPanel">
+        <h2 class="sectionTitle">Kirim Broadcast</h2>
+        <p class="help">Pilih satu jenis broadcast. Kolom yang tidak sesuai tipe akan diabaikan.</p>
+        <form id="broadcastForm" class="form">
+          <div class="field"><label class="label">Jenis Broadcast</label><select class="select" name="type"><option value="text">Teks</option><option value="photo">Gambar URL / file_id</option><option value="sticker">Stiker file_id</option></select></div>
+          <div class="field"><label class="label">Pesan / Caption</label><textarea class="textarea" name="message" placeholder="Contoh: Stok Canva sudah tersedia, cek sekarang."></textarea></div>
+          <div class="field"><label class="label">Gambar</label><input class="input" name="photo" placeholder="URL HTTPS atau file_id foto Telegram"></div>
+          <div class="field"><label class="label">Stiker</label><input class="input" name="sticker" placeholder="file_id stiker, contoh CAACAg..."></div>
+          <button class="btn red" type="submit">Kirim Broadcast</button>
+        </form>
+      </div>
+      <div class="panel pollPanel"><h2 class="sectionTitle">Polling Broadcast</h2><p class="help">Draft dan hasil polling disatukan di halaman Broadcast agar menu utama tidak dobel.</p><div id="pollList"></div></div>
+    </div>
+  </section>
   <section id="maintenance" class="section">
     <button class="btn yellow" data-tab="settings" type="button" style="margin-bottom:12px">← Kembali ke Menu Toko</button>
     <div class="panel orange"><h2 class="sectionTitle">Maintenance Database</h2><p class="help">Bersihkan data lama agar Supabase Free tetap ringan. Pilih target dengan hati-hati. Data yang dihapus tidak bisa dikembalikan kecuali kamu punya backup.</p><div id="maintenanceStats" class="detailGrid"></div></div>
@@ -145,10 +173,23 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
           <div class="field"><label class="label">Minimal Jumlah Beli</label><input class="input" name="min_qty" type="number" placeholder="Contoh: 2"></div>
           <div class="field"><label class="label">Minimal Belanja</label><input class="input" name="min_spend" type="number" placeholder="Contoh: 50000"></div>
         </div>
-        <div class="row">
-          <div class="field"><label class="label">Produk Target</label><textarea class="textarea" name="products" placeholder="Kosong / semua = semua produk\nAtau isi kode produk: CANVA1B, NETFLIX"></textarea></div>
-          <div class="field"><label class="label">Deskripsi / Catatan</label><textarea class="textarea" name="description" placeholder="Contoh: Berlaku minimal 2 produk, tidak bisa digabung voucher lain."></textarea></div>
+        <div class="promoTargetBox">
+          <div class="promoTargetHead">
+            <div><b>Target Promo</b><p class="help">Bisa untuk semua produk, satu produk, atau varian tertentu.</p></div>
+            <label class="switchLabel compactSwitch"><input id="promoAllProducts" type="checkbox" checked><span class="toggleTrack"></span><span>Semua Produk</span></label>
+          </div>
+          <input type="hidden" name="products" id="promoProductsValue" value="">
+          <div id="promoTargetBuilder" class="promoTargetBuilder hidden">
+            <div class="promoTargetControls">
+              <div class="field"><label class="label">Pilih Produk</label><select class="select" id="promoTargetProduct"></select></div>
+              <div class="field"><label class="label">Pilih Cakupan</label><select class="select" id="promoTargetVariant"></select></div>
+              <button class="btn purple" type="button" id="addPromoTarget">+ Tambah Target</button>
+            </div>
+            <div id="promoTargetList" class="promoTargetList"></div>
+            <p class="help">Memilih “Semua varian” berlaku untuk produk tersebut. Memilih nama varian hanya memberi diskon pada varian itu.</p>
+          </div>
         </div>
+        <div class="field"><label class="label">Deskripsi / Catatan</label><textarea class="textarea" name="description" placeholder="Contoh: Berlaku minimal 2 item dan tidak dapat digabung voucher lain."></textarea></div>
         <div class="row">
           <div class="field"><label class="label">Mulai Berlaku</label><input class="input" name="start_at" type="datetime-local"></div>
           <div class="field"><label class="label">Berakhir / Expired</label><input class="input" name="end_at" type="datetime-local"></div>
@@ -167,18 +208,28 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   </section>
 
   <section id="settings" class="section">
+    <div class="panel settingsPanel" id="settingsIdentityPanel">
+      <div class="sectionToolbar"><div><h2 class="sectionTitle">Pengaturan Toko</h2><p class="help">Identitas dan media /start berada di satu formulir agar tidak berulang.</p></div></div>
+      <form id="settingsForm" class="form">
+        <div class="field"><label class="label">Nama Toko</label><input class="input" name="store_name" placeholder="Contoh: iLink.in Store"></div>
+        <div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup</label><input class="input" name="group_link" placeholder="https://t.me/grupkamu atau @grupkamu"></div></div>
+        <input type="hidden" name="store_description" value=""><input type="hidden" name="logo_url" value=""><input type="hidden" name="banner_url" value="">
+        <div class="formDivider"><b>Media saat user membuka /start</b></div>
+        <div class="row"><div class="field"><label class="label">Jenis Media</label><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="sticker">Stiker Telegram</option></select></div><div class="field"><label class="label">URL / File ID</label><input class="input" name="start_media_value" placeholder="URL HTTPS gambar atau file_id stiker"></div></div>
+        <div class="field"><label class="label">Caption /start</label><textarea class="textarea" name="start_media_caption" placeholder="Kosongkan untuk menghapus caption."></textarea></div>
+        <p class="help">Gambar harus memakai URL HTTPS publik atau file_id Telegram. Stiker menggunakan file_id stiker Telegram.</p>
+        <button class="btn lime" type="submit">Simpan Pengaturan</button>
+      </form>
+    </div>
     <div class="panel storeMenuPanel">
-      <h2 class="sectionTitle">Menu Toko</h2>
-      <p class="help">Menu pengaturan penting dipindahkan ke sini agar navigasi utama lebih ringkas.</p>
+      <h2 class="sectionTitle">Alat Toko</h2><p class="help">Fitur lanjutan dipisahkan dari pengaturan harian.</p>
       <div class="storeSubGrid">
-        <button class="storeSubBtn" data-tab="settings" data-scroll-target="settingsIdentityPanel" type="button"><span class="ico">🏪</span><b>Identitas Toko</b><small>Nama toko, CS, grup, media /start</small></button>
-        <button class="storeSubBtn" data-tab="license" data-scroll-target="license" type="button"><span class="ico">🔐</span><b>Lisensi</b><small>Kode aktivasi, masa aktif, sisa hari</small></button>
-        <button class="storeSubBtn" data-tab="maintenance" data-scroll-target="maintenance" type="button"><span class="ico">🧹</span><b>Maintenance</b><small>Bersihkan data lama dengan aman</small></button>
-        <button class="storeSubBtn" data-tab="backup" data-scroll-target="backup" type="button"><span class="ico">💾</span><b>Backup</b><small>Download, kirim, dan import backup</small></button>
-        <button class="storeSubBtn" data-tab="deepStats" data-scroll-target="deepStats" type="button"><span class="ico">📈</span><b>Statistik Lengkap</b><small>Ringkasan toko lebih detail</small></button>
+        <button class="storeSubBtn" data-tab="license" data-scroll-target="license" type="button"><span class="ico">🔐</span><b>Lisensi</b><small>Masa aktif dan sisa hari</small></button>
+        <button class="storeSubBtn" data-tab="deepStats" data-scroll-target="deepStats" type="button"><span class="ico">📈</span><b>Statistik Lengkap</b><small>Omzet, stok, dan user</small></button>
+        <button class="storeSubBtn" data-tab="backup" data-scroll-target="backup" type="button"><span class="ico">💾</span><b>Backup</b><small>Export dan import data</small></button>
+        <button class="storeSubBtn" data-tab="maintenance" data-scroll-target="maintenance" type="button"><span class="ico">🧹</span><b>Maintenance</b><small>Bersihkan data lama</small></button>
       </div>
     </div>
-    <div class="forms"><div class="panel settingsPanel" id="settingsIdentityPanel"><h2 class="sectionTitle">Identitas Toko</h2><form id="settingsForm" class="form"><div class="field"><label class="label">Nama Toko</label><input class="input" name="store_name" placeholder="Contoh: iLink.in Store"></div><div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="Contoh: https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup</label><input class="input" name="group_link" placeholder="Contoh: https://t.me/grupkamu atau @grupkamu"></div></div><input type="hidden" name="store_description" value=""><input type="hidden" name="logo_url" value=""><input type="hidden" name="banner_url" value=""><h3>Media Saat User /start</h3><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="sticker">Stiker Telegram</option></select><input class="input" name="start_media_value" placeholder="Contoh gambar: https://domain.com/banner.jpg atau file_id stiker"><textarea class="textarea" name="start_media_caption" placeholder="Caption gambar /start. Kosongkan lalu simpan jika ingin menghapus caption."></textarea><p class="help">URL toko dan deskripsi toko sudah dihapus. Untuk gambar gunakan URL HTTPS publik. Untuk stiker isi file_id stiker Telegram.</p><button class="btn lime" type="submit">Simpan Toko</button></form></div><div class="panel mediaGuidePanel"><h2 class="sectionTitle">Panduan Media /start</h2><p class="help">Pilih Gambar toko jika ingin /start mengirim gambar dengan caption. Pilih Stiker Telegram jika ingin /start mengirim stiker. Caption bisa diedit atau dikosongkan kapan saja.</p></div></div>
   </section>
 </div>
 <div id="modal" class="modal"><div class="modalBox"><div class="modalHead"><h2 id="modalTitle" class="modalTitle">Modal</h2><button id="modalClose" class="closeBtn">Tutup</button></div><div id="modalBody"></div></div></div>
@@ -188,7 +239,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
   var initData = tg && tg.initData ? tg.initData : '';
-  var state = { stats:{}, products:[], orders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{} };
+  var state = { stats:{}, products:[], orders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[] };
   function rupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0)); }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
   function toast(msg, err){ var el=document.getElementById('toast'); el.textContent=msg; el.className='toast'+(err?' error':''); el.style.display='block'; setTimeout(function(){el.style.display='none';},3500); }
@@ -212,6 +263,21 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function formDataRaw(form){ return Object.fromEntries(new FormData(form).entries()); }
   function searchQuery(){ var el=document.getElementById('search'); return String((el&&el.value)||'').trim().toLowerCase(); }
   function textMatch(parts,q){ if(!q) return true; return parts.map(function(x){ return String(x==null?'':x).toLowerCase(); }).join(' ').indexOf(q)>=0; }
+  function normalizePromoTargetPart(value){ return String(value||'').trim().toUpperCase().replace(/\s+/g,'-'); }
+  function normalizePromoTargetToken(value){ var raw=String(value||'').trim(); if(!raw) return ''; var parts=raw.split('::'); var product=normalizePromoTargetPart(parts.shift()); var variant=normalizePromoTargetPart(parts.join('::')); if(!product || product==='SEMUA' || product==='ALL' || product==='-') return ''; return variant ? product+'::'+variant : product; }
+  function parsePromoTargets(value){ var rows=Array.isArray(value)?value:String(value||'').split(/[,|\n]+/); var seen={}; return rows.map(normalizePromoTargetToken).filter(function(x){ if(!x||seen[x]) return false; seen[x]=1; return true; }); }
+  function promoProductCode(product){ return normalizePromoTargetPart(product&&product.kode); }
+  function promoVariantKey(variant,index){ return normalizePromoTargetPart((variant&&(variant.sku||variant.kode||variant.key||variant.name||variant.nama))||('VAR'+(Number(index||0)+1))); }
+  function promoTargetParts(token){ var clean=normalizePromoTargetToken(token); var parts=clean.split('::'); return {token:clean,productCode:parts.shift()||'',variantKey:parts.join('::')}; }
+  function findPromoProduct(code){ var target=normalizePromoTargetPart(code); return (state.products||[]).find(function(p){return promoProductCode(p)===target;})||null; }
+  function promoTargetLabel(token){ var parts=promoTargetParts(token); var product=findPromoProduct(parts.productCode); var productName=product?(product.nama+' ('+parts.productCode+')'):parts.productCode; if(!parts.variantKey) return productName+' — Semua varian'; var vars=productVariants(product); var variant=vars.find(function(v,i){return promoVariantKey(v,i)===parts.variantKey;}); return productName+' — '+(variant?(variant.name||variant.nama||parts.variantKey):parts.variantKey); }
+  function refreshPromoTargetProducts(){ var select=document.getElementById('promoTargetProduct'); if(!select) return; var current=select.value; var rows=(state.products||[]).slice().sort(function(a,b){return String(a.nama||'').localeCompare(String(b.nama||''),'id');}); select.innerHTML=rows.map(function(p){return '<option value="'+esc(promoProductCode(p))+'">'+esc(p.nama||p.kode)+' ('+esc(p.kode||'')+')</option>';}).join('')||'<option value="">Belum ada produk</option>'; if(current&&rows.some(function(p){return promoProductCode(p)===current;})) select.value=current; refreshPromoTargetVariants(); }
+  function refreshPromoTargetVariants(){ var productSelect=document.getElementById('promoTargetProduct'); var variantSelect=document.getElementById('promoTargetVariant'); if(!variantSelect) return; var product=findPromoProduct(productSelect&&productSelect.value); var vars=productVariants(product); var firstLabel=vars.length?'Semua varian produk':'Produk utama / seluruh produk'; variantSelect.innerHTML='<option value="">'+esc(firstLabel)+'</option>'+vars.map(function(v,i){return '<option value="'+esc(promoVariantKey(v,i))+'">Varian: '+esc(v.name||v.nama||promoVariantKey(v,i))+'</option>';}).join(''); variantSelect.disabled=!product; }
+  function syncPromoTargetValue(){ var input=document.getElementById('promoProductsValue'); if(input) input.value=(state.promoTargets||[]).join(','); }
+  function renderPromoTargetList(){ var el=document.getElementById('promoTargetList'); if(!el) return; var rows=state.promoTargets||[]; el.innerHTML=rows.length?rows.map(function(token){return '<div class="promoTargetItem"><span>'+esc(promoTargetLabel(token))+'</span><button type="button" data-remove-promo-target="'+esc(token)+'">Hapus</button></div>';}).join(''):'<div class="promoTargetEmpty">Belum ada target dipilih. Tambahkan produk atau aktifkan “Semua Produk”.</div>'; document.querySelectorAll('[data-remove-promo-target]').forEach(function(btn){btn.onclick=function(){ state.promoTargets=(state.promoTargets||[]).filter(function(x){return x!==btn.dataset.removePromoTarget;}); if(!state.promoTargets.length) setPromoTargets([]); else {syncPromoTargetValue();renderPromoTargetList();} };}); }
+  function setPromoTargets(value){ state.promoTargets=parsePromoTargets(value); var all=document.getElementById('promoAllProducts'); var builder=document.getElementById('promoTargetBuilder'); if(all) all.checked=state.promoTargets.length===0; if(builder) builder.classList.toggle('hidden',state.promoTargets.length===0); syncPromoTargetValue(); refreshPromoTargetProducts(); renderPromoTargetList(); }
+  function togglePromoTargetMode(){ var all=document.getElementById('promoAllProducts'); var builder=document.getElementById('promoTargetBuilder'); if(!all||!builder) return; if(all.checked){ state.promoTargets=[]; builder.classList.add('hidden'); } else { builder.classList.remove('hidden'); refreshPromoTargetProducts(); } syncPromoTargetValue(); renderPromoTargetList(); }
+  function addSelectedPromoTarget(){ var productSelect=document.getElementById('promoTargetProduct'); var variantSelect=document.getElementById('promoTargetVariant'); var productCode=normalizePromoTargetPart(productSelect&&productSelect.value); if(!productCode) return toast('Pilih produk target terlebih dahulu',true); var variantKey=normalizePromoTargetPart(variantSelect&&variantSelect.value); var token=productCode+(variantKey?'::'+variantKey:''); var rows=state.promoTargets||[]; if(!variantKey){ rows=rows.filter(function(x){return promoTargetParts(x).productCode!==productCode;}); } else if(rows.indexOf(productCode)>=0){ return toast('Produk ini sudah dipilih untuk semua varian',true); } if(rows.indexOf(token)<0) rows.push(token); state.promoTargets=rows; var all=document.getElementById('promoAllProducts'); if(all) all.checked=false; syncPromoTargetValue(); renderPromoTargetList(); }
   function updateSearchCounter(){ var q=searchQuery(); var el=document.getElementById('productCounter'); if(!el) return; if(!q){ el.textContent='Pencarian berlaku untuk Produk, Penjualan, Users, Promo & Voucher.'; return; } var pc=state.products.filter(function(p){return productMatches(p,q);}).length; var oc=state.orders.filter(function(o){return orderMatches(o,q);}).length; var uc=state.users.filter(function(u){return userMatches(u,q);}).length; var vc=getUnifiedPromoRows().filter(function(x){return promoMatches(x,q);}).length; el.textContent='Hasil: '+pc+' produk · '+oc+' penjualan · '+uc+' user · '+vc+' promo/voucher'; }
   function rupiahShort(n){ n=Number(n||0); if(Math.abs(n)>=1000000000) return 'Rp'+(n/1000000000).toFixed(n%1000000000?1:0).replace('.0','')+'M'; if(Math.abs(n)>=1000000) return 'Rp'+(n/1000000).toFixed(n%1000000?1:0).replace('.0','')+'jt'; if(Math.abs(n)>=1000) return 'Rp'+Math.round(n/1000)+'rb'; return 'Rp'+n; }
   function setPromoSub(mode){ mode=mode||'list'; var list=document.getElementById('promoListPanel'); var create=document.getElementById('promoCreatePanel'); if(list) list.classList.toggle('hidden', mode!=='list'); if(create) create.classList.toggle('hidden', mode!=='create'); document.querySelectorAll('[data-promo-sub]').forEach(function(btn){ btn.classList.toggle('active', btn.dataset.promoSub===mode); }); if(mode==='create' && create) setTimeout(function(){ create.scrollIntoView({behavior:'smooth',block:'start'}); },20); }
@@ -541,8 +607,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function renderUsers(sortMode){ if(sortMode) state.userSort=sortMode; var q=searchQuery(); var rows=state.users.filter(function(u){return userMatches(u,q);}); updateSearchCounter(); if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);}); else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);}); document.getElementById('userList').innerHTML=rows.map(function(u){return '<tr><td data-label="ID">'+esc(u.telegram_id)+'</td><td data-label="User">'+(u.username?'@'+esc(u.username):esc(u.first_name||'-'))+'</td><td data-label="Transaksi">'+esc(u.transaction_count||0)+'</td><td data-label="Spending">'+rupiah(u.spending||0)+'</td><td data-label="Aksi"><button class="btn small red" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></td></tr>';}).join('')||'<tr class="userEmptyRow"><td colspan="5">Belum ada user.</td></tr>'; document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};}); document.querySelectorAll('[data-user-sort]').forEach(function(btn){btn.onclick=function(){ renderUsers(btn.dataset.userSort); };}); }
   function promoUnifiedReset(){
     var f=document.getElementById('promoUnifiedForm'); if(!f) return;
-    f.reset(); f.current_code.value='';
-    var title=document.querySelector('#promos .sectionTitle');
+    f.reset(); f.current_code.value=''; setPromoTargets([]);
     var btn=f.querySelector('button[type="submit"]'); if(btn) btn.textContent='Simpan Promo / Voucher'; setPromoSub('create');
   }
   function fillPromoUnified(type, item){
@@ -559,7 +624,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     f.usage_limit.value=item.usage_limit || item.limit || '';
     f.min_qty.value=item.min_qty || 1;
     f.min_spend.value=item.min_spend || 0;
-    f.products.value=(item.products&&item.products.length)?item.products.join(', '):'semua';
+    setPromoTargets(item.products||[]);
     f.description.value=item.description||'';
     f.start_at.value=toLocalInputValue(item.start_at);
     f.end_at.value=toLocalInputValue(item.end_at || item.expires_at);
@@ -602,7 +667,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var q=searchQuery(); var rows=getUnifiedPromoRows().filter(function(item){return promoMatches(item,q);}); updateSearchCounter();
     el.innerHTML=rows.map(function(item){
       var x=item.row; var st=promoStatus(x,item.type);
-      var target=(x.products&&x.products.length)?x.products.join(', '):'Semua produk';
+      var target=(x.products&&x.products.length)?x.products.map(promoTargetLabel).join(', '):'Semua produk';
       var min='Min '+(x.min_qty||1)+' pcs / '+rupiah(x.min_spend||0);
       var limit=(x.usage_limit?x.usage_limit:'∞');
       var end=x.end_at||x.expires_at||'';
@@ -667,7 +732,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var all=await Promise.all([
         apiSafe('license-status',{}), apiSafe('stats',{}), apiSafe('products',[]), apiSafe('orders',[]), apiSafe('users',[]), apiSafe('vouchers',[]), apiSafe('settings',{}), apiSafe('analytics',{}), apiSafe('polls',[]), apiSafe('maintenance-stats',{}), apiSafe('backup-logs',[]), apiSafe('promos',[]), apiSafe('deep-stats',{})
       ]);
-      state.license=all[0]||{}; state.stats=all[1]||{}; state.products=all[2]||[]; state.orders=all[3]||[]; state.users=all[4]||[]; state.vouchers=all[5]||[]; state.settings=all[6]||{}; state.analytics=all[7]||{}; state.polls=all[8]||[]; state.maintenance=all[9]||{}; state.backups=all[10]||[]; state.promos=all[11]||[]; state.deepStats=all[12]||{};
+      state.license=all[0]||{}; state.stats=all[1]||{}; state.products=all[2]||[]; state.orders=all[3]||[]; state.users=all[4]||[]; state.vouchers=all[5]||[]; state.settings=all[6]||{}; state.analytics=all[7]||{}; state.polls=all[8]||[]; state.maintenance=all[9]||{}; state.backups=all[10]||[]; state.promos=all[11]||[]; state.deepStats=all[12]||{}; refreshPromoTargetProducts();
       renderHeader(); renderLicense(); renderStats(); renderCharts(); renderProducts(); renderOrders(); renderUsers(); renderVouchers(); renderPolls(); renderMaintenance(); renderBackup(); renderPromos(); renderDeepStats(); updateSearchCounter();
     }catch(e){ toast(e.message,true); renderLicense(); renderStats(); renderProducts(); renderMaintenance(); }
   }
@@ -718,8 +783,11 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var downloadBackup=document.getElementById('downloadBackup'); if(downloadBackup) downloadBackup.onclick=async function(){ var r=await api('backup-export'); var text=JSON.stringify(r.data,null,2); var blob=new Blob([text],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='backup-bot-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); toast('Backup berhasil diunduh'); await load(); };
   var sendBackupTelegram=document.getElementById('sendBackupTelegram'); if(sendBackupTelegram) sendBackupTelegram.onclick=async function(){ await post('backup-send',{}); toast('Backup dikirim ke Telegram owner'); };
   var importBackupForm=document.getElementById('importBackupForm'); if(importBackupForm) importBackupForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); if(!String(d.backup||'').trim()) return toast('Paste isi backup JSON dulu', true); if(confirm('Import backup sekarang? Data dengan kode/ID sama akan ditimpa.')){ await post('backup-import',{backup:d.backup,include_transactions:!!d.include_transactions}); e.target.reset(); }};
-  var promoUnifiedForm=document.getElementById('promoUnifiedForm'); if(promoUnifiedForm) promoUnifiedForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var isAuto=d.promo_kind==='auto'; var payload={ code:d.code, kode:d.code, current_code:d.current_code, name:d.name||d.code, discount_type:d.discount_type, discount_value:d.discount_value, potongan:d.discount_value, produk:d.products, products:d.products, min_qty:d.min_qty||1, min_spend:d.min_spend||0, usage_limit:d.usage_limit, limit:d.usage_limit, description:d.description, active:d.active, start_at:d.start_at||null, end_at:d.end_at||null, expires_at:d.end_at||null }; if(isAuto){ await post('promo-save',payload); } else { await post(d.current_code?'edit-voucher':'add-voucher',payload); } promoUnifiedReset(); setPromoSub('list'); };
+  var promoUnifiedForm=document.getElementById('promoUnifiedForm'); if(promoUnifiedForm) promoUnifiedForm.onsubmit=async function(e){ e.preventDefault(); var all=document.getElementById('promoAllProducts'); if(all&&!all.checked&&!(state.promoTargets||[]).length) return toast('Tambahkan minimal satu produk atau varian target',true); syncPromoTargetValue(); var d=formDataRaw(e.target); var isAuto=d.promo_kind==='auto'; var payload={ code:d.code, kode:d.code, current_code:d.current_code, name:d.name||d.code, discount_type:d.discount_type, discount_value:d.discount_value, potongan:d.discount_value, produk:d.products, products:d.products, min_qty:d.min_qty||1, min_spend:d.min_spend||0, usage_limit:d.usage_limit, limit:d.usage_limit, description:d.description, active:d.active, start_at:d.start_at||null, end_at:d.end_at||null, expires_at:d.end_at||null }; if(isAuto){ await post('promo-save',payload); } else { await post(d.current_code?'edit-voucher':'add-voucher',payload); } promoUnifiedReset(); setPromoSub('list'); };
   var resetPromoUnified=document.getElementById('resetPromoUnified'); if(resetPromoUnified) resetPromoUnified.onclick=promoUnifiedReset;
+  var promoAllProducts=document.getElementById('promoAllProducts'); if(promoAllProducts) promoAllProducts.onchange=togglePromoTargetMode;
+  var promoTargetProduct=document.getElementById('promoTargetProduct'); if(promoTargetProduct) promoTargetProduct.onchange=refreshPromoTargetVariants;
+  var addPromoTarget=document.getElementById('addPromoTarget'); if(addPromoTarget) addPromoTarget.onclick=addSelectedPromoTarget;
 
   var maintenanceForm=document.getElementById('maintenanceForm'); if(maintenanceForm) maintenanceForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var label=e.target.target.options[e.target.target.selectedIndex].text; var days=d.days||30; var warn='Jalankan maintenance: '+label+'?\n\nUmur data minimal: '+days+' hari.\nData yang dihapus tidak bisa dikembalikan.'; if(d.target==='transactions-old') warn='PERINGATAN: ini akan menghapus detail transaksi lama permanen. Total Transaksi dashboard tetap tersimpan, tapi detail order lama hilang. Pastikan sudah backup/export.\n\n'+warn; if(confirm(warn)){ var r=await post('maintenance-cleanup',d); if(r.data) toast((r.data.message||'Maintenance selesai')+' Terproses: '+(r.data.affected||0)); } };
   load();

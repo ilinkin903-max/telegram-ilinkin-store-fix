@@ -1,4 +1,6 @@
 const WIB_OFFSET = '+07:00';
+const TARGET_SEPARATOR = '::';
+const DEFAULT_VARIANT_KEY = 'DEFAULT';
 
 function boolValue(value, defaultValue = true) {
   if (value === undefined || value === null || value === '') return defaultValue;
@@ -56,11 +58,62 @@ function discountAmount(item, subtotal) {
   return Math.min(base, value);
 }
 
-function targetProducts(value) {
-  if (Array.isArray(value)) return value.map((x) => String(x).trim().toUpperCase()).filter(Boolean);
+function normalizeTargetPart(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-');
+}
+
+function normalizeTargetToken(value) {
   const raw = String(value || '').trim();
-  if (!raw || raw === '-' || ['all', 'semua'].includes(raw.toLowerCase())) return [];
-  return raw.split(/[|,\n]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+  if (!raw) return '';
+  const parts = raw.split(TARGET_SEPARATOR);
+  const productCode = normalizeTargetPart(parts.shift());
+  if (!productCode) return '';
+  const variantKey = normalizeTargetPart(parts.join(TARGET_SEPARATOR));
+  return variantKey ? `${productCode}${TARGET_SEPARATOR}${variantKey}` : productCode;
+}
+
+function targetProducts(value) {
+  const rows = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[|,\n]+/);
+
+  const targets = rows
+    .map(normalizeTargetToken)
+    .filter(Boolean)
+    .filter((item) => !['ALL', 'SEMUA', '-'].includes(item));
+
+  return [...new Set(targets)];
+}
+
+function splitTargetToken(value) {
+  const token = normalizeTargetToken(value);
+  if (!token) return { token: '', productCode: '', variantKey: '' };
+  const [productCode, ...rest] = token.split(TARGET_SEPARATOR);
+  return {
+    token,
+    productCode,
+    variantKey: rest.join(TARGET_SEPARATOR)
+  };
+}
+
+function promoTargetMatches(item, productCodeValue, variantKeyValue = '') {
+  const targets = targetProducts(item?.products);
+  if (!targets.length) return true;
+
+  const productCode = normalizeTargetPart(productCodeValue);
+  const variantKey = normalizeTargetPart(variantKeyValue || DEFAULT_VARIANT_KEY);
+  if (!productCode) return false;
+
+  return targets.some((target) => {
+    const parsed = splitTargetToken(target);
+    if (parsed.productCode !== productCode) return false;
+    // Token produk saja berlaku untuk produk tersebut beserta seluruh variannya.
+    if (!parsed.variantKey) return true;
+    return parsed.variantKey === variantKey;
+  });
 }
 
 function promoState(item = {}, options = {}) {
@@ -87,9 +140,7 @@ function promoEligible(item, input = {}) {
   const state = promoState(item, { now: input.now, usedCount: input.usedCount });
   if (!state.effective_active || discountAmount(item, input.subtotal) <= 0) return false;
 
-  const products = targetProducts(item.products);
-  const productCode = String(input.productCode || '').trim().toUpperCase();
-  if (products.length && !products.includes(productCode)) return false;
+  if (!promoTargetMatches(item, input.productCode, input.variantKey)) return false;
   if (Math.max(1, Number(input.quantity || 1)) < Math.max(1, Number(item.min_qty || 1))) return false;
   if (Math.max(0, Number(input.subtotal || 0)) < Math.max(0, Number(item.min_spend || 0))) return false;
   return true;
@@ -97,13 +148,19 @@ function promoEligible(item, input = {}) {
 
 module.exports = {
   WIB_OFFSET,
+  TARGET_SEPARATOR,
+  DEFAULT_VARIANT_KEY,
   boolValue,
   normalizeDateTime,
   timestamp,
   hasStarted,
   isExpired,
   discountAmount,
+  normalizeTargetPart,
+  normalizeTargetToken,
   targetProducts,
+  splitTargetToken,
+  promoTargetMatches,
   promoState,
   promoEligible
 };

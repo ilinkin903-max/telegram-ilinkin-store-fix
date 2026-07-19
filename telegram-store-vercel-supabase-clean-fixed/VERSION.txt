@@ -1,13 +1,1 @@
-Admin UI v45 - Promo Otomatis, Status Expired, dan Broadcast Media Fix
-
-Perubahan:
-- Perhitungan promo otomatis diperbaiki agar potongan benar-benar mengurangi subtotal saat checkout.
-- Jadwal promo/voucher dari input datetime-local dibaca sebagai WIB, sehingga tidak bergeser 7 jam di Vercel.
-- Promo dan voucher yang expired, belum mulai, limit habis, atau dinonaktifkan tampil sebagai OFF beserta keterangannya.
-- Validasi target produk, minimal jumlah, minimal belanja, limit pemakaian, diskon nominal, dan diskon persen diperkuat.
-- Pemakaian voucher sekarang tercatat dengan benar setelah transaksi selesai.
-- Broadcast gambar dan stiker dapat dikirim ulang melalui command/message baru tanpa dianggap sudah pernah dikirim.
-- Retry webhook Telegram yang sama diabaikan tanpa mengirim peringatan duplikat ke owner.
-- Mini App memakai request_id unik pada setiap klik Kirim Broadcast dan menampilkan contoh error Telegram jika ada pengiriman gagal.
-- Tampilan Produk dan Users responsif dari v44 tetap dipertahankan.
-- Tidak perlu SQL tambahan.
+v46-variant-promo-ui-cleanup
