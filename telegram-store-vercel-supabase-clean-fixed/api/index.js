@@ -1,9 +1,9 @@
 module.exports = async function handler(req, res) {
   res.status(200).json({
     ok: true,
-    name: 'Telegram Store Bot',
-    version: 'v49-auto-payment-watcher-webhook-fix',
-    endpoints: ['/api/telegram', '/api/payment-webhook', '/api/set-webhook', '/reseller'],
-    message: 'Project aktif. Pasang webhook lewat /api/set-webhook?secret=WEBHOOK_SECRET.'
+    name: 'iLink.in Auto Order Marketplace',
+    version: 'v50-marketplace-reseller-panel',
+    endpoints: ['/', '/shop', '/reseller', '/api/store-data', '/api/telegram', '/api/payment-webhook', '/api/set-webhook'],
+    message: 'Marketplace aktif. Buka / untuk katalog pembeli dan /reseller untuk dashboard reseller.'
   });
 };

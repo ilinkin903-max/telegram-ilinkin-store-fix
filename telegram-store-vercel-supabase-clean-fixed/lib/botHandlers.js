@@ -1,7 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { config, getMiniAppUrl } = require('./config');
+const { config, getMiniAppUrl, getStorefrontUrl } = require('./config');
 const tg = require('./telegram');
 const db = require('./db');
 const paymentService = require('./paymentService');
@@ -336,8 +336,10 @@ function homeKeyboard(req, userId, settings = {}) {
     [{ text: '‹📊› Stok', callback_data: 'stok' }]
   ];
 
+  const storeUrl = getStorefrontUrl(req);
+  if (storeUrl) rows.unshift([{ text: '‹🛍️› Buka Marketplace', web_app: { url: storeUrl } }]);
   const miniAppUrl = getMiniAppUrl(req);
-  if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Admin Dashboard', web_app: { url: miniAppUrl } }]);
+  if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Reseller Dashboard', web_app: { url: miniAppUrl } }]);
   const csUrl = normalizeUrl(settings.customer_service_link || config.customerService);
   const groupUrl = normalizeUrl(settings.group_link || config.channelStore);
   const contactRow = [];

@@ -5,7 +5,7 @@ module.exports = async function handler(req, res) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Reseller Panel</title>
+  <title>Reseller Dashboard — iLink.in Store</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root{--bg:#fff0d8;--paper:#fff;--ink:#050505;--muted:#646464;--pink:#e83f9b;--cyan:#12b8ce;--lime:#83d904;--yellow:#ffe04b;--purple:#8557e8;--red:#ef3e45;--orange:#ff9f1c;--line:3px solid #050505;--shadow:6px 6px 0 #050505;--soft:3px 3px 0 #050505;--radius:8px}
@@ -36,9 +36,10 @@ module.exports = async function handler(req, res) {
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">ADMIN DASHBOARD</div>
+    <div class="eyebrow">RESELLER DASHBOARD</div>
     <h1 id="storeName">iLink.in Store</h1>
-    <div class="storeline byline"><span>By iLink</span></div>
+    <div class="storeline byline"><span>Kelola toko, produk, promo, dan penjualan</span></div>
+    <div style="margin-top:12px"><a href="/" class="btn yellow" style="display:inline-block;text-decoration:none;color:#000">🛍️ Lihat Marketplace</a></div>
     <div class="statsGrid" id="stats"></div>
   </header>
 

@@ -18,6 +18,7 @@ const config = {
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   publicUrl: required('PUBLIC_URL'),
   miniAppUrl: required('MINIAPP_URL'),
+  storeUrl: required('STORE_URL', ''),
   webhookSecret: required('WEBHOOK_SECRET', ''),
   licenseManagerUrl: required('LICENSE_MANAGER_URL', required('RENTAL_MANAGER_URL', '')),
   licenseApiSecret: required('LICENSE_API_SECRET', ''),
@@ -49,4 +50,10 @@ function getMiniAppUrl(req) {
   return base ? `${base}/reseller` : '';
 }
 
-module.exports = { config, requireEnv, getPublicBaseUrl, getMiniAppUrl };
+function getStorefrontUrl(req) {
+  if (config.storeUrl) return config.storeUrl;
+  const base = getPublicBaseUrl(req);
+  return base || '';
+}
+
+module.exports = { config, requireEnv, getPublicBaseUrl, getMiniAppUrl, getStorefrontUrl };

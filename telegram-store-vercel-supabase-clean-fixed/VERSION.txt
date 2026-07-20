@@ -1,1 +1,9 @@
-v49-auto-payment-watcher-webhook-fix
+v50-marketplace-reseller-panel
+
+- Website auto order bergaya marketplace di halaman utama.
+- Checkout aman melalui Telegram Web App.
+- Pilihan produk, varian, jumlah, voucher, QRIS, countdown, dan riwayat pesanan.
+- Gambar URL HTTPS dan Google Drive share link.
+- Satu reseller dashboard khusus OWNER_ID.
+- Stok rahasia tidak pernah dikirim ke browser.
+- Pembayaran memakai webhook/watcher dan notifikasi PESANAN SELESAI tetap dipertahankan.

@@ -1,150 +1,135 @@
-# Telegram Store Bot — v49
+# v50 — Website Auto Order Marketplace + 1 Reseller Panel
 
-## Perbaikan pembayaran otomatis
+Versi ini menambahkan website pembeli bergaya marketplace tanpa menghapus fitur bot Telegram dan dashboard reseller yang sudah ada.
 
-Versi v49 memakai dua jalur deteksi pembayaran:
+## Fitur baru
 
-1. **Webhook Pakasir** sebagai jalur utama dan tercepat.
-2. **Watcher latar belakang Vercel** sebagai cadangan selama beberapa menit setelah QRIS dibuat.
+### Website marketplace pembeli
 
-Dengan demikian, pembayaran yang berhasil dapat tetap terdeteksi walaupun notifikasi webhook terlambat atau pengaturan Webhook URL Pakasir belum tersimpan dengan benar.
+- Halaman utama toko berada di `/`, `/shop`, atau `/marketplace`.
+- Tampilan responsif seperti marketplace: pencarian, kategori, pengurutan, banner, kartu produk, detail produk, pilihan varian, jumlah beli, voucher, QRIS, countdown, dan riwayat pesanan.
+- Gambar produk menggunakan URL HTTPS. Link berbagi Google Drive otomatis diubah menjadi URL gambar langsung.
+- Stok asli seperti email/password tidak pernah dikirim ke browser. Website hanya menerima jumlah stok.
+- Promo otomatis dan voucher manual tetap mengikuti target produk/varian dari versi sebelumnya.
+- Pembayaran dibuat melalui Pakasir dan diproses oleh webhook/watcher pembayaran yang sudah ada.
+- Setelah transaksi selesai, produk tetap dikirim ke chat Telegram pembeli.
+- Website melakukan polling ke database lokal untuk menampilkan status berhasil; website tidak memanggil Pakasir terus-menerus.
 
-Sebelum produk dikirim, sistem tetap memeriksa ulang `project`, `order_id`, dan `amount` melalui Transaction Detail API Pakasir. Invoice yang sama hanya diproses satu kali sehingga stok, promo, voucher, dan transaksi tidak terpotong ganda.
+### Satu reseller panel
 
-## Perubahan lain
+- Dashboard reseller tetap berada di `/reseller`.
+- Hanya `OWNER_ID` yang dapat membuka dan memakai API dashboard.
+- Tersedia tombol `Lihat Marketplace` dari dashboard.
+- Menu bot owner berubah menjadi `Reseller Dashboard`.
 
-- Notifikasi channel log kembali menggunakan format:
+### Tombol marketplace di bot
+
+Semua pengguna mendapatkan tombol:
 
 ```text
-✅ PESANAN SELESAI
-=======================
-User: @username
-Trx ID: ABC123
-Produk: Nama Produk - Varian
-Harga: Rp 35.000
-Jumlah Beli: 1
-Fee: Rp 26
-Total Harga: Rp 35.026
-Tanggal: Minggu, 19 Juli 2026 pukul 19.28
+🛍️ Buka Marketplace
 ```
 
-- Tombol **Salin Produk** tidak lagi tampil dua kali. Produk tetap berada dalam blok kode Telegram yang sudah memiliki tombol salin bawaan.
-- Webhook menerima body JSON, body string JSON, dan `application/x-www-form-urlencoded`.
-- Nama project Pakasir dicocokkan tanpa terpengaruh huruf besar/kecil.
-- Secret webhook Pakasir dibuat opsional karena transaksi tetap diverifikasi ulang melalui API Pakasir.
+Tombol membuka website sebagai Telegram Web App sehingga identitas pembeli dapat diverifikasi dan produk dapat dikirim otomatis.
 
-Perubahan ini tidak memerlukan SQL atau kolom database baru.
+## Struktur URL
 
-## Cara memasang
+```text
+https://DOMAIN-ANDA.vercel.app/                Marketplace pembeli
+https://DOMAIN-ANDA.vercel.app/shop            Alias marketplace
+https://DOMAIN-ANDA.vercel.app/reseller        Dashboard reseller/owner
+https://DOMAIN-ANDA.vercel.app/api/store-data  API marketplace
+https://DOMAIN-ANDA.vercel.app/api/telegram    Webhook bot Telegram
+https://DOMAIN-ANDA.vercel.app/api/payment-webhook  Webhook Pakasir
+```
 
-1. Ekstrak ZIP v49.
-2. Unggah seluruh isi folder ke repository GitHub bot Anda dan timpa file lama.
-3. Pastikan Environment Variables berikut tersedia di Vercel:
+## Environment Variables Vercel
+
+Pastikan variabel lama tetap ada, kemudian tambahkan/periksa:
+
+```text
+PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
+STORE_URL=https://telegram-ilinkin-store-fix.vercel.app
+MINIAPP_URL=https://telegram-ilinkin-store-fix.vercel.app/reseller
+BOT_USERNAME=username_bot_tanpa_tanda_at
+```
+
+Variabel pembayaran yang tetap wajib:
 
 ```text
 PAKASIR_SLUG=slug_proyek_pakasir
-PAKASIR_API_KEY=api_key_proyek_pakasir
-PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
-WEBHOOK_SECRET=rahasia_webhook_telegram
-```
-
-Variabel berikut opsional:
-
-```text
-PAKASIR_WEBHOOK_SECRET=rahasia_webhook_pembayaran
+PAKASIR_API_KEY=api_key_pakasir
 PAKASIR_WEBHOOK_REQUIRE_SECRET=false
 ```
 
-4. Commit dan tunggu deployment Vercel berstatus **Ready**.
-5. Pasang ulang webhook Telegram:
+Webhook Pakasir:
 
 ```text
-https://DOMAIN-VERCEL-ANDA/api/set-webhook?secret=WEBHOOK_SECRET
+https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 ```
 
-6. Di dashboard Pakasir, buka proyek → **Edit Proyek** → isi Webhook URL.
-
-### Rekomendasi paling sederhana
+Variabel database:
 
 ```text
-https://DOMAIN-VERCEL-ANDA/api/payment-webhook
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=service_role_key
 ```
 
-Dengan nilai:
+Variabel Telegram:
 
 ```text
-PAKASIR_WEBHOOK_REQUIRE_SECRET=false
+BOT_TOKEN=token_bot
+OWNER_ID=id_telegram_owner
+WEBHOOK_SECRET=rahasia_set_webhook
 ```
 
-### Mode secret ketat
+## Cara pemasangan
 
-Gunakan hanya bila Anda yakin query parameter tersimpan utuh di dashboard Pakasir:
+1. Ekstrak ZIP v50.
+2. Unggah semua isi folder `store_fix_v50` ke root repository GitHub yang terhubung ke Vercel.
+3. Pastikan `package.json`, `vercel.json`, folder `api`, `lib`, `public`, dan `supabase` berada di root repository.
+4. Simpan Environment Variables di Vercel untuk lingkungan `Production`.
+5. Redeploy tanpa build cache.
+6. Setelah deployment berstatus `Ready`, pasang webhook Telegram:
 
 ```text
-https://DOMAIN-VERCEL-ANDA/api/payment-webhook?secret=RAHASIA_ANDA
+https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=ISI_WEBHOOK_SECRET
 ```
 
-Lalu atur:
+7. Kirim `/start` ke bot. Tombol `Buka Marketplace` akan muncul.
+8. Owner dapat membuka panel melalui tombol `Reseller Dashboard` atau perintah `/reseller`.
+
+## Database
+
+Jika database dari v49 sudah terpasang, tidak ada SQL tambahan yang wajib dijalankan.
+
+Untuk instalasi baru, jalankan:
 
 ```text
-PAKASIR_WEBHOOK_SECRET=RAHASIA_ANDA
-PAKASIR_WEBHOOK_REQUIRE_SECRET=true
+supabase/schema.sql
 ```
 
-Nilai secret harus sama persis dan tidak boleh memiliki spasi atau tanda kutip.
+Catatan: sistem saat ini memakai satu `pending_order` aktif per akun Telegram. Artinya satu pembeli menyelesaikan satu invoice terlebih dahulu sebelum membuat invoice berikutnya. Ini mencegah invoice tertimpa dan stok terkirim ke pembayaran yang salah.
 
-## Pemeriksaan endpoint
+## Gambar Google Drive
 
-Buka:
+Kolom gambar dapat diisi dengan link berbagi seperti:
 
 ```text
-https://DOMAIN-VERCEL-ANDA/api/payment-webhook
+https://drive.google.com/file/d/FILE_ID/view?usp=sharing
 ```
 
-Respons yang benar akan memuat versi v49 dan status konfigurasi tanpa menampilkan API key:
+File harus diatur `Anyone with the link / Siapa saja yang memiliki link` sebagai Viewer. Website akan mengubahnya menjadi direct image URL secara otomatis.
 
-```json
-{
-  "ok": true,
-  "message": "Webhook pembayaran Pakasir aktif.",
-  "version": "v49-auto-payment-watcher-webhook-fix",
-  "configuration": {
-    "projectConfigured": true,
-    "apiKeyConfigured": true,
-    "webhookSecretConfigured": true,
-    "webhookSecretRequired": false
-  }
-}
+## Pengujian
+
+Jalankan:
+
+```bash
+npm ci
+npm test
 ```
 
-## Cara menguji
+Paket v50 telah lolos 19 pengujian otomatis yang mencakup pembayaran, notifikasi pesanan selesai, promo, voucher, target varian, URL Google Drive, dan perlindungan isi stok.
 
-1. Buat satu produk uji dengan stok kecil.
-2. Buat pesanan sampai QRIS tampil.
-3. Bayar sesuai **Total Bayar**, termasuk fee unik.
-4. Jangan tekan tombol **Cek Pembayaran Sekarang**.
-5. Tunggu beberapa detik. Webhook atau watcher akan memeriksa status dan mengirim produk.
-6. Periksa channel log. Pesan harus memakai judul **PESANAN SELESAI**.
-
-## Jika belum terkirim
-
-Periksa **Vercel → Project → Logs** dan cari salah satu keterangan berikut:
-
-- `Webhook Pakasir ditolak`
-- `payment webhook error`
-- `Background payment watcher error`
-- `Detail transaksi Pakasir tidak cocok dengan invoice lokal`
-- `Konfigurasi Pakasir belum lengkap`
-
-Pastikan juga:
-
-- `PAKASIR_SLUG` benar-benar sama dengan slug proyek Pakasir;
-- `PAKASIR_API_KEY` berasal dari proyek yang sama;
-- nominal dibayar sama dengan Total Bayar;
-- deployment Production menggunakan Environment Variables terbaru;
-- Fluid Compute Vercel tetap aktif agar watcher latar belakang dapat berjalan;
-- fungsi `api/telegram.js` memiliki Maximum Duration 300 detik dari `vercel.json`.
-
-## Deployment
-
-Node.js tetap dikunci ke `20.x`. Bila pernah mengalami error instalasi npm, lakukan **Redeploy without cache**.
+Pengujian transaksi sungguhan tetap memerlukan akun Telegram, Pakasir, Supabase, dan Vercel milik Anda.

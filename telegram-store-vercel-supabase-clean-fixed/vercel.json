@@ -21,12 +21,23 @@
     },
     "api/backup-cron.js": {
       "maxDuration": 30
+    },
+    "api/store-data.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
     {
       "source": "/",
-      "destination": "/api/index"
+      "destination": "/index.html"
+    },
+    {
+      "source": "/shop",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/marketplace",
+      "destination": "/index.html"
     },
     {
       "source": "/reseller",
