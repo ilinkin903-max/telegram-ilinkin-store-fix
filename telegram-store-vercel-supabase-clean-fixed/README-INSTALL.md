@@ -1,4 +1,4 @@
-# v50 — Website Auto Order Marketplace + 1 Reseller Panel
+# v51 — Website Auto Order Marketplace + 1 Reseller Panel
 
 Versi ini menambahkan website pembeli bergaya marketplace tanpa menghapus fitur bot Telegram dan dashboard reseller yang sudah ada.
 
@@ -130,6 +130,39 @@ npm ci
 npm test
 ```
 
-Paket v50 telah lolos 19 pengujian otomatis yang mencakup pembayaran, notifikasi pesanan selesai, promo, voucher, target varian, URL Google Drive, dan perlindungan isi stok.
+Paket v51 telah lolos 24 pengujian otomatis yang mencakup pembayaran, notifikasi pesanan selesai, promo, voucher, target varian, URL Google Drive, dan perlindungan isi stok.
 
 Pengujian transaksi sungguhan tetap memerlukan akun Telegram, Pakasir, Supabase, dan Vercel milik Anda.
+
+## Perubahan v51 — QRIS, Detail Pembayaran, Banner, dan CS
+
+Versi ini tidak membutuhkan SQL baru.
+
+### Banner promosi marketplace
+
+Buka dashboard reseller:
+
+```text
+https://DOMAIN-ANDA/reseller
+```
+
+Lalu pilih **Pengaturan → Banner Promosi Marketplace**.
+
+- Masukkan satu URL gambar pada setiap baris.
+- Ukuran gambar yang disarankan adalah **2,39:1**, contohnya 1195 × 500 px atau 1434 × 600 px.
+- Maksimal 10 gambar.
+- URL HTTPS publik dan link berbagi Google Drive didukung.
+- Atur perpindahan otomatis antara 3–15 detik.
+
+Banner akan bergeser otomatis ke kiri. Jika kolom banner dikosongkan, marketplace kembali menggunakan blok hero oranye bawaan.
+
+### QRIS dan detail pembayaran
+
+- Tombol **Unduh QRIS** tersedia di bawah gambar QR.
+- Jika jendela pembayaran ditutup, bubble **Detail Pembayaran** tetap muncul di bagian bawah.
+- Detail QRIS disimpan sementara di browser sampai invoice selesai, dibatalkan, atau kedaluwarsa.
+- Setelah halaman dibuka ulang pada perangkat dan browser yang sama, invoice aktif dapat dibuka lagi dari bubble tersebut.
+
+### Customer Service
+
+Isi **Link Customer Service** di Pengaturan Toko. Tombolnya akan muncul sebagai bubble **Hubungi CS** di kanan bawah marketplace.

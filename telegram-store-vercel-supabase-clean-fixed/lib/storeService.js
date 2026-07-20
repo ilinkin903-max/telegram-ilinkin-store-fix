@@ -37,6 +37,29 @@ function normalizePublicImageUrl(url) {
   return '';
 }
 
+function parseBannerUrls(value) {
+  let rows = [];
+  if (Array.isArray(value)) rows = value;
+  else {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) rows = parsed;
+      } catch (_) {}
+    }
+    if (!rows.length) rows = text.split(/\r?\n|;/g);
+  }
+  const unique = [];
+  for (const row of rows) {
+    const url = normalizePublicImageUrl(row);
+    if (url && !unique.includes(url)) unique.push(url);
+    if (unique.length >= 10) break;
+  }
+  return unique;
+}
+
 function variantStock(variant) {
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
@@ -122,12 +145,16 @@ async function getCatalog(viewer = null) {
   ]);
   const publicProducts = products.map((product) => sanitizeProduct(product, promos));
   const categories = [...new Set(publicProducts.map((product) => product.category || 'Lainnya'))].sort((a, b) => a.localeCompare(b, 'id'));
+  const bannerUrls = parseBannerUrls(settings.banner_urls || settings.banner_url);
+  const bannerIntervalSeconds = Math.max(3, Math.min(15, Number(settings.banner_interval_seconds || 5)));
   return {
     settings: {
       store_name: settings.store_name || config.botName || 'iLink.in Store',
       store_description: settings.store_description || 'Produk digital otomatis, cepat, dan praktis.',
       logo_url: normalizePublicImageUrl(settings.logo_url),
-      banner_url: normalizePublicImageUrl(settings.banner_url),
+      banner_url: bannerUrls[0] || '',
+      banner_urls: bannerUrls,
+      banner_interval_ms: bannerIntervalSeconds * 1000,
       customer_service_link: settings.customer_service_link || config.customerService || '',
       group_link: settings.group_link || config.channelStore || ''
     },
@@ -341,6 +368,7 @@ async function getHistory(user, limit = 20) {
 
 module.exports = {
   normalizePublicImageUrl,
+  parseBannerUrls,
   sanitizeProduct,
   getCatalog,
   createPayment,

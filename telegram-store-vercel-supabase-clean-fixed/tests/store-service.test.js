@@ -36,3 +36,21 @@ test('Varian publik hanya memuat jumlah stok, bukan kredensial', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(product.variants[0], 'stock_items'), false);
   assert.equal(JSON.stringify(product).includes('akun1'), false);
 });
+
+test('Daftar banner memproses beberapa URL dan menghapus duplikat', () => {
+  assert.deepEqual(
+    store.parseBannerUrls('https://example.com/a.jpg\nhttps://example.com/b.jpg\nhttps://example.com/a.jpg'),
+    ['https://example.com/a.jpg', 'https://example.com/b.jpg']
+  );
+});
+
+test('Daftar banner mendukung link Google Drive dan menolak URL tidak aman', () => {
+  assert.deepEqual(
+    store.parseBannerUrls([
+      'https://drive.google.com/file/d/1Banner_Test-99/view?usp=sharing',
+      'http://example.com/tidak-aman.jpg',
+      'javascript:alert(1)'
+    ]),
+    ['https://drive.google.com/uc?export=view&id=1Banner_Test-99']
+  );
+});

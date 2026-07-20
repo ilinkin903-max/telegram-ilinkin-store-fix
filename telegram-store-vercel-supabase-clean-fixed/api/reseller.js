@@ -210,10 +210,13 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
   <section id="settings" class="section">
     <div class="panel settingsPanel" id="settingsIdentityPanel">
-      <div class="sectionToolbar"><div><h2 class="sectionTitle">Pengaturan Toko</h2><p class="help">Identitas dan media /start berada di satu formulir agar tidak berulang.</p></div></div>
+      <div class="sectionToolbar"><div><h2 class="sectionTitle">Pengaturan Toko</h2><p class="help">Identitas, banner marketplace, dan media /start berada di satu formulir agar mudah dikelola.</p></div></div>
       <form id="settingsForm" class="form">
         <div class="field"><label class="label">Nama Toko</label><input class="input" name="store_name" placeholder="Contoh: iLink.in Store"></div>
         <div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup</label><input class="input" name="group_link" placeholder="https://t.me/grupkamu atau @grupkamu"></div></div>
+        <div class="formDivider"><b>Banner Promosi Marketplace</b></div>
+        <div class="field"><label class="label">URL Gambar Banner (ukuran 2,39:1)</label><textarea class="textarea" name="banner_urls" rows="5" placeholder="Masukkan 1 URL gambar per baris.&#10;https://domain.com/promo-1.jpg&#10;https://domain.com/promo-2.jpg"></textarea><p class="help">Bisa memakai URL HTTPS publik atau link Google Drive yang aksesnya sudah diatur “Siapa saja yang memiliki link”. Maksimal 10 gambar.</p></div>
+        <div class="field"><label class="label">Kecepatan Pergantian Banner</label><input class="input" type="number" name="banner_interval_seconds" min="3" max="15" step="1" value="5"><p class="help">Banner bergeser otomatis ke kiri setiap 3–15 detik.</p></div>
         <input type="hidden" name="store_description" value=""><input type="hidden" name="logo_url" value=""><input type="hidden" name="banner_url" value="">
         <div class="formDivider"><b>Media saat user membuka /start</b></div>
         <div class="row"><div class="field"><label class="label">Jenis Media</label><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="sticker">Stiker Telegram</option></select></div><div class="field"><label class="label">URL / File ID</label><input class="input" name="start_media_value" placeholder="URL HTTPS gambar atau file_id stiker"></div></div>
@@ -407,7 +410,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     }
     renderSettingsForm();
   }
-  function renderSettingsForm(){ var s=state.settings||{}; var f=document.getElementById('settingsForm'); if(!f) return; ['store_name','customer_service_link','group_link','start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(f[k]) f[k].value = s[k] || (k==='start_media_type'?'none':''); }); if(f.store_description) f.store_description.value=''; if(f.logo_url) f.logo_url.value=''; if(f.banner_url) f.banner_url.value=''; }
+  function renderSettingsForm(){ var s=state.settings||{}; var f=document.getElementById('settingsForm'); if(!f) return; ['store_name','customer_service_link','group_link','start_media_type','start_media_value','start_media_caption','banner_urls','banner_interval_seconds'].forEach(function(k){ if(!f[k]) return; var fallback=(k==='start_media_type'?'none':(k==='banner_interval_seconds'?'5':'')); f[k].value = s[k] || fallback; }); if(f.banner_urls && !String(f.banner_urls.value||'').trim() && s.banner_url) f.banner_urls.value=s.banner_url; if(f.store_description) f.store_description.value=''; if(f.logo_url) f.logo_url.value=''; if(f.banner_url) f.banner_url.value=''; }
   function daysLeftText(n){ n=Number(n); if(!isFinite(n)) return '-'; if(n<0) return 'Expired'; if(n===0) return 'Hari ini'; return n+' hari'; }
   function fmtLicenseDate(v){ if(!v) return '-'; try{return new Date(v).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',weekday:'long',day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return String(v);} }
   function renderLicense(){ var l=state.license||{}; var box=document.getElementById('licenseBox'); if(!box) return; var status=(l.enabled===false)?'Belum diaktifkan':(l.active?'Aktif':(l.status||'Tidak aktif')); var rows=[['Status',status],['Kode Aktivasi',l.license_code||l.code||'-'],['Bot','@'+(l.bot_username||'-')],['Paket',l.plan_name||'-'],['Masa Aktif Sampai',fmtLicenseDate(l.expires_at)],['Sisa Durasi',daysLeftText(l.days_left)],['Catatan',l.reason||'-']]; box.innerHTML=rows.map(function(r){return '<div class="detailItem"><b>'+esc(r[0])+'</b><br><span style="font-size:18px">'+esc(r[1])+'</span></div>';}).join(''); }
@@ -768,7 +771,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   };
   var addVariantToggle=document.getElementById('addVariantToggle'); if(addVariantToggle) addVariantToggle.onchange=toggleAddVariantBuilder;
   var addVariantRowBtn=document.getElementById('addVariantRow'); if(addVariantRowBtn) addVariantRowBtn.onclick=function(){ addVariantRow(); };
-  document.getElementById('settingsForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.store_description=''; d.logo_url=''; d.banner_url=''; await post('save-settings',d);};
+  document.getElementById('settingsForm').onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.store_description=''; d.logo_url=''; d.banner_url=''; d.banner_interval_seconds=Math.max(3,Math.min(15,Number(d.banner_interval_seconds||5))); await post('save-settings',d);};
   document.getElementById('broadcastForm').onsubmit=async function(e){
     e.preventDefault();
     var d=formDataRaw(e.target);

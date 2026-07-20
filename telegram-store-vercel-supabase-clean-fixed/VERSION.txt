@@ -1,9 +1,10 @@
-v50-marketplace-reseller-panel
+v51-marketplace-qris-banner-ui
 
-- Website auto order bergaya marketplace di halaman utama.
-- Checkout aman melalui Telegram Web App.
-- Pilihan produk, varian, jumlah, voucher, QRIS, countdown, dan riwayat pesanan.
-- Gambar URL HTTPS dan Google Drive share link.
-- Satu reseller dashboard khusus OWNER_ID.
-- Stok rahasia tidak pernah dikirim ke browser.
-- Pembayaran memakai webhook/watcher dan notifikasi PESANAN SELESAI tetap dipertahankan.
+- Tombol unduh QRIS.
+- Bubble detail pembayaran untuk membuka kembali invoice aktif.
+- Invoice aktif dipulihkan setelah halaman dibuka ulang pada browser yang sama.
+- Bubble Customer Service di kanan bawah.
+- Carousel banner promosi rasio 2,39:1, maksimal 10 gambar.
+- Pengaturan URL dan interval banner melalui dashboard reseller.
+- Label “Produk Pilihan” dan “mulai” dihapus.
+- Tidak membutuhkan SQL baru.

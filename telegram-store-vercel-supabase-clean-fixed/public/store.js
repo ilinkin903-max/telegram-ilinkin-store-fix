@@ -6,6 +6,7 @@
     try { tg.ready(); tg.expand(); } catch (_) {}
   }
   var initData = tg && tg.initData ? tg.initData : '';
+  var ACTIVE_PAYMENT_KEY = 'ilinkin_store_active_payment_v51';
   var state = {
     catalog: null,
     products: [],
@@ -16,15 +17,21 @@
     selectedProduct: null,
     selectedVariantKey: '',
     activePayment: null,
+    paymentStatus: 'idle',
+    paymentRestored: false,
     pollingTimer: null,
-    countdownTimer: null
+    countdownTimer: null,
+    bannerIndex: 0,
+    bannerTimer: null,
+    bannerInterval: 5000
   };
 
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     brandLogo: $('brandLogo'), brandName: $('brandName'), searchInput: $('searchInput'), clearSearch: $('clearSearch'),
     telegramNotice: $('telegramNotice'), hero: $('hero'), heroTitle: $('heroTitle'), heroDescription: $('heroDescription'),
-    customerServiceHero: $('customerServiceHero'), customerServiceFooter: $('customerServiceFooter'), groupFooter: $('groupFooter'),
+    heroCarousel: $('heroCarousel'), heroTrack: $('heroTrack'), heroDots: $('heroDots'),
+    customerServiceBubble: $('customerServiceBubble'), groupFooter: $('groupFooter'),
     footerStoreName: $('footerStoreName'), categoryList: $('categoryList'), productGrid: $('productGrid'), productSummary: $('productSummary'),
     emptyState: $('emptyState'), sortSelect: $('sortSelect'), resellerButton: $('resellerButton'), mobilePanel: $('mobilePanel'),
     productModal: $('productModal'), detailImage: $('detailImage'), detailCategory: $('detailCategory'), productModalTitle: $('productModalTitle'),
@@ -34,7 +41,8 @@
     quantityInput: $('quantityInput'), voucherInput: $('voucherInput'), estimatedTotal: $('estimatedTotal'), buyNowButton: $('buyNowButton'),
     paymentModal: $('paymentModal'), paymentPendingView: $('paymentPendingView'), paymentSuccessView: $('paymentSuccessView'),
     paymentExpiredView: $('paymentExpiredView'), paymentQr: $('paymentQr'), paymentCountdown: $('paymentCountdown'),
-    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), historyModal: $('historyModal'), historyList: $('historyList'),
+    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'),
+    paymentBubble: $('paymentBubble'), paymentBubbleText: $('paymentBubbleText'), historyModal: $('historyModal'), historyList: $('historyList'),
     historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast')
   };
 
@@ -85,10 +93,12 @@
   }
   function openModal(el) {
     el.classList.add('show'); el.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
+    if (el === els.paymentModal) updatePaymentBubble();
   }
   function closeModal(el) {
     el.classList.remove('show'); el.setAttribute('aria-hidden', 'true');
     if (!document.querySelector('.modal.show')) document.body.style.overflow = '';
+    if (el === els.paymentModal) updatePaymentBubble();
   }
   function telegramUrl() {
     var username = state.catalog && state.catalog.bot_username;
@@ -100,6 +110,7 @@
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.location.href = url;
   }
   function setLink(el, value) {
+    if (!el) return;
     if (!value) return el.classList.add('hidden');
     var url = String(value).trim();
     if (url.charAt(0) === '@') url = 'https://t.me/' + url.slice(1);
@@ -116,6 +127,60 @@
       fallback.textContent = String(productName || 'P').slice(0, 1).toUpperCase();
       parent.appendChild(fallback);
     };
+  }
+
+  function clearBannerTimer() {
+    if (state.bannerTimer) clearInterval(state.bannerTimer);
+    state.bannerTimer = null;
+  }
+  function goToBanner(index) {
+    var count = els.heroTrack ? els.heroTrack.children.length : 0;
+    if (!count) return;
+    state.bannerIndex = (Number(index) + count) % count;
+    els.heroTrack.style.transform = 'translateX(-' + (state.bannerIndex * 100) + '%)';
+    els.heroDots.querySelectorAll('.hero-dot').forEach(function (dot, dotIndex) {
+      dot.classList.toggle('active', dotIndex === state.bannerIndex);
+      dot.setAttribute('aria-current', dotIndex === state.bannerIndex ? 'true' : 'false');
+    });
+  }
+  function startBannerTimer() {
+    clearBannerTimer();
+    var count = els.heroTrack ? els.heroTrack.children.length : 0;
+    if (count < 2) return;
+    state.bannerTimer = setInterval(function () { goToBanner(state.bannerIndex + 1); }, state.bannerInterval);
+  }
+  function renderHeroBanners(settings) {
+    var banners = Array.isArray(settings.banner_urls) ? settings.banner_urls.filter(Boolean) : [];
+    if (!banners.length && settings.banner_url) banners = [settings.banner_url];
+    clearBannerTimer();
+    state.bannerIndex = 0;
+    if (!banners.length) {
+      els.hero.classList.remove('has-banners');
+      els.heroCarousel.classList.add('hidden');
+      els.heroTrack.innerHTML = '';
+      els.heroDots.innerHTML = '';
+      return;
+    }
+    state.bannerInterval = Math.max(3000, Math.min(15000, Number(settings.banner_interval_ms || 5000)));
+    els.heroTrack.innerHTML = banners.map(function (url, index) {
+      return '<div class="hero-slide"><img src="' + escapeHtml(url) + '" alt="Banner promosi ' + (index + 1) + '"></div>';
+    }).join('');
+    els.heroDots.innerHTML = banners.length > 1 ? banners.map(function (_, index) {
+      return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan banner ' + (index + 1) + '"></button>';
+    }).join('') : '';
+    els.heroDots.classList.toggle('hidden', banners.length < 2);
+    els.heroDots.querySelectorAll('[data-banner-index]').forEach(function (dot) {
+      dot.addEventListener('click', function () { goToBanner(Number(dot.dataset.bannerIndex)); startBannerTimer(); });
+    });
+    els.heroTrack.querySelectorAll('img').forEach(function (img) {
+      img.onerror = function () { img.style.display = 'none'; };
+    });
+    els.hero.classList.add('has-banners');
+    els.heroCarousel.classList.remove('hidden');
+    els.heroCarousel.onmouseenter = clearBannerTimer;
+    els.heroCarousel.onmouseleave = startBannerTimer;
+    goToBanner(0);
+    startBannerTimer();
   }
 
   function renderSkeletons() {
@@ -135,11 +200,8 @@
       els.brandLogo.innerHTML = '<img src="' + escapeHtml(settings.logo_url) + '" alt="Logo toko">';
       imageFallback(els.brandLogo.querySelector('img'), settings.store_name);
     }
-    if (settings.banner_url) {
-      els.hero.querySelector('.hero-overlay').style.backgroundImage = 'url("' + settings.banner_url.replace(/"/g, '%22') + '")';
-    }
-    setLink(els.customerServiceHero, settings.customer_service_link);
-    setLink(els.customerServiceFooter, settings.customer_service_link);
+    renderHeroBanners(settings);
+    setLink(els.customerServiceBubble, settings.customer_service_link);
     setLink(els.groupFooter, settings.group_link);
     var viewer = state.catalog.viewer || {};
     if (state.catalog.store_active === false) {
@@ -199,7 +261,7 @@
         '<span class="product-category">' + escapeHtml(product.category || 'Lainnya') + '</span>' +
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
-        '<div class="product-price"><strong>' + escapeHtml(productPriceText(product)) + '</strong>' + (product.variants.length ? '<small>mulai</small>' : '') + '</div>' +
+        '<div class="product-price"><strong>' + escapeHtml(productPriceText(product)) + '</strong></div>' +
         '<div class="card-promo-note">' + escapeHtml(promo) + '</div>' +
         '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? 'Beli Sekarang' : 'Stok Habis') + '</button></div>' +
       '</div></article>';
@@ -347,8 +409,31 @@
     if (state.countdownTimer) clearInterval(state.countdownTimer);
     state.pollingTimer = null; state.countdownTimer = null;
   }
-  function showPayment(payment) {
+  function saveActivePayment() {
+    if (!state.activePayment || state.paymentStatus !== 'pending') return;
+    try { localStorage.setItem(ACTIVE_PAYMENT_KEY, JSON.stringify(state.activePayment)); } catch (_) {}
+  }
+  function clearActivePaymentStorage() {
+    try { localStorage.removeItem(ACTIVE_PAYMENT_KEY); } catch (_) {}
+  }
+  function updatePaymentBubble() {
+    if (!els.paymentBubble) return;
+    var modalOpen = els.paymentModal.classList.contains('show');
+    var visible = Boolean(state.activePayment && state.paymentStatus === 'pending' && !modalOpen);
+    els.paymentBubble.classList.toggle('hidden', !visible);
+    if (visible) els.paymentBubbleText.textContent = state.activePayment.invoice + ' · ' + rupiah(state.activePayment.total);
+  }
+  function startPaymentTimers() {
     clearPaymentTimers();
+    updateCountdown();
+    if (state.paymentStatus !== 'pending') return;
+    state.countdownTimer = setInterval(updateCountdown, 1000);
+    state.pollingTimer = setInterval(function () { checkPayment(false); }, 5000);
+  }
+  function showPayment(payment, shouldOpen) {
+    state.activePayment = payment;
+    state.paymentStatus = 'pending';
+    saveActivePayment();
     els.paymentPendingView.classList.remove('hidden');
     els.paymentSuccessView.classList.add('hidden');
     els.paymentExpiredView.classList.add('hidden');
@@ -357,13 +442,39 @@
     els.watcherInfo.textContent = payment.watcher_scheduled
       ? 'Sistem memeriksa pembayaran otomatis. Tombol cek hanya sebagai cadangan.'
       : 'Webhook pembayaran tetap aktif. Gunakan tombol cek jika status belum berubah.';
-    openModal(els.paymentModal);
-    updateCountdown();
-    state.countdownTimer = setInterval(updateCountdown, 1000);
-    state.pollingTimer = setInterval(function () { checkPayment(false); }, 5000);
+    startPaymentTimers();
+    if (shouldOpen !== false) openModal(els.paymentModal);
+    updatePaymentBubble();
+  }
+  function restoreActivePayment() {
+    if (!state.catalog || !state.catalog.viewer || !state.catalog.viewer.telegram_ready) return;
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem(ACTIVE_PAYMENT_KEY) || 'null'); } catch (_) {}
+    if (!stored || !stored.invoice || !stored.qr_data_url || !stored.expires_at) return clearActivePaymentStorage();
+    if (new Date(stored.expires_at).getTime() <= Date.now()) return clearActivePaymentStorage();
+    showPayment(stored, false);
+    checkPayment(false);
+  }
+  async function downloadQr() {
+    if (!state.activePayment || !state.activePayment.qr_data_url) return toast('QRIS belum tersedia.', true);
+    var filename = 'QRIS-' + String(state.activePayment.invoice || 'pembayaran').replace(/[^a-z0-9_-]/gi, '-') + '.png';
+    var source = state.activePayment.qr_data_url;
+    var objectUrl = '';
+    try {
+      var response = await fetch(source);
+      if (!response.ok) throw new Error('QRIS tidak dapat diambil.');
+      objectUrl = URL.createObjectURL(await response.blob());
+      var link = document.createElement('a');
+      link.href = objectUrl; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+      toast('QRIS sedang diunduh.');
+    } catch (_) {
+      var fallback = document.createElement('a');
+      fallback.href = source; fallback.download = filename; fallback.target = '_blank'; document.body.appendChild(fallback); fallback.click(); fallback.remove();
+    }
   }
   function updateCountdown() {
-    if (!state.activePayment) return;
+    if (!state.activePayment || state.paymentStatus !== 'pending') return;
     var remaining = new Date(state.activePayment.expires_at).getTime() - Date.now();
     if (remaining <= 0) {
       els.paymentCountdown.textContent = '00:00'; clearPaymentTimers(); showExpiredPayment(); return;
@@ -372,12 +483,13 @@
     els.paymentCountdown.textContent = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
   }
   async function checkPayment(manual) {
-    if (!state.activePayment) return;
+    if (!state.activePayment || state.paymentStatus !== 'pending') return;
     try {
       var status = await api('order-status', { query: { invoice: state.activePayment.invoice } });
       if (status.status === 'completed') {
-        clearPaymentTimers();
+        clearPaymentTimers(); clearActivePaymentStorage(); state.paymentStatus = 'success'; updatePaymentBubble();
         els.paymentPendingView.classList.add('hidden'); els.paymentSuccessView.classList.remove('hidden'); els.paymentExpiredView.classList.add('hidden');
+        if (!els.paymentModal.classList.contains('show')) openModal(els.paymentModal);
         if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch (_) {}
         loadCatalog(false);
       } else if (status.status === 'expired' || status.status === 'not_found') {
@@ -386,14 +498,16 @@
     } catch (error) { if (manual) toast(error.message, true); }
   }
   function showExpiredPayment() {
+    clearActivePaymentStorage(); state.paymentStatus = 'expired'; updatePaymentBubble();
     els.paymentPendingView.classList.add('hidden'); els.paymentSuccessView.classList.add('hidden'); els.paymentExpiredView.classList.remove('hidden');
+    if (!els.paymentModal.classList.contains('show')) toast('Invoice pembayaran sudah kedaluwarsa.', true);
   }
   async function cancelPayment() {
     if (!state.activePayment) return closeModal(els.paymentModal);
     showLoading(true);
     try {
       await api('cancel-order', { body: { invoice: state.activePayment.invoice } });
-      clearPaymentTimers(); state.activePayment = null; closeModal(els.paymentModal); toast('Pesanan dibatalkan.');
+      clearPaymentTimers(); clearActivePaymentStorage(); state.activePayment = null; state.paymentStatus = 'idle'; updatePaymentBubble(); closeModal(els.paymentModal); toast('Pesanan dibatalkan.');
     } catch (error) { toast(error.message, true); }
     finally { showLoading(false); }
   }
@@ -427,6 +541,7 @@
       state.catalog = await api('catalog');
       state.products = state.catalog.products || [];
       applySettings(); renderCategories(); filterProducts();
+      if (!state.paymentRestored) { state.paymentRestored = true; restoreActivePayment(); }
     } catch (error) {
       els.productGrid.innerHTML = '';
       els.emptyState.classList.remove('hidden');
@@ -453,14 +568,17 @@
   els.quantityInput.addEventListener('input', updateProductEstimate);
   els.buyNowButton.addEventListener('click', startCheckout);
   $('checkPaymentButton').addEventListener('click', function () { checkPayment(true); });
+  els.downloadQrButton.addEventListener('click', downloadQr);
+  els.paymentBubble.addEventListener('click', function () { if (state.activePayment) showPayment(state.activePayment, true); });
   $('cancelPaymentButton').addEventListener('click', cancelPayment);
   $('paymentCloseButton').addEventListener('click', function () { closeModal(els.paymentModal); });
-  $('successDoneButton').addEventListener('click', function () { state.activePayment = null; closeModal(els.paymentModal); });
-  $('expiredDoneButton').addEventListener('click', function () { state.activePayment = null; closeModal(els.paymentModal); });
+  $('successDoneButton').addEventListener('click', function () { clearActivePaymentStorage(); state.activePayment = null; state.paymentStatus = 'idle'; updatePaymentBubble(); closeModal(els.paymentModal); });
+  $('expiredDoneButton').addEventListener('click', function () { clearActivePaymentStorage(); state.activePayment = null; state.paymentStatus = 'idle'; updatePaymentBubble(); closeModal(els.paymentModal); });
   window.addEventListener('keydown', function (event) {
     if (event.key !== 'Escape') return;
     if (els.productModal.classList.contains('show')) closeModal(els.productModal);
     else if (els.historyModal.classList.contains('show')) closeModal(els.historyModal);
+    else if (els.paymentModal.classList.contains('show')) closeModal(els.paymentModal);
   });
 
   loadCatalog(true);

@@ -42,6 +42,10 @@
       </section>
 
       <section id="hero" class="hero">
+        <div id="heroCarousel" class="hero-carousel hidden" aria-label="Banner promosi toko">
+          <div id="heroTrack" class="hero-track"></div>
+          <div id="heroDots" class="hero-dots" aria-label="Navigasi banner"></div>
+        </div>
         <div class="hero-overlay"></div>
         <div class="hero-content">
           <span class="hero-kicker">BELANJA PRODUK DIGITAL</span>
@@ -49,7 +53,6 @@
           <p id="heroDescription">Bayar dengan QRIS, sistem mendeteksi pembayaran, lalu produk dikirim otomatis ke Telegram.</p>
           <div class="hero-actions">
             <button id="shopNowButton" class="button button-light" type="button">Belanja Sekarang</button>
-            <a id="customerServiceHero" class="button button-ghost hidden" target="_blank" rel="noopener">Hubungi CS</a>
           </div>
         </div>
         <div class="hero-stat-card">
@@ -69,7 +72,6 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">KATALOG TOKO</p>
-            <h2>Produk Pilihan</h2>
             <p id="productSummary">Memuat produk...</p>
           </div>
           <label class="sort-control">
@@ -101,7 +103,6 @@
         <p>Marketplace produk digital dengan sistem auto order.</p>
       </div>
       <nav>
-        <a id="customerServiceFooter" class="hidden" target="_blank" rel="noopener">Customer Service</a>
         <a id="groupFooter" class="hidden" target="_blank" rel="noopener">Grup / Channel</a>
       </nav>
     </footer>
@@ -176,6 +177,7 @@
         <h2 id="paymentTitle">Scan QRIS untuk membayar</h2>
         <p class="payment-subtitle">Jangan tutup Telegram sampai pembayaran selesai.</p>
         <div class="qr-card"><img id="paymentQr" alt="QRIS pembayaran"></div>
+        <button id="downloadQrButton" class="button button-secondary qr-download-button" type="button">⬇ Unduh QRIS</button>
         <div class="countdown"><span>Sisa waktu</span><strong id="paymentCountdown">10:00</strong></div>
         <div id="paymentBreakdown" class="payment-breakdown"></div>
         <div class="payment-actions">
@@ -209,6 +211,16 @@
       <div id="historyList" class="history-list"></div>
     </section>
   </div>
+
+  <button id="paymentBubble" class="payment-bubble hidden" type="button" aria-label="Buka kembali detail pembayaran">
+    <span class="payment-bubble-icon">▦</span>
+    <span class="payment-bubble-copy"><strong>Detail Pembayaran</strong><small id="paymentBubbleText">Invoice aktif</small></span>
+    <span aria-hidden="true">›</span>
+  </button>
+
+  <a id="customerServiceBubble" class="customer-service-bubble hidden" target="_blank" rel="noopener" aria-label="Hubungi Customer Service">
+    <span aria-hidden="true">💬</span><strong>Hubungi CS</strong>
+  </a>
 
   <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite">
     <div class="spinner"></div><strong>Memproses...</strong>

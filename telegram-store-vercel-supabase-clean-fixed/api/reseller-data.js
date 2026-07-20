@@ -249,6 +249,8 @@ module.exports = async function handler(req, res) {
         store_description: body.store_description,
         logo_url: body.logo_url,
         banner_url: body.banner_url,
+        banner_urls: body.banner_urls,
+        banner_interval_seconds: body.banner_interval_seconds,
         start_media_type: body.start_media_type,
         start_media_value: body.start_media_value,
         start_media_caption: body.start_media_caption,
