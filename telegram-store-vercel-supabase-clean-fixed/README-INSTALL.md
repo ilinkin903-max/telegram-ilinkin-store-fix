@@ -1,4 +1,25 @@
-# Telegram Store Bot — v47
+# Telegram Store Bot — v48
+
+
+## Perbaikan deployment Vercel pada v48
+
+Versi v48 memperbaiki kegagalan saat tahap **Installing dependencies** dengan pesan:
+
+```text
+npm error Exit handler never called!
+Error: Command "npm install" exited with 1
+```
+
+Perbaikannya meliputi:
+
+- Node.js dikunci ke `20.x`, bukan lagi rentang `>=18` yang dapat otomatis memakai Node.js terbaru.
+- `@supabase/supabase-js` dan dependency utama dikunci ke versi yang kompatibel dengan Node.js 20.
+- Dependency pengembangan `vercel` dihapus dari proses instalasi produksi karena tidak dibutuhkan oleh Vercel saat deployment.
+- `package-lock.json` dibuat ulang hanya dengan dependency produksi.
+- Seluruh URL paket pada lockfile diarahkan ke registry resmi `https://registry.npmjs.org/`.
+- File `.npmrc` ditambahkan agar instalasi menggunakan registry npm resmi.
+
+Setelah mengunggah v48 ke GitHub, lakukan deployment baru dengan opsi **Redeploy without cache**.
 
 ## Pembayaran dan pengiriman produk otomatis
 
@@ -24,7 +45,7 @@ Perubahan ini **tidak memerlukan SQL atau kolom database baru**.
 
 ## Cara memasang
 
-1. Ekstrak ZIP v47.
+1. Ekstrak ZIP v48.
 2. Salin seluruh isi folder ke repository bot yang digunakan di Vercel.
 3. Tambahkan environment variable berikut di Vercel:
 
@@ -71,7 +92,7 @@ Jika aktif, responsnya berisi:
 {
   "ok": true,
   "message": "Webhook pembayaran Pakasir aktif.",
-  "version": "v47-auto-payment-webhook"
+  "version": "v48-build-install-fix"
 }
 ```
 

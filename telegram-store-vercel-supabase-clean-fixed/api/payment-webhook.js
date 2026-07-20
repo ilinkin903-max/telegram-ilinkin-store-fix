@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       message: 'Webhook pembayaran Pakasir aktif.',
-      version: 'v47-auto-payment-webhook'
+      version: 'v48-build-install-fix'
     });
   }
   if (req.method !== 'POST') {
