@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const { config, getMiniAppUrl } = require('./config');
 const tg = require('./telegram');
 const db = require('./db');
+const paymentService = require('./paymentService');
 const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
@@ -615,7 +616,7 @@ async function sendHelp(chatId, from) {
     `3. Atur jumlah pesanan\n` +
     `4. Klik Konfirmasi\n` +
     `5. Scan QRIS\n` +
-    `6. Setelah bayar, klik Saya Sudah Bayar\n` +
+    `6. Bayar sesuai nominal QRIS\n` +
     `7. Produk dikirim otomatis` + ownerLine;
   return tg.sendMessage(chatId, text, { parse_mode: 'Markdown' });
 }
@@ -1249,7 +1250,7 @@ async function createPayment(query) {
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
     `Expired: *10 menit*\n` +
     `=======================\n` +
-    `Setelah bayar, klik tombol *Saya Sudah Bayar*.`;
+    `Pembayaran akan terdeteksi otomatis. Produk langsung dikirim setelah status Pakasir menjadi berhasil. Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   return tg.sendPhoto(userId, buffer, {
@@ -1257,7 +1258,7 @@ async function createPayment(query) {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
-        [{ text: '✅ Saya Sudah Bayar', callback_data: `cekbayar:${invoiceRef}` }],
+        [{ text: '🔄 Cek Pembayaran Sekarang', callback_data: `cekbayar:${invoiceRef}` }],
         [{ text: '❌ Batal', callback_data: 'batalbeli' }]
       ]
     }
@@ -1265,62 +1266,15 @@ async function createPayment(query) {
 }
 
 
-async function sendOrderProductInvoiceMessage(userId, product, order, variant, dataProduk) {
-  const terms = variantTerms(product, variant);
-  const title = `${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}`;
-  const fee = Number(order.fee || 0);
-  const total = Number(order.amount || 0);
-  const subtotal = Math.max(0, total - fee);
-  const rawProduct = String(dataProduk || '').trim();
-  const productForMessage = rawProduct.length > 2800
-    ? rawProduct.slice(0, 2800) + '\n...\n(Data produk terlalu panjang, salin dari file backup/order log jika diperlukan.)'
-    : rawProduct;
-  const text = `✅ <b>PESANAN SELESAI</b>
-` +
-    `=======================
-` +
-    `Invoice: <b>${escapeHtml(order.invoice_ref || '-')}</b>
-` +
-    `Produk: <b>${escapeHtml(title)}</b>
-` +
-    `Harga: <b>${escapeHtml(formatRupiah(subtotal))}</b>
-` +
-    `Jumlah Beli: <b>${escapeHtml(order.quantity || 1)}</b>
-` +
-    `Fee: <b>${escapeHtml(formatRupiah(fee))}</b>
-` +
-    `Total Harga: <b>${escapeHtml(formatRupiah(total))}</b>
-` +
-    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>
-` +
-    `=======================
-
-` +
-    `<b>SYARAT & KETENTUAN</b>
-${escapeHtml(terms)}
-
-` +
-    `<b>PRODUK YANG DIDAPAT</b>
-<pre>${escapeHtml(productForMessage || '-')}</pre>
-` +
-    `Klik/tahan bagian data produk untuk menyalin. Jika tombol salin muncul, gunakan tombol tersebut.`;
-  const copyText = rawProduct;
-  const keyboard = copyText.length && copyText.length <= 256 ? {
-    inline_keyboard: [[{ text: '📋 Salin Produk', copy_text: { text: copyText } }]]
-  } : undefined;
-  try {
-    return await tg.sendMessage(userId, text, { parse_mode: 'HTML', reply_markup: keyboard });
-  } catch (error) {
-    console.error('Gagal kirim invoice + produk:', error.message);
-    return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
-  }
-}
-
 async function checkPayment(query, invoiceFromButton) {
   const userId = query.from.id;
   const order = await db.getPendingOrder(userId);
   if (!order || order.status !== 'awaiting_payment') {
-    return tg.answerCallbackQuery(query.id, { text: 'Tidak ada pembayaran aktif.', show_alert: true });
+    const existing = invoiceFromButton ? await db.getTransactionByOrderRef(invoiceFromButton).catch(() => null) : null;
+    return tg.answerCallbackQuery(query.id, {
+      text: existing ? 'Pembayaran sudah diproses dan produk telah dikirim.' : 'Tidak ada pembayaran aktif.',
+      show_alert: true
+    });
   }
   if (invoiceFromButton && order.invoice_ref && invoiceFromButton !== order.invoice_ref) {
     return tg.answerCallbackQuery(query.id, { text: 'Invoice tidak cocok.', show_alert: true });
@@ -1331,44 +1285,20 @@ async function checkPayment(query, invoiceFromButton) {
     return tg.sendMessage(userId, 'Pesananmu telah expired, harap pesan kembali!');
   }
 
-  const detail = await axios.get('https://app.pakasir.com/api/transactiondetail', {
-    params: {
-      project: config.pakasirSlug,
-      amount: order.amount,
-      order_id: order.invoice_ref,
-      api_key: config.pakasirApiKey
-    }
-  });
-  const status = detail.data?.transaction?.status;
-  if (status !== 'completed') {
-    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran belum masuk. Coba klik lagi beberapa saat setelah transfer.', show_alert: true });
+  const transaction = await paymentService.verifyPakasirTransaction(order);
+  if (transaction.status !== 'completed') {
+    return tg.answerCallbackQuery(query.id, {
+      text: 'Pembayaran belum masuk. Sistem tetap memeriksa otomatis melalui webhook Pakasir.',
+      show_alert: true
+    });
   }
 
-  const product = await db.getProductByCode(order.product_code);
-  const variant = selectedVariant(product, order);
-  const result = await db.completeOrder(order, product, order.amount, query.from);
-  const dataProduk = result.delivered.join('\n');
+  const result = await paymentService.fulfillPaidOrder({ order, buyer: query.from, source: 'manual-check' });
+  if (result.state === 'processing') {
+    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran sedang diproses otomatis. Produk akan segera dikirim.', show_alert: true });
+  }
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
-  await sendOrderProductInvoiceMessage(userId, product, order, variant, dataProduk);
-
-  if (config.channelLog) {
-    const fee = Number(order.fee || 0);
-    const total = Number(order.amount || 0);
-    const subtotal = Math.max(0, total - fee);
-    const username = query.from.username ? '@' + query.from.username : (query.from.first_name || String(query.from.id));
-    await tg.sendMessage(config.channelLog, `✅ PESANAN SELESAI\n` +
-      `=======================\n` +
-      `User: ${username}\n` +
-      `Trx ID: ${order.invoice_ref}\n` +
-      `Produk: ${product.nama}${order.variant_name ? ' - ' + order.variant_name : ''}\n` +
-      `Harga: ${formatRupiah(subtotal)}\n` +
-      `Jumlah Beli: ${order.quantity}\n` +
-      `Fee: ${formatRupiah(fee)}\n` +
-      `Total Harga: ${formatRupiah(total)}\n` +
-      `Tanggal: ${formatWIB(new Date())}`).catch(() => null);
-  }
-
   return sendHome(userId, query.from, null);
 }
 
@@ -1423,7 +1353,7 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
   if (cmd === 'caraorder') {
-    return editMessage(query, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk/varian\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Setelah bayar klik Saya Sudah Bayar\n7. Produk dikirim otomatis', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
+    return editMessage(query, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk/varian\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Bayar sesuai nominal QRIS\n7. Sistem mendeteksi pembayaran dan mengirim produk otomatis', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
   }
   if (cmd === 'kembaliawal') {
     await db.deletePendingOrder(query.from.id).catch(() => null);

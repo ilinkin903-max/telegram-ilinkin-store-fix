@@ -12,6 +12,7 @@ const config = {
   channelLog: required('CHANNEL_LOG', ''),
   pakasirSlug: required('PAKASIR_SLUG', ''),
   pakasirApiKey: required('PAKASIR_API_KEY', ''),
+  pakasirWebhookSecret: required('PAKASIR_WEBHOOK_SECRET', ''),
   supabaseUrl: required('SUPABASE_URL'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   publicUrl: required('PUBLIC_URL'),

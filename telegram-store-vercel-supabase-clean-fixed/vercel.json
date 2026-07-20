@@ -17,6 +17,10 @@
     {
       "source": "/webhook",
       "destination": "/api/telegram"
+    },
+    {
+      "source": "/payment-webhook",
+      "destination": "/api/payment-webhook"
     }
   ],
   "crons": [

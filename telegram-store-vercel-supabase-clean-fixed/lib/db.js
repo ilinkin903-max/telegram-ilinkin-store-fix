@@ -76,6 +76,13 @@ async function markClaimDone(rawKey, meta = {}) {
   return data;
 }
 
+async function releaseClaim(rawKey) {
+  const key = String(rawKey || '').trim().slice(0, 220);
+  if (!key) return;
+  const { error } = await sb().from('shop_settings').delete().eq('key', key);
+  if (error && !isMissingTableError(error)) console.error('releaseClaim gagal:', error.message || error);
+}
+
 
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 
@@ -678,6 +685,14 @@ async function getPendingOrder(telegramId) {
   return data;
 }
 
+async function getPendingOrderByInvoice(invoiceRef) {
+  const ref = String(invoiceRef || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('pending_orders').select('*').eq('invoice_ref', ref).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function deletePendingOrder(telegramId) {
   const { error } = await sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
   if (error) throw error;
@@ -775,7 +790,33 @@ async function listTransactionsByUser(telegramId, limit = 8) {
   return data || [];
 }
 
+async function getTransactionByOrderRef(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('transactions').select('*').eq('order_ref', ref).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getUserByTelegramId(telegramId) {
+  const { data, error } = await sb().from('bot_users').select('*').eq('telegram_id', Number(telegramId)).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function completeOrder(order, product, totalPrice, buyer = {}) {
+  // Webhook Pakasir dapat dikirim lebih dari sekali. Cek transaksi lebih dulu agar
+  // stok, statistik, dan voucher tidak diproses ulang untuk invoice yang sama.
+  const existingTransaction = await getTransactionByOrderRef(order.invoice_ref);
+  if (existingTransaction) {
+    return {
+      delivered: Array.isArray(existingTransaction.delivered_items)
+        ? existingTransaction.delivered_items
+        : String(existingTransaction.delivered_text || '').split('\n').filter(Boolean),
+      transaction: existingTransaction,
+      already_completed: true
+    };
+  }
   const quantity = Number(order.quantity || 1);
   let delivered = [];
   const updatePayload = { sold: Number(product.terjual || 0) + quantity, updated_at: new Date().toISOString() };
@@ -842,8 +883,10 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     if (promoMatch) await applyAutoPromoUsage(promoMatch[1]).catch(() => null);
     else await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
   }
-  await deletePendingOrder(order.telegram_id);
-  return { delivered, transaction };
+  // Pending order baru dihapus oleh paymentService setelah pesan produk berhasil
+  // dikirim. Bila Telegram sedang gangguan, webhook/manual check dapat mencoba
+  // mengirim ulang tanpa memotong stok lagi karena order_ref sudah tercatat.
+  return { delivered, transaction, already_completed: false };
 }
 
 
@@ -1418,6 +1461,7 @@ async function getDeepStats() {
 module.exports = {
   claimOnce,
   markClaimDone,
+  releaseClaim,
   upsertUser,
   getStats,
   ensureHistoricalStatsFromCurrentTransactions,
@@ -1440,6 +1484,7 @@ module.exports = {
   getAnalytics,
   upsertPendingOrder,
   getPendingOrder,
+  getPendingOrderByInvoice,
   deletePendingOrder,
   getVoucher,
   voucherIsValid,
@@ -1447,6 +1492,8 @@ module.exports = {
   applyVoucherUsage,
   listTransactions,
   listTransactionsByUser,
+  getTransactionByOrderRef,
+  getUserByTelegramId,
   completeOrder,
   normalizeBulkPrices,
   normalizeVariants,
