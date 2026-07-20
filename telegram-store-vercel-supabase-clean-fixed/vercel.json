@@ -1,7 +1,25 @@
 {
   "version": 2,
   "functions": {
-    "api/*.js": {
+    "api/telegram.js": {
+      "maxDuration": 300
+    },
+    "api/payment-webhook.js": {
+      "maxDuration": 60
+    },
+    "api/index.js": {
+      "maxDuration": 30
+    },
+    "api/reseller.js": {
+      "maxDuration": 30
+    },
+    "api/reseller-data.js": {
+      "maxDuration": 30
+    },
+    "api/set-webhook.js": {
+      "maxDuration": 30
+    },
+    "api/backup-cron.js": {
       "maxDuration": 30
     }
   },

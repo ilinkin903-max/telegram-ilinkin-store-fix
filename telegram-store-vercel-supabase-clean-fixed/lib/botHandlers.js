@@ -1253,7 +1253,7 @@ async function createPayment(query) {
     `Pembayaran akan terdeteksi otomatis. Produk langsung dikirim setelah status Pakasir menjadi berhasil. Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
-  return tg.sendPhoto(userId, buffer, {
+  const paymentMessage = await tg.sendPhoto(userId, buffer, {
     caption,
     parse_mode: 'Markdown',
     reply_markup: {
@@ -1263,6 +1263,19 @@ async function createPayment(query) {
       ]
     }
   });
+
+  // Selain webhook Pakasir, jalankan watcher latar belakang selama beberapa menit.
+  // Ini menjadi cadangan otomatis bila notifikasi webhook terlambat atau URL webhook
+  // di dashboard Pakasir belum tersimpan dengan benar.
+  const watcherScheduled = paymentService.schedulePaymentWatcher({
+    invoiceRef,
+    telegramId: userId
+  });
+  if (!watcherScheduled) {
+    console.warn(`Watcher pembayaran ${invoiceRef} tidak aktif; mengandalkan webhook Pakasir.`);
+  }
+
+  return paymentMessage;
 }
 
 

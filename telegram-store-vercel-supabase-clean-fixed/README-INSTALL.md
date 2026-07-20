@@ -1,141 +1,150 @@
-# Telegram Store Bot — v48
+# Telegram Store Bot — v49
 
+## Perbaikan pembayaran otomatis
 
-## Perbaikan deployment Vercel pada v48
+Versi v49 memakai dua jalur deteksi pembayaran:
 
-Versi v48 memperbaiki kegagalan saat tahap **Installing dependencies** dengan pesan:
+1. **Webhook Pakasir** sebagai jalur utama dan tercepat.
+2. **Watcher latar belakang Vercel** sebagai cadangan selama beberapa menit setelah QRIS dibuat.
+
+Dengan demikian, pembayaran yang berhasil dapat tetap terdeteksi walaupun notifikasi webhook terlambat atau pengaturan Webhook URL Pakasir belum tersimpan dengan benar.
+
+Sebelum produk dikirim, sistem tetap memeriksa ulang `project`, `order_id`, dan `amount` melalui Transaction Detail API Pakasir. Invoice yang sama hanya diproses satu kali sehingga stok, promo, voucher, dan transaksi tidak terpotong ganda.
+
+## Perubahan lain
+
+- Notifikasi channel log kembali menggunakan format:
 
 ```text
-npm error Exit handler never called!
-Error: Command "npm install" exited with 1
+✅ PESANAN SELESAI
+=======================
+User: @username
+Trx ID: ABC123
+Produk: Nama Produk - Varian
+Harga: Rp 35.000
+Jumlah Beli: 1
+Fee: Rp 26
+Total Harga: Rp 35.026
+Tanggal: Minggu, 19 Juli 2026 pukul 19.28
 ```
 
-Perbaikannya meliputi:
+- Tombol **Salin Produk** tidak lagi tampil dua kali. Produk tetap berada dalam blok kode Telegram yang sudah memiliki tombol salin bawaan.
+- Webhook menerima body JSON, body string JSON, dan `application/x-www-form-urlencoded`.
+- Nama project Pakasir dicocokkan tanpa terpengaruh huruf besar/kecil.
+- Secret webhook Pakasir dibuat opsional karena transaksi tetap diverifikasi ulang melalui API Pakasir.
 
-- Node.js dikunci ke `20.x`, bukan lagi rentang `>=18` yang dapat otomatis memakai Node.js terbaru.
-- `@supabase/supabase-js` dan dependency utama dikunci ke versi yang kompatibel dengan Node.js 20.
-- Dependency pengembangan `vercel` dihapus dari proses instalasi produksi karena tidak dibutuhkan oleh Vercel saat deployment.
-- `package-lock.json` dibuat ulang hanya dengan dependency produksi.
-- Seluruh URL paket pada lockfile diarahkan ke registry resmi `https://registry.npmjs.org/`.
-- File `.npmrc` ditambahkan agar instalasi menggunakan registry npm resmi.
-
-Setelah mengunggah v48 ke GitHub, lakukan deployment baru dengan opsi **Redeploy without cache**.
-
-## Pembayaran dan pengiriman produk otomatis
-
-Versi ini menambahkan webhook pembayaran Pakasir. Setelah pembeli berhasil membayar QRIS:
-
-1. Pakasir mengirim notifikasi ke `/api/payment-webhook`.
-2. Bot mencocokkan `project`, `order_id`, dan `amount` dengan pesanan di Supabase.
-3. Bot memeriksa ulang status transaksi melalui Transaction Detail API Pakasir.
-4. Jika status benar-benar `completed`, stok dipotong satu kali.
-5. Produk dan invoice langsung dikirim ke Telegram pembeli tanpa harus menekan tombol.
-
-Tombol **Cek Pembayaran Sekarang** tetap tersedia sebagai cadangan jika webhook terlambat.
-
-### Perlindungan transaksi ganda
-
-- Webhook dan tombol pengecekan memakai kunci proses invoice yang sama.
-- Invoice yang sudah tercatat di tabel `transactions` tidak memotong stok, promo, atau voucher untuk kedua kalinya.
-- Pesanan belum dihapus sebelum pesan produk berhasil dikirim.
-- Jika Telegram atau Supabase sedang mengalami gangguan sementara, webhook dapat mencoba ulang tanpa mengirim stok dua kali.
-- Pesan produk dan log owner mempunyai pengaman agar tidak terkirim berulang untuk invoice yang sama.
-
-Perubahan ini **tidak memerlukan SQL atau kolom database baru**.
+Perubahan ini tidak memerlukan SQL atau kolom database baru.
 
 ## Cara memasang
 
-1. Ekstrak ZIP v48.
-2. Salin seluruh isi folder ke repository bot yang digunakan di Vercel.
-3. Tambahkan environment variable berikut di Vercel:
+1. Ekstrak ZIP v49.
+2. Unggah seluruh isi folder ke repository GitHub bot Anda dan timpa file lama.
+3. Pastikan Environment Variables berikut tersedia di Vercel:
 
 ```text
 PAKASIR_SLUG=slug_proyek_pakasir
 PAKASIR_API_KEY=api_key_proyek_pakasir
-PAKASIR_WEBHOOK_SECRET=buat_teks_acak_rahasia_tanpa_spasi
+PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
+WEBHOOK_SECRET=rahasia_webhook_telegram
 ```
 
-4. Commit dan push ke GitHub.
-5. Tunggu deployment Vercel berstatus **Ready**.
-6. Pasang ulang webhook Telegram:
+Variabel berikut opsional:
+
+```text
+PAKASIR_WEBHOOK_SECRET=rahasia_webhook_pembayaran
+PAKASIR_WEBHOOK_REQUIRE_SECRET=false
+```
+
+4. Commit dan tunggu deployment Vercel berstatus **Ready**.
+5. Pasang ulang webhook Telegram:
 
 ```text
 https://DOMAIN-VERCEL-ANDA/api/set-webhook?secret=WEBHOOK_SECRET
 ```
 
-7. Masuk ke dashboard Pakasir → buka proyek yang dipakai → **Edit Proyek**.
-8. Isi **Webhook URL** dengan:
+6. Di dashboard Pakasir, buka proyek → **Edit Proyek** → isi Webhook URL.
 
-```text
-https://DOMAIN-VERCEL-ANDA/api/payment-webhook?secret=PAKASIR_WEBHOOK_SECRET
-```
-
-Contoh:
-
-```text
-https://ilinkin-store.vercel.app/api/payment-webhook?secret=rahasia-acak-123
-```
-
-Nilai setelah `secret=` harus sama persis dengan `PAKASIR_WEBHOOK_SECRET` di Vercel.
-
-## Pemeriksaan endpoint
-
-Buka URL berikut melalui browser:
+### Rekomendasi paling sederhana
 
 ```text
 https://DOMAIN-VERCEL-ANDA/api/payment-webhook
 ```
 
-Jika aktif, responsnya berisi:
+Dengan nilai:
+
+```text
+PAKASIR_WEBHOOK_REQUIRE_SECRET=false
+```
+
+### Mode secret ketat
+
+Gunakan hanya bila Anda yakin query parameter tersimpan utuh di dashboard Pakasir:
+
+```text
+https://DOMAIN-VERCEL-ANDA/api/payment-webhook?secret=RAHASIA_ANDA
+```
+
+Lalu atur:
+
+```text
+PAKASIR_WEBHOOK_SECRET=RAHASIA_ANDA
+PAKASIR_WEBHOOK_REQUIRE_SECRET=true
+```
+
+Nilai secret harus sama persis dan tidak boleh memiliki spasi atau tanda kutip.
+
+## Pemeriksaan endpoint
+
+Buka:
+
+```text
+https://DOMAIN-VERCEL-ANDA/api/payment-webhook
+```
+
+Respons yang benar akan memuat versi v49 dan status konfigurasi tanpa menampilkan API key:
 
 ```json
 {
   "ok": true,
   "message": "Webhook pembayaran Pakasir aktif.",
-  "version": "v48-build-install-fix"
+  "version": "v49-auto-payment-watcher-webhook-fix",
+  "configuration": {
+    "projectConfigured": true,
+    "apiKeyConfigured": true,
+    "webhookSecretConfigured": true,
+    "webhookSecretRequired": false
+  }
 }
 ```
 
 ## Cara menguji
 
-### Mode sandbox Pakasir
+1. Buat satu produk uji dengan stok kecil.
+2. Buat pesanan sampai QRIS tampil.
+3. Bayar sesuai **Total Bayar**, termasuk fee unik.
+4. Jangan tekan tombol **Cek Pembayaran Sekarang**.
+5. Tunggu beberapa detik. Webhook atau watcher akan memeriksa status dan mengirim produk.
+6. Periksa channel log. Pesan harus memakai judul **PESANAN SELESAI**.
 
-1. Buat pesanan melalui bot sampai QRIS tampil.
-2. Salin `order_id`/invoice dan nominal transaksi.
-3. Gunakan fitur simulasi pembayaran pada proyek Pakasir yang masih berada dalam mode sandbox.
-4. Setelah status menjadi `completed`, bot harus langsung mengirim produk ke pembeli.
+## Jika belum terkirim
 
-### Mode produksi
+Periksa **Vercel → Project → Logs** dan cari salah satu keterangan berikut:
 
-1. Gunakan produk uji dengan harga dan stok kecil.
-2. Lakukan pembayaran sesuai nominal QRIS hingga berhasil.
-3. Jangan menekan tombol pengecekan terlebih dahulu.
-4. Produk seharusnya terkirim otomatis setelah webhook diterima dan diverifikasi.
+- `Webhook Pakasir ditolak`
+- `payment webhook error`
+- `Background payment watcher error`
+- `Detail transaksi Pakasir tidak cocok dengan invoice lokal`
+- `Konfigurasi Pakasir belum lengkap`
 
-## Catatan penting
+Pastikan juga:
 
-- Jangan memakai URL `/api/telegram` sebagai webhook Pakasir. Gunakan `/api/payment-webhook`.
-- Jangan membagikan `PAKASIR_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, atau `PAKASIR_WEBHOOK_SECRET`.
-- Nominal pembayaran harus sama persis dengan nominal invoice, termasuk fee unik.
-- Jika produk tidak terkirim, periksa **Vercel → Deployment → Functions Logs** dan pastikan Webhook URL proyek Pakasir sudah benar.
-- Jika status endpoint aktif tetapi webhook belum masuk, simpan ulang konfigurasi Webhook URL pada proyek Pakasir.
+- `PAKASIR_SLUG` benar-benar sama dengan slug proyek Pakasir;
+- `PAKASIR_API_KEY` berasal dari proyek yang sama;
+- nominal dibayar sama dengan Total Bayar;
+- deployment Production menggunakan Environment Variables terbaru;
+- Fluid Compute Vercel tetap aktif agar watcher latar belakang dapat berjalan;
+- fungsi `api/telegram.js` memiliki Maximum Duration 300 detik dari `vercel.json`.
 
-## Perbaikan versi sebelumnya yang tetap tersedia
+## Deployment
 
-- Promo otomatis dan voucher manual untuk produk atau varian tertentu.
-- Promo/voucher expired tampil OFF.
-- Broadcast gambar, stiker, teks, dan polling.
-- Tampilan Produk dan Users responsif pada perangkat mobile.
-- Mini App telah disederhanakan agar menu tidak dobel dan lebih mudah dipahami.
-
-## Pengujian paket
-
-Paket telah diperiksa dengan:
-
-- pemeriksaan sintaks seluruh file JavaScript;
-- validasi handler webhook pembayaran;
-- validasi kecocokan project, invoice, dan nominal;
-- pengaman transaksi invoice ganda;
-- 11 pengujian otomatis untuk pembayaran, promo, voucher, waktu WIB, dan target varian.
-
-Integrasi langsung tetap perlu diuji menggunakan proyek Pakasir, Telegram, Supabase, dan Vercel milik Anda.
+Node.js tetap dikunci ke `20.x`. Bila pernah mengalami error instalasi npm, lakukan **Redeploy without cache**.

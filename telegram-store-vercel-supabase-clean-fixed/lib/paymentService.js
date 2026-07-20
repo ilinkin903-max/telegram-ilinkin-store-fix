@@ -4,12 +4,26 @@ const db = require('./db');
 const tg = require('./telegram');
 const { formatRupiah, formatWIB } = require('./utils');
 
+function getVercelWaitUntil() {
+  const symbol = Symbol.for('@vercel/request-context');
+  const context = globalThis?.[symbol]?.get?.() || {};
+  return typeof context.waitUntil === 'function' ? context.waitUntil.bind(context) : null;
+}
+
 function escapeHtml(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function normalizedText(value) {
+  return String(value == null ? '' : value).trim();
+}
+
+function sameProject(left, right) {
+  return normalizedText(left).toLowerCase() === normalizedText(right).toLowerCase();
 }
 
 function variantKey(variant, index = 0) {
@@ -31,14 +45,16 @@ function variantTerms(product, variant) {
 }
 
 function normalizePakasirTransaction(payload = {}) {
-  const trx = payload?.transaction || payload?.payment || payload || {};
+  const root = payload && typeof payload === 'object' ? payload : {};
+  const data = root?.data && typeof root.data === 'object' ? root.data : null;
+  const trx = root?.transaction || root?.payment || data?.transaction || data?.payment || data || root || {};
   return {
-    order_id: String(trx.order_id || '').trim(),
-    project: String(trx.project || '').trim(),
-    amount: Number(trx.amount || 0),
-    status: String(trx.status || '').trim().toLowerCase(),
-    payment_method: String(trx.payment_method || '').trim(),
-    completed_at: trx.completed_at || null
+    order_id: normalizedText(trx.order_id || trx.orderId || trx.invoice || trx.reference),
+    project: normalizedText(trx.project || trx.project_slug || trx.slug),
+    amount: Number(trx.amount || trx.total || trx.nominal || 0),
+    status: normalizedText(trx.status || trx.payment_status || trx.state).toLowerCase(),
+    payment_method: normalizedText(trx.payment_method || trx.method || trx.channel),
+    completed_at: trx.completed_at || trx.paid_at || null
   };
 }
 
@@ -46,7 +62,9 @@ function validateWebhookPayload(payload = {}, expectedProject = config.pakasirSl
   const trx = normalizePakasirTransaction(payload);
   if (!trx.order_id) return { ok: false, reason: 'order_id kosong', transaction: trx };
   if (!Number.isFinite(trx.amount) || trx.amount <= 0) return { ok: false, reason: 'amount tidak valid', transaction: trx };
-  if (expectedProject && trx.project !== String(expectedProject)) return { ok: false, reason: 'project tidak cocok', transaction: trx };
+  if (expectedProject && !sameProject(trx.project, expectedProject)) {
+    return { ok: false, reason: 'project tidak cocok', transaction: trx };
+  }
   return { ok: true, transaction: trx };
 }
 
@@ -54,9 +72,9 @@ function paymentMatchesOrder(transaction, order) {
   return Boolean(
     transaction &&
     order &&
-    String(transaction.order_id) === String(order.invoice_ref || '') &&
+    normalizedText(transaction.order_id) === normalizedText(order.invoice_ref) &&
     Number(transaction.amount) === Number(order.amount || 0) &&
-    (!config.pakasirSlug || String(transaction.project) === String(config.pakasirSlug))
+    (!config.pakasirSlug || sameProject(transaction.project, config.pakasirSlug))
   );
 }
 
@@ -128,16 +146,9 @@ async function sendOrderReceipt(userId, order, product, transaction, delivered) 
     `<b>PRODUK YANG DIDAPAT</b>\n<pre>${escapeHtml(productForMessage || '-')}</pre>\n` +
     `Pembayaran terdeteksi otomatis dan produk sudah dikirim.`;
 
-  const keyboard = rawProduct.length && rawProduct.length <= 256
-    ? { inline_keyboard: [[{ text: '📋 Salin Produk', copy_text: { text: rawProduct } }]] }
-    : undefined;
-
-  try {
-    return await tg.sendMessage(userId, text, { parse_mode: 'HTML', reply_markup: keyboard });
-  } catch (error) {
-    console.error('Gagal kirim invoice otomatis:', error.message);
-    return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
-  }
+  // Telegram sudah menyediakan tombol salin bawaan pada blok <pre> produk.
+  // Karena itu tombol inline "Salin Produk" dihapus agar tidak tampil dobel.
+  return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
 async function sendOwnerLog(order, product, transaction, buyer = {}) {
@@ -152,16 +163,16 @@ async function sendOwnerLog(order, product, transaction, buyer = {}) {
     const productName = transaction?.product_name || product?.nama || order?.product_code || '-';
     const variantName = transaction?.variant_name || order?.variant_name || '';
     await tg.sendMessage(config.channelLog,
-      `✅ PEMBAYARAN OTOMATIS BERHASIL\n` +
+      `✅ PESANAN SELESAI\n` +
       `=======================\n` +
       `User: ${username}\n` +
       `Trx ID: ${transaction?.order_ref || order?.invoice_ref || '-'}\n` +
       `Produk: ${productName}${variantName ? ' - ' + variantName : ''}\n` +
       `Harga: ${formatRupiah(subtotal)}\n` +
-      `Jumlah: ${Number(transaction?.quantity || order?.quantity || 1)}\n` +
+      `Jumlah Beli: ${Number(transaction?.quantity || order?.quantity || 1)}\n` +
       `Fee: ${formatRupiah(fee)}\n` +
-      `Total: ${formatRupiah(total)}\n` +
-      `Sumber: webhook Pakasir / pengecekan otomatis`
+      `Total Harga: ${formatRupiah(total)}\n` +
+      `Tanggal: ${formatWIB(new Date())}`
     );
   } catch (error) {
     console.error('Gagal kirim log pembayaran:', error.message);
@@ -199,8 +210,8 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     }
 
     await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
-    // Hapus pesanan segera setelah produk berhasil dikirim. Webhook duplikat berikutnya
-    // akan menemukan transaksi yang sudah selesai dan tidak mengirim produk ulang.
+    // Hapus pesanan segera setelah produk berhasil dikirim. Webhook/watcher duplikat
+    // berikutnya akan menemukan transaksi selesai dan tidak memotong stok ulang.
     await db.deletePendingOrder(order.telegram_id);
     await sendOwnerLog(order, product, result.transaction, currentBuyer);
     await db.markClaimDone(processKey, { invoice, source, state: 'completed' });
@@ -217,11 +228,88 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function watchPendingPayment({ invoiceRef, telegramId, maxWaitMs = 235000, intervalMs = 10000 } = {}) {
+  const invoice = normalizedText(invoiceRef);
+  if (!invoice) return { ok: false, state: 'invalid_invoice' };
+
+  const watchKey = `payment_watch:${invoice}`;
+  const ttlSeconds = Math.ceil(Number(maxWaitMs || 235000) / 1000) + 60;
+  const claimed = await db.claimOnce(watchKey, ttlSeconds, { invoice, telegramId, source: 'background-watcher' });
+  if (!claimed) return { ok: true, state: 'watcher_exists' };
+
+  const deadline = Date.now() + Math.max(10000, Number(maxWaitMs || 235000));
+  let lastError = null;
+
+  // Beri waktu Pakasir membuat transaksi sebelum pengecekan pertama.
+  await sleep(4000);
+
+  while (Date.now() < deadline) {
+    const order = await db.getPendingOrderByInvoice(invoice).catch((error) => {
+      lastError = error;
+      return null;
+    });
+
+    if (!order) {
+      await db.markClaimDone(watchKey, { invoice, state: 'pending_order_missing' }).catch(() => null);
+      return { ok: true, state: 'pending_order_missing' };
+    }
+    if (telegramId && Number(order.telegram_id) !== Number(telegramId)) {
+      await db.markClaimDone(watchKey, { invoice, state: 'buyer_mismatch' }).catch(() => null);
+      return { ok: false, state: 'buyer_mismatch' };
+    }
+
+    try {
+      const transaction = await verifyPakasirTransaction(order);
+      if (transaction.status === 'completed') {
+        const result = await fulfillPaidOrder({ order, source: 'background-watcher' });
+        await db.markClaimDone(watchKey, { invoice, state: result.state || 'completed' }).catch(() => null);
+        return result;
+      }
+      if (['cancelled', 'canceled', 'expired', 'failed'].includes(transaction.status)) {
+        await db.markClaimDone(watchKey, { invoice, state: transaction.status }).catch(() => null);
+        return { ok: true, state: transaction.status };
+      }
+    } catch (error) {
+      lastError = error;
+      // Gangguan API sesaat tidak menghentikan watcher; coba lagi sampai batas waktu.
+    }
+
+    await sleep(Math.max(5000, Number(intervalMs || 10000)));
+  }
+
+  if (lastError) console.warn(`Watcher pembayaran ${invoice} berakhir:`, lastError.message || lastError);
+  await db.markClaimDone(watchKey, { invoice, state: 'watch_timeout' }).catch(() => null);
+  return { ok: true, state: 'watch_timeout' };
+}
+
+function schedulePaymentWatcher(options = {}) {
+  try {
+    const waitUntil = getVercelWaitUntil();
+    if (!waitUntil) return false;
+    waitUntil(
+      watchPendingPayment(options).catch((error) => {
+        console.error('Background payment watcher error:', error.message || error);
+      })
+    );
+    return true;
+  } catch (error) {
+    console.warn('Payment watcher tidak dapat dijadwalkan:', error.message || error);
+    return false;
+  }
+}
+
 module.exports = {
   normalizePakasirTransaction,
   validateWebhookPayload,
   paymentMatchesOrder,
   verifyPakasirTransaction,
   fulfillPaidOrder,
-  sendOrderReceipt
+  sendOrderReceipt,
+  sendOwnerLog,
+  watchPendingPayment,
+  schedulePaymentWatcher
 };

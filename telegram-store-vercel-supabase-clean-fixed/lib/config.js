@@ -13,6 +13,7 @@ const config = {
   pakasirSlug: required('PAKASIR_SLUG', ''),
   pakasirApiKey: required('PAKASIR_API_KEY', ''),
   pakasirWebhookSecret: required('PAKASIR_WEBHOOK_SECRET', ''),
+  pakasirWebhookRequireSecret: process.env.PAKASIR_WEBHOOK_REQUIRE_SECRET === 'true',
   supabaseUrl: required('SUPABASE_URL'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   publicUrl: required('PUBLIC_URL'),
