@@ -250,6 +250,7 @@ module.exports = async function handler(req, res) {
         logo_url: body.logo_url,
         banner_url: body.banner_url,
         banner_urls: body.banner_urls,
+        banner_items: body.banner_items,
         banner_interval_seconds: body.banner_interval_seconds,
         start_media_type: body.start_media_type,
         start_media_value: body.start_media_value,
@@ -268,6 +269,7 @@ module.exports = async function handler(req, res) {
       const snk = String(body.snk || '').trim();
       const image_url = String(body.image_url || '').trim();
       const category = String(body.category || body.kategori || '').trim();
+      const display_scope = String(body.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
       const bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
       const variants = parseVariantPayload(body);
       const hasVariants = variants.length > 0;
@@ -275,7 +277,7 @@ module.exports = async function handler(req, res) {
       const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
       const finalSnk = snk || (hasVariants ? (variants[0].snk || 'Syarat mengikuti varian yang dipilih.') : '');
       if (!nama || !kode || !finalHarga || !finalDeskripsi || !finalSnk) return json(res, 400, { ok: false, error: hasVariants ? 'Nama, kode, dan minimal satu varian dengan harga wajib diisi.' : 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga: finalHarga, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, bulk_prices, variants, data: splitStock(body.stock_text || '') });
+      const product = await db.addProduct({ nama, kode, harga: finalHarga, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, bulk_prices, variants, data: splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 
@@ -317,7 +319,7 @@ module.exports = async function handler(req, res) {
       const code = String(body.current_code || body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
       const updates = {};
-      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category', 'display_scope'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
       if (body.active !== undefined) updates.active = boolOf(body.active);
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);

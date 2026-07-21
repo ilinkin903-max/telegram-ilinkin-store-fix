@@ -1,44 +1,75 @@
-# Pengaturan Singkat Marketplace
+# Pengaturan Marketplace v52
 
-Gunakan nilai berikut untuk domain Anda:
+## 1. Jalankan SQL upgrade
+
+Buka Supabase SQL Editor dan jalankan:
 
 ```text
-PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
-STORE_URL=https://telegram-ilinkin-store-fix.vercel.app
-MINIAPP_URL=https://telegram-ilinkin-store-fix.vercel.app/reseller
+supabase/update-v52-marketplace.sql
 ```
 
-Setelah deploy:
+Lakukan ini sebelum mengubah visibilitas produk atau mencoba unduh QRIS.
 
-1. Buka `https://telegram-ilinkin-store-fix.vercel.app/` untuk melihat katalog publik.
-2. Kirim `/start` ke bot untuk membuka marketplace sebagai Telegram Web App.
-3. Checkout hanya dapat dilakukan dari Telegram agar sistem mengetahui `telegram_id` tujuan pengiriman produk.
-4. Buka `/reseller` dari tombol owner untuk mengelola produk, stok, promo, voucher, dan penjualan.
-5. Isi `image_url` produk dengan URL HTTPS atau link berbagi Google Drive publik.
+## 2. Logo Marketplace
 
-## Mengatur banner promosi v51
+Buka:
 
-1. Buka `/reseller` melalui Telegram pemilik.
-2. Pilih menu **Pengaturan**.
-3. Cari bagian **Banner Promosi Marketplace**.
-4. Tempel satu URL gambar per baris.
-5. Gunakan rasio **2,39:1** agar gambar tidak terpotong.
-6. Tentukan kecepatan 3–15 detik, lalu tekan **Simpan Pengaturan**.
+```text
+/reseller → Pengaturan → Logo Marketplace
+```
+
+Isi **Link Logo** dengan URL HTTPS publik atau link Google Drive publik.
+
+## 3. Banner Promosi
+
+Pada bagian **Banner Promosi Marketplace** tekan **+ Tambah**.
+
+Setiap baris memiliki:
+
+```text
+Nama Banner | URL Gambar | ×
+```
 
 Contoh:
 
 ```text
-https://domain-anda.com/banner-promo-1.jpg
-https://domain-anda.com/banner-promo-2.jpg
-https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+Promo Canva       | https://domain.com/canva.jpg
+Diskon ChatGPT    | https://domain.com/chatgpt.jpg
+Promo Gemini      | https://drive.google.com/file/d/FILE_ID/view?usp=sharing
 ```
 
-Untuk Google Drive, pastikan izin file adalah **Siapa saja yang memiliki link — Pelihat**.
+Gunakan rasio gambar **2,39:1**. Maksimal 10 banner.
 
-## Menguji detail pembayaran
+## 4. Produk Marketplace saja
 
-1. Buat transaksi baru sampai QRIS muncul.
-2. Tekan **Unduh QRIS** untuk menyimpan gambar QR.
-3. Tutup jendela QRIS menggunakan tombol ×.
-4. Pastikan bubble **Detail Pembayaran** muncul di bawah.
-5. Tekan bubble untuk menampilkan QRIS dan rincian invoice kembali.
+Saat **Tambah Produk** atau **Edit Produk**, cari pilihan **Tampilkan Produk Di**.
+
+- **Bot Telegram + Marketplace**: tampil di kedua kanal.
+- **Marketplace saja**: tidak tampil di daftar produk pembeli pada bot Telegram.
+
+## 5. Promo dan varian
+
+Jika promo berlaku untuk satu varian tertentu, Marketplace akan menampilkan harga asli dicoret dan harga promo tepat pada blok varian tersebut.
+
+Contoh:
+
+```text
+18 Bulan Invite
+Rp 45.000  → dicoret
+Rp 16.500
+Diskon Invite · hemat Rp 28.500
+```
+
+Harga final saat checkout tetap dihitung ulang oleh server agar voucher/promo, jumlah beli, dan harga grosir tetap tervalidasi.
+
+## 6. Unduh QRIS
+
+Setelah v52 terpasang, buat **invoice baru**.
+
+1. Buka Marketplace dari Telegram.
+2. Pilih produk dan buat pembayaran.
+3. Saat QRIS muncul, tekan **⬇ Unduh QRIS**.
+4. Telegram akan menampilkan permintaan download native pada versi yang mendukung fitur tersebut.
+5. Pada browser/fallback, file PNG dibuka atau diunduh langsung dari endpoint server.
+
+Invoice yang dibuat sebelum v52 tidak memiliki payload QRIS di database, sehingga buat transaksi baru saat pengujian.

@@ -26,3 +26,39 @@ test('label Produk Pilihan dan mulai sudah dihapus dari kartu produk', () => {
   assert.doesNotMatch(html, /Produk Pilihan/i);
   assert.doesNotMatch(js, /<small>mulai<\/small>/i);
 });
+
+test('v52 memakai tema biru dan mendukung logo URL', () => {
+  const css = fs.readFileSync(path.join(root, 'public', 'store.css'), 'utf8');
+  assert.match(css, /--primary:\s*#1769e0/i);
+  assert.match(reseller, /name="logo_url"/);
+  assert.match(js, /settings\.logo_url/);
+});
+
+test('dashboard banner memakai baris nama + link dengan tambah dan hapus', () => {
+  assert.match(reseller, /id="addBannerRow"/);
+  assert.match(reseller, /data-banner-name/);
+  assert.match(reseller, /data-banner-url/);
+  assert.match(reseller, /data-remove-banner/);
+  assert.match(reseller, /name="banner_items"/);
+});
+
+test('produk bisa dipilih untuk bot+marketplace atau marketplace saja', () => {
+  assert.match(reseller, /name="display_scope"/);
+  assert.match(reseller, /Bot Telegram \+ Marketplace/);
+  assert.match(reseller, /Marketplace saja/);
+});
+
+test('marketplace menampilkan harga promo dicoret dan promo varian', () => {
+  assert.match(js, /<del>/);
+  assert.match(js, /variant-promo-row/);
+  assert.match(js, /variant-promo-chip/);
+  assert.match(js, /salePriceText/);
+});
+
+test('unduh QRIS memakai endpoint server dan Telegram downloadFile', () => {
+  assert.match(js, /action=qr-download/);
+  assert.match(js, /tg\.downloadFile/);
+  const api = fs.readFileSync(path.join(root, 'api', 'store-data.js'), 'utf8');
+  assert.match(api, /Content-Disposition/);
+  assert.match(api, /Access-Control-Allow-Origin/);
+});

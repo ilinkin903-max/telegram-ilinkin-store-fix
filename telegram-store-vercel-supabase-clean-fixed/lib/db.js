@@ -172,6 +172,7 @@ function normalizeProduct(row) {
     image_url: row.image_url || '',
     category: row.category || '',
     active: row.active !== false,
+    display_scope: String(row.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
     bulk_prices: normalizeBulkPrices(row.bulk_prices),
     variants: normalizeVariants(row.variants),
     data: Array.isArray(row.stock) ? row.stock.map((x) => String(x).trim()).filter(Boolean) : [],
@@ -369,6 +370,7 @@ async function addProduct(input) {
     terms: String(input.snk || input.terms || ''),
     image_url: String(input.image_url || input.imageUrl || '').trim(),
     category: String(input.category || input.kategori || '').trim(),
+    display_scope: String(input.display_scope || input.displayScope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
     bulk_prices: normalizeBulkPrices(input.bulk_prices || input.bulkPrices || []),
     variants: normalizeVariants(input.variants || []),
     stock: Array.isArray(input.data || input.stock) ? (input.data || input.stock) : splitStock(input.stock_text || ''),
@@ -411,6 +413,7 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
   if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
+  if (updates.display_scope !== undefined || updates.displayScope !== undefined) payload.display_scope = String((updates.display_scope ?? updates.displayScope) || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
   if (updates.active !== undefined) payload.active = updates.active === true || String(updates.active).toLowerCase() === 'true' || String(updates.active) === '1' || String(updates.active).toLowerCase() === 'on';
   if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) payload.bulk_prices = normalizeBulkPrices(updates.bulk_prices ?? updates.bulkPrices);
   if (updates.variants !== undefined) payload.variants = normalizeVariants(updates.variants);
@@ -672,6 +675,7 @@ async function upsertPendingOrder(input) {
     fee: Number(input.fee || 0),
     status: input.status || 'draft',
     expires_at: input.expires_at || null,
+    qr_payload: String(input.qr_payload || ''),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
@@ -706,6 +710,7 @@ async function getShopSettings() {
     logo_url: '',
     banner_url: '',
     banner_urls: '',
+    banner_items: '',
     banner_interval_seconds: '5',
     start_media_type: 'none',
     start_media_value: '',
@@ -736,6 +741,7 @@ async function saveShopSettings(input = {}) {
     'logo_url',
     'banner_url',
     'banner_urls',
+    'banner_items',
     'banner_interval_seconds',
     'start_media_type',
     'start_media_value',

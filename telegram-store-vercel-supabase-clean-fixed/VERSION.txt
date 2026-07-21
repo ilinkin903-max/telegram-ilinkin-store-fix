@@ -1,10 +1,10 @@
-v51-marketplace-qris-banner-ui
+v52-blue-marketplace-link-manager-qris-download
 
-- Tombol unduh QRIS.
-- Bubble detail pembayaran untuk membuka kembali invoice aktif.
-- Invoice aktif dipulihkan setelah halaman dibuka ulang pada browser yang sama.
-- Bubble Customer Service di kanan bawah.
-- Carousel banner promosi rasio 2,39:1, maksimal 10 gambar.
-- Pengaturan URL dan interval banner melalui dashboard reseller.
-- Label “Produk Pilihan” dan “mulai” dihapus.
-- Tidak membutuhkan SQL baru.
+- Marketplace memakai tema biru.
+- Logo Marketplace dapat diatur dari URL/Google Drive.
+- Banner memakai daftar baris Nama Banner + Link, dengan tombol Tambah/Hapus.
+- Produk dapat dipilih tampil di Bot Telegram + Marketplace atau Marketplace saja.
+- Harga promo Marketplace menampilkan harga asli dicoret dan harga sesudah promo.
+- Promo varian ditampilkan langsung pada varian yang menerima promo.
+- Unduh QRIS memakai endpoint PNG server dan Telegram Mini Apps downloadFile bila tersedia.
+- Membutuhkan migrasi SQL update-v52-marketplace.sql.

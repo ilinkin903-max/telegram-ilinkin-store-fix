@@ -38,6 +38,10 @@ function normalizePublicImageUrl(url) {
 }
 
 function parseBannerUrls(value) {
+  return parseBannerItems(value).map((item) => item.url);
+}
+
+function parseBannerItems(value) {
   let rows = [];
   if (Array.isArray(value)) rows = value;
   else {
@@ -52,9 +56,17 @@ function parseBannerUrls(value) {
     if (!rows.length) rows = text.split(/\r?\n|;/g);
   }
   const unique = [];
-  for (const row of rows) {
-    const url = normalizePublicImageUrl(row);
-    if (url && !unique.includes(url)) unique.push(url);
+  const seen = new Set();
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const name = typeof row === 'object' && row
+      ? String(row.name || row.nama || row.label || `Banner ${index + 1}`).trim()
+      : `Banner ${index + 1}`;
+    const rawUrl = typeof row === 'object' && row ? (row.url || row.link || row.image_url || '') : row;
+    const url = normalizePublicImageUrl(rawUrl);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    unique.push({ name: name || `Banner ${index + 1}`, url });
     if (unique.length >= 10) break;
   }
   return unique;
@@ -64,18 +76,35 @@ function variantStock(variant) {
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
 
-function sanitizeVariant(variant, index) {
+function promoDisplay(promo, originalPrice) {
+  if (!promo || Number(originalPrice || 0) <= 0) return null;
+  const original = Number(originalPrice || 0);
+  const discount = Math.min(original, Math.max(0, Number(promo.discount_amount || 0)));
+  if (!discount) return null;
   return {
-    key: db.variantKey(variant, index),
+    ...promo,
+    original_price: original,
+    final_price: Math.max(0, original - discount)
+  };
+}
+
+function sanitizeVariant(variant, index, promos = [], productCode = '') {
+  const key = db.variantKey(variant, index);
+  const price = Number(variant?.price || 0);
+  const promo = promoDisplay(bestPromoForSelection(promos, productCode, key, 1, price), price);
+  return {
+    key,
     name: String(variant?.name || `Varian ${index + 1}`),
-    price: Number(variant?.price || 0),
+    price,
     stock: variantStock(variant),
     sold: Number(variant?.sold || 0),
     active: variant?.active !== false,
     description: String(variant?.description || ''),
     terms: String(variant?.snk || ''),
     note: String(variant?.note || ''),
-    bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || [])
+    bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || []),
+    promo,
+    display_price: promo ? promo.final_price : price
   };
 }
 
@@ -98,7 +127,7 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
 
 function sanitizeProduct(product, promos = []) {
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
-    .map(sanitizeVariant)
+    .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode))
     .filter((variant) => variant.active);
   const buyableVariants = variants.filter((variant) => variant.stock > 0 && variant.price > 0);
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
@@ -106,16 +135,21 @@ function sanitizeProduct(product, promos = []) {
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
     .filter((price) => price > 0);
+  const displayPrices = variants.length
+    ? variants.map((variant) => Number(variant.display_price || variant.price || 0)).filter((price) => price >= 0)
+    : [];
   const priceMin = prices.length ? Math.min(...prices) : Number(product?.harga || 0);
   const priceMax = prices.length ? Math.max(...prices) : Number(product?.harga || 0);
-  const promoVariant = buyableVariants[0] || variants[0] || null;
-  const promo = bestPromoForSelection(
-    promos,
-    product.kode,
-    promoVariant?.key || '',
-    1,
-    promoVariant?.price || Number(product?.harga || 0)
-  );
+  const basePromo = variants.length
+    ? null
+    : promoDisplay(bestPromoForSelection(promos, product.kode, '', 1, Number(product?.harga || 0)), Number(product?.harga || 0));
+  const salePriceMin = variants.length
+    ? (displayPrices.length ? Math.min(...displayPrices) : priceMin)
+    : (basePromo ? basePromo.final_price : priceMin);
+  const salePriceMax = variants.length
+    ? (displayPrices.length ? Math.max(...displayPrices) : priceMax)
+    : (basePromo ? basePromo.final_price : priceMax);
+  const hasPromo = Boolean(basePromo || variants.some((variant) => variant.promo));
 
   return {
     code: product.kode,
@@ -124,15 +158,19 @@ function sanitizeProduct(product, promos = []) {
     terms: product.snk || '',
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
+    display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
     price: Number(product.harga || 0),
     price_min: priceMin,
     price_max: priceMax,
+    sale_price_min: salePriceMin,
+    sale_price_max: salePriceMax,
     stock,
     sold: Number(product.terjual || 0),
     active: product.active !== false,
     variants,
     bulk_prices: db.normalizeBulkPrices(product.bulk_prices || []),
-    promo,
+    promo: basePromo,
+    has_promo: hasPromo,
     available: product.active !== false && stock > 0 && (!variants.length || buyableVariants.length > 0)
   };
 }
@@ -143,9 +181,10 @@ async function getCatalog(viewer = null) {
     db.getShopSettings(),
     db.listAutoPromos(200).catch(() => [])
   ]);
-  const publicProducts = products.map((product) => sanitizeProduct(product, promos));
+  const publicProducts = products.filter((product) => String(product.display_scope || 'both') !== 'telegram').map((product) => sanitizeProduct(product, promos));
   const categories = [...new Set(publicProducts.map((product) => product.category || 'Lainnya'))].sort((a, b) => a.localeCompare(b, 'id'));
-  const bannerUrls = parseBannerUrls(settings.banner_urls || settings.banner_url);
+  const bannerItems = parseBannerItems(settings.banner_items || settings.banner_urls || settings.banner_url);
+  const bannerUrls = bannerItems.map((item) => item.url);
   const bannerIntervalSeconds = Math.max(3, Math.min(15, Number(settings.banner_interval_seconds || 5)));
   return {
     settings: {
@@ -154,6 +193,7 @@ async function getCatalog(viewer = null) {
       logo_url: normalizePublicImageUrl(settings.logo_url),
       banner_url: bannerUrls[0] || '',
       banner_urls: bannerUrls,
+      banner_items: bannerItems,
       banner_interval_ms: bannerIntervalSeconds * 1000,
       customer_service_link: settings.customer_service_link || config.customerService || '',
       group_link: settings.group_link || config.channelStore || ''
@@ -279,7 +319,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     amount: total,
     fee,
     status: 'awaiting_payment',
-    expires_at: expiresAt
+    expires_at: expiresAt,
+    qr_payload: qrText
   });
 
   const watcher_scheduled = paymentService.schedulePaymentWatcher({
@@ -307,6 +348,18 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     qr_data_url,
     watcher_scheduled
   };
+}
+
+async function getQrDownload(user, invoice) {
+  if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
+  const ref = String(invoice || '').trim().toUpperCase();
+  if (!ref) throw httpError('Invoice wajib diisi.', 400, 'INVOICE_REQUIRED');
+  const order = await db.getPendingOrderByInvoice(ref);
+  if (!order) throw httpError('Invoice QRIS tidak ditemukan atau sudah selesai.', 404, 'QR_NOT_FOUND');
+  if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
+  if (!String(order.qr_payload || '').trim()) throw httpError('Data QRIS belum tersedia. Buat invoice baru setelah update v52.', 409, 'QR_PAYLOAD_MISSING');
+  const buffer = await QRCode.toBuffer(String(order.qr_payload), { type: 'png', width: 900, margin: 2, errorCorrectionLevel: 'M' });
+  return { buffer, filename: `QRIS-${ref.replace(/[^A-Z0-9_-]/gi, '-')}.png` };
 }
 
 async function getOrderStatus(user, invoice) {
@@ -369,9 +422,11 @@ async function getHistory(user, limit = 20) {
 module.exports = {
   normalizePublicImageUrl,
   parseBannerUrls,
+  parseBannerItems,
   sanitizeProduct,
   getCatalog,
   createPayment,
+  getQrDownload,
   getOrderStatus,
   cancelOrder,
   getHistory,

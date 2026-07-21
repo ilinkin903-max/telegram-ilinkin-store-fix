@@ -29,6 +29,15 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data: await store.getOrderStatus(user, req.query?.invoice) });
     }
 
+    if (req.method === 'GET' && action === 'qr-download') {
+      const file = await store.getQrDownload(user, req.query?.invoice);
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+      res.setHeader('Access-Control-Allow-Origin', 'https://web.telegram.org');
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      return res.status(200).send(file.buffer);
+    }
+
     if (req.method === 'GET' && action === 'history') {
       return json(res, 200, { ok: true, data: await store.getHistory(user, req.query?.limit) });
     }

@@ -484,6 +484,7 @@ function productStockTotal(product) {
 }
 
 function isBuyableProduct(product) {
+  if (String(product?.display_scope || 'both').toLowerCase() === 'marketplace') return false;
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   return !variants.length || activeVariantsWithIndex(product).length > 0;
 }
@@ -1097,6 +1098,7 @@ async function handleProductSelection(query, code) {
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
+  if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(userId, '🛒 Produk ini hanya tersedia melalui Marketplace.');
   const variants = activeVariantsWithIndex(product);
   if (variants.length) {
     const rows = variants.map(({ variant, index }) => ([{
@@ -1138,6 +1140,7 @@ async function handleVariantSelection(query, code, indexText) {
   const product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(query.from.id, '⚠️ Produk tidak ditemukan.');
   if (product.active === false) return tg.sendMessage(query.from.id, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
+  if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(query.from.id, '🛒 Produk ini hanya tersedia melalui Marketplace.');
   const index = Number(indexText);
   const variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
@@ -1153,6 +1156,7 @@ async function showConfirmation(query, edit = false) {
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, harap ulangi pilih produk!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
+  if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(userId, '🛒 Produk ini hanya tersedia melalui Marketplace.');
   const subtotal = Number(order.quantity || 1) * orderUnitPrice(product, order);
   const promo = await db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), subtotal, order.variant_key).catch(() => null);
   const text = confirmationText(product, order, promo);

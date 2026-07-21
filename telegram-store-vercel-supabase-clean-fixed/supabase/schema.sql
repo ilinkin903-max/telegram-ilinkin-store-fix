@@ -205,3 +205,7 @@ create table if not exists public.auto_promos (
 
 create index if not exists auto_promos_active_idx on public.auto_promos (active);
 create index if not exists backup_logs_created_idx on public.backup_logs (created_at desc);
+
+-- v52: visibilitas produk per kanal dan penyimpanan payload QRIS untuk unduhan Mini App.
+alter table public.products add column if not exists display_scope text not null default 'both';
+alter table public.pending_orders add column if not exists qr_payload text not null default '';

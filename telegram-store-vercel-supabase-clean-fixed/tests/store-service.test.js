@@ -54,3 +54,34 @@ test('Daftar banner mendukung link Google Drive dan menolak URL tidak aman', () 
     ['https://drive.google.com/uc?export=view&id=1Banner_Test-99']
   );
 });
+
+test('banner bernama dipertahankan sebagai pasangan nama dan URL', () => {
+  assert.deepEqual(
+    store.parseBannerItems(JSON.stringify([
+      { name: 'Promo Canva', url: 'https://example.com/canva.jpg' },
+      { name: 'Promo ChatGPT', url: 'https://example.com/chatgpt.jpg' }
+    ])),
+    [
+      { name: 'Promo Canva', url: 'https://example.com/canva.jpg' },
+      { name: 'Promo ChatGPT', url: 'https://example.com/chatgpt.jpg' }
+    ]
+  );
+});
+
+test('promo varian publik menyertakan harga asli dan harga setelah diskon', () => {
+  const product = store.sanitizeProduct({
+    nama: 'Gemini', kode: 'GEMINI', harga: 45000, active: true, data: [], display_scope: 'marketplace', variants: [
+      { name: '18 Bulan Invite', sku: '18-BULAN-INVITE', price: 45000, active: true, stock: ['akun1'] }
+    ], bulk_prices: [], terjual: 1
+  }, [{
+    code: 'INVITEHEMAT', name: 'Diskon Invite', active: true,
+    products: ['GEMINI::18-BULAN-INVITE'], discount_type: 'amount', discount_value: 28500,
+    min_qty: 1, min_spend: 0, usage_limit: 0, used_count: 0,
+    start_at: '2020-01-01T00:00:00.000Z', end_at: '2099-01-01T00:00:00.000Z'
+  }]);
+  assert.equal(product.display_scope, 'marketplace');
+  assert.equal(product.has_promo, true);
+  assert.equal(product.variants[0].promo.original_price, 45000);
+  assert.equal(product.variants[0].promo.final_price, 16500);
+  assert.equal(product.sale_price_min, 16500);
+});

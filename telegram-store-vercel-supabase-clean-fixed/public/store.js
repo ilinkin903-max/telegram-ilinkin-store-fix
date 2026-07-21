@@ -6,7 +6,7 @@
     try { tg.ready(); tg.expand(); } catch (_) {}
   }
   var initData = tg && tg.initData ? tg.initData : '';
-  var ACTIVE_PAYMENT_KEY = 'ilinkin_store_active_payment_v51';
+  var ACTIVE_PAYMENT_KEY = 'ilinkin_store_active_payment_v52';
   var state = {
     catalog: null,
     products: [],
@@ -150,11 +150,15 @@
     state.bannerTimer = setInterval(function () { goToBanner(state.bannerIndex + 1); }, state.bannerInterval);
   }
   function renderHeroBanners(settings) {
-    var banners = Array.isArray(settings.banner_urls) ? settings.banner_urls.filter(Boolean) : [];
-    if (!banners.length && settings.banner_url) banners = [settings.banner_url];
+    var items = Array.isArray(settings.banner_items) ? settings.banner_items.filter(function (item) { return item && item.url; }) : [];
+    if (!items.length) {
+      var legacy = Array.isArray(settings.banner_urls) ? settings.banner_urls.filter(Boolean) : [];
+      if (!legacy.length && settings.banner_url) legacy = [settings.banner_url];
+      items = legacy.map(function (url, index) { return { name: 'Banner ' + (index + 1), url: url }; });
+    }
     clearBannerTimer();
     state.bannerIndex = 0;
-    if (!banners.length) {
+    if (!items.length) {
       els.hero.classList.remove('has-banners');
       els.heroCarousel.classList.add('hidden');
       els.heroTrack.innerHTML = '';
@@ -162,13 +166,13 @@
       return;
     }
     state.bannerInterval = Math.max(3000, Math.min(15000, Number(settings.banner_interval_ms || 5000)));
-    els.heroTrack.innerHTML = banners.map(function (url, index) {
-      return '<div class="hero-slide"><img src="' + escapeHtml(url) + '" alt="Banner promosi ' + (index + 1) + '"></div>';
+    els.heroTrack.innerHTML = items.map(function (item, index) {
+      return '<div class="hero-slide"><img src="' + escapeHtml(item.url) + '" alt="' + escapeHtml(item.name || ('Banner promosi ' + (index + 1))) + '"><span class="hero-slide-name">' + escapeHtml(item.name || ('Banner ' + (index + 1))) + '</span></div>';
     }).join('');
-    els.heroDots.innerHTML = banners.length > 1 ? banners.map(function (_, index) {
-      return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan banner ' + (index + 1) + '"></button>';
+    els.heroDots.innerHTML = items.length > 1 ? items.map(function (item, index) {
+      return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan ' + escapeHtml(item.name || ('banner ' + (index + 1))) + '"></button>';
     }).join('') : '';
-    els.heroDots.classList.toggle('hidden', banners.length < 2);
+    els.heroDots.classList.toggle('hidden', items.length < 2);
     els.heroDots.querySelectorAll('[data-banner-index]').forEach(function (dot) {
       dot.addEventListener('click', function () { goToBanner(Number(dot.dataset.bannerIndex)); startBannerTimer(); });
     });
@@ -239,33 +243,58 @@
       if (state.sort === 'price-high') return b.price_min - a.price_min;
       if (state.sort === 'sold') return b.sold - a.sold;
       if (state.sort === 'stock') return b.stock - a.stock;
-      return Number(b.available) - Number(a.available) || Number(Boolean(b.promo)) - Number(Boolean(a.promo)) || b.sold - a.sold || a.name.localeCompare(b.name, 'id');
+      return Number(b.available) - Number(a.available) || Number(Boolean(b.has_promo)) - Number(Boolean(a.has_promo)) || b.sold - a.sold || a.name.localeCompare(b.name, 'id');
     });
     return rows;
   }
 
+  function priceRange(min, max) {
+    return Number(min) === Number(max) ? rupiah(min) : rupiah(min) + ' – ' + rupiah(max);
+  }
   function productPriceText(product) {
-    return product.price_min === product.price_max ? rupiah(product.price_min) : rupiah(product.price_min) + ' – ' + rupiah(product.price_max);
+    return priceRange(product.price_min, product.price_max);
+  }
+  function salePriceText(product) {
+    return priceRange(product.sale_price_min != null ? product.sale_price_min : product.price_min, product.sale_price_max != null ? product.sale_price_max : product.price_max);
+  }
+  function promoPriceHtml(original, promo) {
+    if (!promo) return '<strong>' + escapeHtml(rupiah(original)) + '</strong>';
+    return '<del>' + escapeHtml(rupiah(promo.original_price != null ? promo.original_price : original)) + '</del><strong>' + escapeHtml(rupiah(promo.final_price)) + '</strong>';
+  }
+  function cardVariantPromoRows(product) {
+    if (!product.variants || !product.variants.length) return '';
+    var rows = product.variants.filter(function (variant) { return variant.promo; }).slice(0, 3);
+    if (!rows.length) return '';
+    var html = rows.map(function (variant) {
+      return '<div class="variant-promo-row"><span>' + escapeHtml(variant.name) + '</span><span><del>' + escapeHtml(rupiah(variant.price)) + '</del> <b>' + escapeHtml(rupiah(variant.promo.final_price)) + '</b></span><small>' + escapeHtml(variant.promo.name) + '</small></div>';
+    }).join('');
+    var total = product.variants.filter(function (variant) { return variant.promo; }).length;
+    if (total > rows.length) html += '<div class="variant-promo-more">+' + (total - rows.length) + ' varian promo lainnya</div>';
+    return '<div class="card-variant-promos">' + html + '</div>';
   }
   function productCard(product) {
     var image = product.image_url
       ? '<img class="product-image" src="' + escapeHtml(product.image_url) + '" alt="' + escapeHtml(product.name) + '">'
       : '<div class="product-image-fallback">' + escapeHtml(product.name.slice(0, 1).toUpperCase()) + '</div>';
-    var badge = product.promo
+    var badge = product.has_promo
       ? '<span class="card-badge promo">PROMO</span>'
       : (!product.available ? '<span class="card-badge empty">HABIS</span>' : '');
-    var promo = product.promo ? 'Hemat ' + rupiah(product.promo.discount_amount) + ' · ' + product.promo.name : '';
+    var priceHtml = product.has_promo
+      ? '<del>' + escapeHtml(productPriceText(product)) + '</del><strong>' + escapeHtml(salePriceText(product)) + '</strong>'
+      : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
+    var promo = product.promo ? '<div class="card-promo-note"><b>' + escapeHtml(product.promo.name) + '</b><span>Hemat ' + escapeHtml(rupiah(product.promo.discount_amount)) + '</span></div>' : '';
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">Stok ' + product.stock + '</span></div>' +
       '<div class="product-card-body">' +
         '<span class="product-category">' + escapeHtml(product.category || 'Lainnya') + '</span>' +
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
-        '<div class="product-price"><strong>' + escapeHtml(productPriceText(product)) + '</strong></div>' +
-        '<div class="card-promo-note">' + escapeHtml(promo) + '</div>' +
+        '<div class="product-price">' + priceHtml + '</div>' +
+        promo + cardVariantPromoRows(product) +
         '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? 'Beli Sekarang' : 'Stok Habis') + '</button></div>' +
       '</div></article>';
   }
+
   function filterProducts() {
     state.filtered = filteredProducts();
     els.productSummary.textContent = state.filtered.length + ' dari ' + state.products.length + ' produk tersedia';
@@ -309,15 +338,24 @@
     var subtotal = unit * qty;
     var product = state.selectedProduct;
     var variant = activeVariant();
-    els.detailPrice.textContent = rupiah(unit) + (qty > 1 ? ' / item' : '');
-    els.estimatedTotal.textContent = rupiah(subtotal);
+    var promo = variant && variant.promo ? variant.promo : product.promo;
+    var promoAppliesToShownPrice = Boolean(promo && qty === 1 && Number(promo.original_price) === Number(unit));
+    if (promoAppliesToShownPrice) {
+      els.detailPrice.innerHTML = '<del>' + escapeHtml(rupiah(unit)) + '</del> <strong>' + escapeHtml(rupiah(promo.final_price)) + '</strong>';
+      els.estimatedTotal.textContent = rupiah(promo.final_price);
+      els.detailPromo.innerHTML = '<b>🏷️ ' + escapeHtml(promo.name) + '</b><span>Potongan ' + escapeHtml(rupiah(promo.discount_amount)) + ' untuk ' + escapeHtml(variant ? variant.name : product.name) + '.</span>';
+      els.detailPromo.classList.remove('hidden');
+    } else {
+      els.detailPrice.textContent = rupiah(unit) + (qty > 1 ? ' / item' : '');
+      els.estimatedTotal.textContent = rupiah(subtotal);
+      if (promo) {
+        els.detailPromo.innerHTML = '<b>🏷️ ' + escapeHtml(promo.name) + '</b><span>Promo tersedia untuk ' + escapeHtml(variant ? variant.name : product.name) + '. Nilai akhir dihitung ulang saat checkout.</span>';
+        els.detailPromo.classList.remove('hidden');
+      } else els.detailPromo.classList.add('hidden');
+    }
     els.stockHint.textContent = 'Stok tersedia: ' + selectedStock();
     els.detailStockBadge.textContent = 'Stok ' + selectedStock();
     els.buyNowButton.disabled = state.catalog.store_active === false || selectedStock() < 1 || (product.variants.length && !variant);
-    if (product.promo) {
-      els.detailPromo.textContent = '🏷️ Promo otomatis tersedia: ' + product.promo.name + ' (diskon dihitung ulang saat checkout)';
-      els.detailPromo.classList.remove('hidden');
-    } else els.detailPromo.classList.add('hidden');
   }
   function renderVariants(product) {
     if (!product.variants.length) {
@@ -330,7 +368,10 @@
     }
     els.variantHint.textContent = product.variants.length + ' pilihan';
     els.variantOptions.innerHTML = product.variants.map(function (variant) {
-      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (variant.stock < 1 ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b><small>' + rupiah(variant.price) + ' · stok ' + variant.stock + '</small></button>';
+      var priceLine = variant.promo
+        ? '<span class="variant-price"><del>' + escapeHtml(rupiah(variant.price)) + '</del><strong>' + escapeHtml(rupiah(variant.promo.final_price)) + '</strong></span><span class="variant-promo-chip">' + escapeHtml(variant.promo.name) + ' · hemat ' + escapeHtml(rupiah(variant.promo.discount_amount)) + '</span>'
+        : '<span class="variant-price"><strong>' + escapeHtml(rupiah(variant.price)) + '</strong></span>';
+      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (variant.stock < 1 ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>Stok ' + variant.stock + '</small></button>';
     }).join('');
     els.variantOptions.querySelectorAll('[data-variant]').forEach(function (button) {
       button.addEventListener('click', function () {
@@ -455,24 +496,42 @@
     showPayment(stored, false);
     checkPayment(false);
   }
+  function qrDownloadUrl() {
+    if (!state.activePayment || !state.activePayment.invoice) return '';
+    var url = window.location.origin + '/api/store-data?action=qr-download&invoice=' + encodeURIComponent(state.activePayment.invoice);
+    if (initData) url += '&initData=' + encodeURIComponent(initData);
+    return url;
+  }
   async function downloadQr() {
-    if (!state.activePayment || !state.activePayment.qr_data_url) return toast('QRIS belum tersedia.', true);
+    if (!state.activePayment || !state.activePayment.invoice) return toast('QRIS belum tersedia.', true);
     var filename = 'QRIS-' + String(state.activePayment.invoice || 'pembayaran').replace(/[^a-z0-9_-]/gi, '-') + '.png';
-    var source = state.activePayment.qr_data_url;
-    var objectUrl = '';
+    var url = qrDownloadUrl();
+    if (!url) return toast('Link unduhan QRIS tidak tersedia.', true);
     try {
-      var response = await fetch(source);
-      if (!response.ok) throw new Error('QRIS tidak dapat diambil.');
-      objectUrl = URL.createObjectURL(await response.blob());
+      if (tg && typeof tg.downloadFile === 'function') {
+        tg.downloadFile({ url: url, file_name: filename }, function (accepted) {
+          toast(accepted ? 'Unduhan QRIS dimulai.' : 'Unduhan QRIS dibatalkan.');
+        });
+        return;
+      }
       var link = document.createElement('a');
-      link.href = objectUrl; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+      link.href = url;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       toast('QRIS sedang diunduh.');
-    } catch (_) {
-      var fallback = document.createElement('a');
-      fallback.href = source; fallback.download = filename; fallback.target = '_blank'; document.body.appendChild(fallback); fallback.click(); fallback.remove();
+    } catch (error) {
+      try {
+        if (tg && typeof tg.openLink === 'function') tg.openLink(url);
+        else window.open(url, '_blank', 'noopener');
+      } catch (_) {}
+      toast('QRIS dibuka sebagai file. Simpan gambar dari halaman yang terbuka.', true);
     }
   }
+
   function updateCountdown() {
     if (!state.activePayment || state.paymentStatus !== 'pending') return;
     var remaining = new Date(state.activePayment.expires_at).getTime() - Date.now();
