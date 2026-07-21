@@ -714,8 +714,10 @@ async function getShopSettings() {
     banner_interval_seconds: '5',
     flash_sale_enabled: 'false',
     flash_sale_title: 'FLASH SALE',
+    flash_sale_start_at: '',
     flash_sale_end_at: '',
     flash_sale_products: '',
+    flash_sale_promo_codes: '',
     start_media_type: 'none',
     start_media_value: '',
     start_media_caption: '',
@@ -749,8 +751,10 @@ async function saveShopSettings(input = {}) {
     'banner_interval_seconds',
     'flash_sale_enabled',
     'flash_sale_title',
+    'flash_sale_start_at',
     'flash_sale_end_at',
     'flash_sale_products',
+    'flash_sale_promo_codes',
     'start_media_type',
     'start_media_value',
     'start_media_caption',
@@ -800,6 +804,30 @@ async function listTransactions(limit = 50) {
   const { data, error } = await sb().from('transactions').select('*').order('created_at', { ascending: false }).limit(limit);
   if (error) throw error;
   return data || [];
+}
+
+async function listTransactionsInRange(startAt, endAt = null, maxRows = 10000) {
+  const startIso = normalizeDateTime(startAt);
+  if (!startIso) return [];
+  const endIso = normalizeDateTime(endAt) || new Date().toISOString();
+  const pageSize = 1000;
+  const cap = Math.max(1, Math.min(50000, Number(maxRows || 10000)));
+  const out = [];
+  for (let from = 0; from < cap; from += pageSize) {
+    const to = Math.min(cap - 1, from + pageSize - 1);
+    let query = sb().from('transactions')
+      .select('product_code,variant_key,variant_name,quantity,created_at')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .order('created_at', { ascending: true })
+      .range(from, to);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
 }
 
 async function listTransactionsByUser(telegramId, limit = 8) {
@@ -1509,6 +1537,7 @@ module.exports = {
   voucherDiscountAmount,
   applyVoucherUsage,
   listTransactions,
+  listTransactionsInRange,
   listTransactionsByUser,
   getTransactionByOrderRef,
   getUserByTelegramId,

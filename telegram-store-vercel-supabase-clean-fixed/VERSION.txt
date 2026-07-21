@@ -1,9 +1,1 @@
-v53-flash-sale-hero-ratio-checkout-confirmation
-
-- Blok hero biru dan banner Marketplace memakai rasio 2,39:1.
-- Nama internal banner tidak ditampilkan pada Marketplace.
-- Flash Sale dapat diatur dari Reseller Dashboard: ON/OFF, judul, waktu berakhir, dan maksimal 8 produk.
-- Flash Sale menampilkan countdown, harga coret/harga promo, persentase diskon, serta indikator stok/terjual.
-- Blok Transaksi Aman, Proses Otomatis, Dukungan Telegram, Promo & Voucher dipindah ke bagian bawah Marketplace.
-- Sebelum membuat invoice QRIS, tombol Beli Sekarang menampilkan konfirmasi “Ya, Lanjut ke Pembayaran” atau “Kembali”.
-- Tidak ada SQL baru untuk upgrade dari v52. Instalasi dari v51 atau lebih lama tetap perlu update-v52-marketplace.sql.
+v54-flash-sale-promo-integration

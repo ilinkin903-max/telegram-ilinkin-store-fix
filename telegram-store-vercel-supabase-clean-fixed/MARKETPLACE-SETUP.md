@@ -1,72 +1,35 @@
-# Pengaturan Marketplace v53
-
-## Hero / Banner 2,39:1
-
-Banner yang disarankan tetap menggunakan rasio:
-
-```text
-2,39:1
-```
-
-Contoh ukuran:
-
-```text
-1195 × 500 px
-1434 × 600 px
-```
-
-Blok biru bawaan Marketplace sekarang juga mengikuti rasio yang sama.
-
-## Banner Promosi
-
-Buka:
-
-```text
-/reseller → Pengaturan → Banner Promosi Marketplace
-```
-
-Setiap banner tetap memiliki **Nama Banner** dan **Link Gambar** untuk memudahkan pengelolaan di dashboard. Nama tersebut tidak ditampilkan pada Marketplace.
+# Pengaturan Marketplace v54
 
 ## Flash Sale
 
 Buka:
 
-```text
-/reseller → Pengaturan → Flash Sale Marketplace
-```
+`Reseller Dashboard → Promo → Flash Sale Marketplace`
 
-Langkah:
+Atur:
 
-1. Pilih `ON`.
-2. Isi judul, misalnya `FLASH SALE`.
-3. Tentukan tanggal dan jam berakhir.
-4. Tekan **+ Tambah Produk**.
-5. Pilih produk yang ingin ditampilkan.
-6. Maksimal 8 produk.
-7. Tekan **Simpan Pengaturan**.
+- Status Flash Sale: ON/OFF
+- Judul
+- Mulai Flash Sale
+- Berakhir Flash Sale
 
-Agar tampil seperti Flash Sale marketplace, buat promo otomatis untuk produk atau varian tersebut dari menu **Promo**. Harga asli dan harga promo akan ditampilkan secara otomatis.
+Kemudian buka **Buat Promo / Voucher**, pilih **Promo Otomatis**, tentukan target produk/varian, dan aktifkan:
 
-## Konfirmasi pembelian
+`Masukkan target promo ini ke Flash Sale Marketplace`
 
-Pada detail produk, tombol **Beli Sekarang** sekarang menampilkan konfirmasi terlebih dahulu. Pembayaran hanya dibuat setelah pembeli memilih:
+Produk tidak dipilih lagi secara manual dari panel Flash Sale. Sumber produk Flash Sale sekarang adalah promo otomatis yang diberi tanda tersebut.
 
-```text
-Ya, Lanjut ke Pembayaran
-```
+## Harga Marketplace
 
-Pilihan `Kembali` menutup konfirmasi tanpa membuat invoice.
+Pada kartu katalog:
 
-## Posisi blok keunggulan
+- Tidak ada range harga.
+- Produk tanpa promo menampilkan harga termurah.
+- Promo ditampilkan dengan harga asli dicoret dan harga promo.
+- Daftar varian promo tidak ditampilkan sebagai blok tambahan pada kartu agar tampilan lebih ringkas.
 
-Transaksi Aman, Proses Otomatis, Dukungan Telegram, dan Promo & Voucher sekarang berada di bagian bawah setelah katalog.
+Pada Flash Sale:
 
-## Database
-
-Jika sudah memakai v52, tidak ada SQL tambahan untuk v53.
-
-Untuk upgrade dari v51 atau versi lebih lama, tetap jalankan:
-
-```text
-supabase/update-v52-marketplace.sql
-```
+- Harga selalu mengikuti promo Flash Sale yang berlaku.
+- Bila promo hanya untuk varian tertentu, nama varian tampil tepat di bawah nama produk.
+- Angka terjual hanya menghitung transaksi dalam periode Flash Sale.

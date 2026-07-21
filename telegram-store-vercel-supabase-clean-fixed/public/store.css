@@ -521,3 +521,34 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
 @media (max-width: 390px) {
   .flash-card { flex-basis: 48%; }
 }
+
+/* v54: Flash Sale biru, ringkas, dan konsisten dengan tema marketplace */
+.flash-sale-section {
+  border-color: #cfe0ff;
+  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
+  box-shadow: 0 12px 34px rgba(23,105,224,.10);
+}
+.flash-sale-title-wrap h2 { color: var(--primary-dark); }
+.flash-sale-icon { filter: hue-rotate(175deg) saturate(1.15); }
+.flash-sale-countdown span { background: var(--primary-dark); }
+.flash-sale-countdown b { color: var(--primary-dark); }
+.flash-card { border-color: #d7e6ff; }
+.flash-card:hover { border-color: #9fc2ff; box-shadow: 0 12px 28px rgba(23,105,224,.14); }
+.flash-discount { background: var(--primary); }
+.flash-variant {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: -1px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flash-price strong { color: var(--primary-dark); }
+.flash-stock-track { background: #cfe0ff; }
+.flash-stock-fill { background: linear-gradient(90deg, var(--primary-dark), var(--primary)); }

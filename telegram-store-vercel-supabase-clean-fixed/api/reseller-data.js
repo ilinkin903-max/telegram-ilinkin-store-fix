@@ -25,6 +25,33 @@ function boolOf(value) {
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'aktif' || raw === 'active' || raw === '';
 }
 
+function parseCodeList(value, limit = 100) {
+  let rows = [];
+  if (Array.isArray(value)) rows = value;
+  else {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    if (raw.startsWith('[')) { try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) rows = parsed; } catch (_) {} }
+    if (!rows.length) rows = raw.split(/[\r\n,;|]+/g);
+  }
+  const seen = new Set();
+  return rows.map((item) => String(typeof item === 'object' && item ? (item.code || item.kode || '') : item).trim().toUpperCase())
+    .filter((code) => { if (!code || seen.has(code)) return false; seen.add(code); return true; })
+    .slice(0, Math.max(1, Number(limit || 100)));
+}
+
+async function updateFlashPromoMembership({ currentCode = '', code = '', enabled = false } = {}) {
+  const settings = await db.getShopSettings();
+  const oldCode = String(currentCode || '').trim().toUpperCase();
+  const newCode = String(code || '').trim().toUpperCase();
+  let codes = parseCodeList(settings.flash_sale_promo_codes, 100);
+  if (oldCode) codes = codes.filter((item) => item !== oldCode);
+  if (newCode) codes = codes.filter((item) => item !== newCode);
+  if (enabled && newCode) codes.push(newCode);
+  await db.saveShopSettings({ flash_sale_promo_codes: JSON.stringify(codes) });
+  return codes;
+}
+
 function parseBulkPrices(value) {
   if (Array.isArray(value)) return value.map((item) => ({
     min_qty: numberOf(item.min_qty || item.qty || item.jumlah),
@@ -201,7 +228,11 @@ module.exports = async function handler(req, res) {
     }
     if (req.method === 'GET' && action === 'backup-logs') return json(res, 200, { ok: true, data: await db.listBackupLogs(30) });
     if (req.method === 'GET' && action === 'deep-stats') return json(res, 200, { ok: true, data: await db.getDeepStats() });
-    if (req.method === 'GET' && action === 'promos') return json(res, 200, { ok: true, data: await db.listAutoPromos(200) });
+    if (req.method === 'GET' && action === 'promos') {
+      const [promos, settings] = await Promise.all([db.listAutoPromos(200), db.getShopSettings()]);
+      const flashCodes = new Set(parseCodeList(settings.flash_sale_promo_codes, 100));
+      return json(res, 200, { ok: true, data: promos.map((promo) => ({ ...promo, flash_sale: flashCodes.has(String(promo.code || '').trim().toUpperCase()) })) });
+    }
     if (req.method === 'GET' && action === 'poll-result') {
       const id = String(req.query?.id || '').trim();
       if (!id) return json(res, 400, { ok: false, error: 'ID polling wajib diisi.' });
@@ -230,16 +261,24 @@ module.exports = async function handler(req, res) {
 
     if (action === 'promo-save') {
       const code = String(body.code || body.kode || '').trim().toUpperCase();
+      const currentCode = String(body.current_code || '').trim().toUpperCase();
       const discountValue = numberOf(body.discount_value || body.discount || body.potongan);
       if (!code || discountValue <= 0) {
         return json(res, 400, { ok: false, error: 'Kode dan nilai diskon promo otomatis wajib diisi lebih dari 0.' });
       }
       const promo = await db.saveAutoPromo({ ...body, code, discount_value: discountValue });
-      return json(res, 200, { ok: true, data: promo });
+      const flashCodes = await updateFlashPromoMembership({
+        currentCode,
+        code: promo.code || code,
+        enabled: body.flash_sale !== undefined && boolOf(body.flash_sale)
+      });
+      return json(res, 200, { ok: true, data: { ...promo, flash_sale: flashCodes.includes(String(promo.code || code).toUpperCase()) } });
     }
 
     if (action === 'promo-delete') {
-      await db.deleteAutoPromo(body.code || body.kode);
+      const code = String(body.code || body.kode || '').trim().toUpperCase();
+      await db.deleteAutoPromo(code);
+      await updateFlashPromoMembership({ currentCode: code, code: '', enabled: false });
       return json(res, 200, { ok: true });
     }
 
@@ -254,8 +293,10 @@ module.exports = async function handler(req, res) {
         banner_interval_seconds: body.banner_interval_seconds,
         flash_sale_enabled: body.flash_sale_enabled,
         flash_sale_title: body.flash_sale_title,
+        flash_sale_start_at: body.flash_sale_start_at,
         flash_sale_end_at: body.flash_sale_end_at,
         flash_sale_products: body.flash_sale_products,
+        flash_sale_promo_codes: body.flash_sale_promo_codes,
         start_media_type: body.start_media_type,
         start_media_value: body.start_media_value,
         start_media_caption: body.start_media_caption,

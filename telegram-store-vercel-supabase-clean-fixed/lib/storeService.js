@@ -95,6 +95,29 @@ function parseFlashSaleProductCodes(value) {
     }).slice(0, 8);
 }
 
+function parseFlashSalePromoCodes(value) {
+  let rows = [];
+  if (Array.isArray(value)) rows = value;
+  else {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) rows = parsed;
+      } catch (_) {}
+    }
+    if (!rows.length) rows = text.split(/[\r\n,;|]+/g);
+  }
+  const seen = new Set();
+  return rows.map((row) => String(typeof row === 'object' && row ? (row.code || row.kode || row.promo_code || '') : row).trim().toUpperCase())
+    .filter((code) => {
+      if (!code || seen.has(code)) return false;
+      seen.add(code);
+      return true;
+    }).slice(0, 100);
+}
+
 function variantStock(variant) {
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
@@ -111,10 +134,11 @@ function promoDisplay(promo, originalPrice) {
   };
 }
 
-function sanitizeVariant(variant, index, promos = [], productCode = '') {
+function sanitizeVariant(variant, index, promos = [], productCode = '', flashPromos = []) {
   const key = db.variantKey(variant, index);
   const price = Number(variant?.price || 0);
   const promo = promoDisplay(bestPromoForSelection(promos, productCode, key, 1, price), price);
+  const flashPromo = promoDisplay(bestPromoForSelection(flashPromos, productCode, key, 1, price), price);
   return {
     key,
     name: String(variant?.name || `Varian ${index + 1}`),
@@ -127,6 +151,8 @@ function sanitizeVariant(variant, index, promos = [], productCode = '') {
     note: String(variant?.note || ''),
     bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || []),
     promo,
+    flash_promo: flashPromo,
+    flash_sale_sold: 0,
     display_price: promo ? promo.final_price : price
   };
 }
@@ -148,9 +174,9 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
   return candidates[0] || null;
 }
 
-function sanitizeProduct(product, promos = []) {
+function sanitizeProduct(product, promos = [], flashPromos = []) {
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
-    .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode))
+    .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos))
     .filter((variant) => variant.active);
   const buyableVariants = variants.filter((variant) => variant.stock > 0 && variant.price > 0);
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
@@ -166,6 +192,9 @@ function sanitizeProduct(product, promos = []) {
   const basePromo = variants.length
     ? null
     : promoDisplay(bestPromoForSelection(promos, product.kode, '', 1, Number(product?.harga || 0)), Number(product?.harga || 0));
+  const baseFlashPromo = variants.length
+    ? null
+    : promoDisplay(bestPromoForSelection(flashPromos, product.kode, '', 1, Number(product?.harga || 0)), Number(product?.harga || 0));
   const salePriceMin = variants.length
     ? (displayPrices.length ? Math.min(...displayPrices) : priceMin)
     : (basePromo ? basePromo.final_price : priceMin);
@@ -193,6 +222,9 @@ function sanitizeProduct(product, promos = []) {
     variants,
     bulk_prices: db.normalizeBulkPrices(product.bulk_prices || []),
     promo: basePromo,
+    flash_promo: baseFlashPromo,
+    flash_sale_eligible: Boolean(baseFlashPromo || variants.some((variant) => variant.flash_promo)),
+    flash_sale_sold: 0,
     has_promo: hasPromo,
     available: product.active !== false && stock > 0 && (!variants.length || buyableVariants.length > 0)
   };
@@ -204,7 +236,43 @@ async function getCatalog(viewer = null) {
     db.getShopSettings(),
     db.listAutoPromos(200).catch(() => [])
   ]);
-  const publicProducts = products.filter((product) => String(product.display_scope || 'both') !== 'telegram').map((product) => sanitizeProduct(product, promos));
+  const flashPromoCodes = parseFlashSalePromoCodes(settings.flash_sale_promo_codes);
+  const flashPromoCodeSet = new Set(flashPromoCodes);
+  const flashPromos = promos.filter((promo) => flashPromoCodeSet.has(String(promo.code || '').trim().toUpperCase()));
+  const publicProducts = products
+    .filter((product) => String(product.display_scope || 'both') !== 'telegram')
+    .map((product) => sanitizeProduct(product, promos, flashPromos));
+
+  const flashStartAt = String(settings.flash_sale_start_at || '').trim();
+  const flashEndAt = String(settings.flash_sale_end_at || '').trim();
+  const flashEnabled = String(settings.flash_sale_enabled || '').toLowerCase() === 'true';
+  const flashStartTime = flashStartAt ? new Date(flashStartAt).getTime() : NaN;
+  const flashEndTime = flashEndAt ? new Date(flashEndAt).getTime() : NaN;
+  if (flashEnabled && Number.isFinite(flashStartTime) && Number.isFinite(flashEndTime)) {
+    const rangeEnd = new Date(Math.min(Date.now(), flashEndTime)).toISOString();
+    const flashTransactions = await db.listTransactionsInRange(new Date(flashStartTime).toISOString(), rangeEnd).catch(() => []);
+    const soldByProduct = new Map();
+    const soldByVariant = new Map();
+    for (const trx of flashTransactions) {
+      const productCode = String(trx.product_code || '').trim().toUpperCase();
+      const variantKey = String(trx.variant_key || '').trim().toUpperCase();
+      const qty = Math.max(0, Number(trx.quantity || 0));
+      soldByProduct.set(productCode, (soldByProduct.get(productCode) || 0) + qty);
+      if (variantKey) {
+        const key = `${productCode}::${variantKey}`;
+        soldByVariant.set(key, (soldByVariant.get(key) || 0) + qty);
+      }
+    }
+    publicProducts.forEach((product) => {
+      const productCode = String(product.code || '').trim().toUpperCase();
+      product.flash_sale_sold = soldByProduct.get(productCode) || 0;
+      (product.variants || []).forEach((variant) => {
+        const variantKey = String(variant.key || '').trim().toUpperCase();
+        variant.flash_sale_sold = soldByVariant.get(`${productCode}::${variantKey}`) || 0;
+      });
+    });
+  }
+
   const categories = [...new Set(publicProducts.map((product) => product.category || 'Lainnya'))].sort((a, b) => a.localeCompare(b, 'id'));
   const bannerItems = parseBannerItems(settings.banner_items || settings.banner_urls || settings.banner_url);
   const bannerUrls = bannerItems.map((item) => item.url);
@@ -218,9 +286,11 @@ async function getCatalog(viewer = null) {
       banner_urls: bannerUrls,
       banner_items: bannerItems,
       banner_interval_ms: bannerIntervalSeconds * 1000,
-      flash_sale_enabled: String(settings.flash_sale_enabled || '').toLowerCase() === 'true',
+      flash_sale_enabled: flashEnabled,
       flash_sale_title: String(settings.flash_sale_title || 'FLASH SALE').trim() || 'FLASH SALE',
-      flash_sale_end_at: String(settings.flash_sale_end_at || '').trim(),
+      flash_sale_start_at: flashStartAt,
+      flash_sale_end_at: flashEndAt,
+      flash_sale_promo_codes: flashPromoCodes,
       flash_sale_product_codes: parseFlashSaleProductCodes(settings.flash_sale_products),
       customer_service_link: settings.customer_service_link || config.customerService || '',
       group_link: settings.group_link || config.channelStore || ''
@@ -451,6 +521,7 @@ module.exports = {
   parseBannerUrls,
   parseBannerItems,
   parseFlashSaleProductCodes,
+  parseFlashSalePromoCodes,
   sanitizeProduct,
   getCatalog,
   createPayment,

@@ -93,3 +93,26 @@ test('daftar produk Flash Sale menerima JSON, menghapus duplikat, dan membatasi 
   );
   assert.equal(store.parseFlashSaleProductCodes('A,B,C,D,E,F,G,H,I').length, 8);
 });
+
+
+test('daftar kode promo Flash Sale menerima JSON dan menghapus duplikat', () => {
+  assert.deepEqual(
+    store.parseFlashSalePromoCodes(JSON.stringify(['PROMO-A', 'promo-b', 'PROMO-A'])),
+    ['PROMO-A', 'PROMO-B']
+  );
+});
+
+test('sanitizeProduct memisahkan promo umum dan promo yang dipilih untuk Flash Sale', () => {
+  const allPromos = [{
+    code: 'PROMO-ALL', name: 'Promo Semua', active: true, products: ['TEST::VIP'],
+    discount_type: 'amount', discount_value: 2000, min_qty: 1, min_spend: 0,
+    usage_limit: 0, used_count: 0, start_at: '2020-01-01T00:00:00.000Z', end_at: '2099-01-01T00:00:00.000Z'
+  }];
+  const product = store.sanitizeProduct({
+    nama: 'Test', kode: 'TEST', harga: 10000, active: true, data: [], variants: [
+      { name: 'VIP', sku: 'VIP', price: 10000, active: true, stock: ['x'] }
+    ]
+  }, allPromos, allPromos);
+  assert.equal(product.flash_sale_eligible, true);
+  assert.equal(product.variants[0].flash_promo.final_price, 8000);
+});

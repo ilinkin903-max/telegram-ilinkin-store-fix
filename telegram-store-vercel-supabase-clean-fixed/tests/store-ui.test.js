@@ -48,11 +48,12 @@ test('produk bisa dipilih untuk bot+marketplace atau marketplace saja', () => {
   assert.match(reseller, /Marketplace saja/);
 });
 
-test('marketplace menampilkan harga promo dicoret dan promo varian', () => {
+test('marketplace menampilkan harga termurah dan harga promo dicoret tanpa blok varian promo di kartu', () => {
+  assert.match(js, /cardBestPromo/);
+  assert.match(js, /productPriceText/);
   assert.match(js, /<del>/);
-  assert.match(js, /variant-promo-row/);
-  assert.match(js, /variant-promo-chip/);
-  assert.match(js, /salePriceText/);
+  assert.doesNotMatch(js, /cardVariantPromoRows/);
+  assert.doesNotMatch(js, /variant-promo-row/);
 });
 
 test('unduh QRIS memakai endpoint server dan Telegram downloadFile', () => {
@@ -69,15 +70,19 @@ test('v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketp
   assert.doesNotMatch(js, /hero-slide-name/);
 });
 
-test('v53 menyediakan Flash Sale dengan countdown dan pengaturan reseller', () => {
+test('v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otomatis', () => {
+  const css = fs.readFileSync(path.join(root, 'public', 'store.css'), 'utf8');
   assert.match(html, /id="flashSaleSection"/);
   assert.match(html, /id="flashSaleCountdown"/);
   assert.match(js, /renderFlashSale/);
-  assert.match(js, /bestFlashPromo/);
-  assert.match(reseller, /Flash Sale Marketplace/);
-  assert.match(reseller, /name="flash_sale_enabled"/);
+  assert.match(js, /flash_sale_eligible/);
+  assert.match(js, /flash_sale_sold/);
+  assert.match(css, /v54: Flash Sale biru/);
+  assert.match(reseller, /id="flashSaleForm"/);
+  assert.match(reseller, /name="flash_sale_start_at"/);
   assert.match(reseller, /name="flash_sale_end_at"/);
-  assert.match(reseller, /id="addFlashSaleRow"/);
+  assert.match(reseller, /id="promoFlashSale"/);
+  assert.doesNotMatch(reseller, /id="addFlashSaleRow"/);
 });
 
 test('v53 menempatkan blok benefit setelah katalog', () => {
@@ -89,4 +94,14 @@ test('v53 meminta konfirmasi sebelum membuat pembayaran', () => {
   assert.match(html, /Ya, Lanjut ke Pembayaran/);
   assert.match(js, /openCheckoutConfirmation/);
   assert.match(js, /confirmCheckoutButton/);
+});
+
+
+test('Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale', () => {
+  const namePos = js.indexOf('<h3 class="flash-name">');
+  const variantPos = js.indexOf('<div class="flash-variant">');
+  const pricePos = js.indexOf('<div class="flash-price">');
+  assert.ok(namePos >= 0 && variantPos > namePos && pricePos > variantPos);
+  assert.match(js, /promo\.sold/);
+  assert.match(js, /TERJUAL/);
 });

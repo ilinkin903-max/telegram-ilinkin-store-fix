@@ -1,6 +1,6 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "private": true,
   "description": "Telegram auto-order marketplace for Vercel and Supabase with one reseller dashboard.",
   "scripts": {

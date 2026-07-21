@@ -203,24 +203,33 @@
   }
   function bestFlashPromo(product) {
     var choices = [];
-    if (product && product.promo && Number(product.promo.final_price) < Number(product.promo.original_price)) {
+    if (product && product.flash_promo && Number(product.flash_promo.final_price) < Number(product.flash_promo.original_price)) {
       choices.push({
-        name: product.promo.name || 'Promo',
+        code: product.flash_promo.code || '',
+        name: product.flash_promo.name || 'Promo',
         variant: '',
-        original: Number(product.promo.original_price || product.price_min || 0),
-        final: Number(product.promo.final_price || product.sale_price_min || product.price_min || 0)
+        variantKey: '',
+        original: Number(product.flash_promo.original_price || product.price_min || 0),
+        final: Number(product.flash_promo.final_price || product.sale_price_min || product.price_min || 0),
+        sold: Number(product.flash_sale_sold || 0)
       });
     }
     (product && product.variants || []).forEach(function (variant) {
-      if (!variant.promo) return;
-      var original = Number(variant.promo.original_price != null ? variant.promo.original_price : variant.price || 0);
-      var final = Number(variant.promo.final_price || original);
-      if (final < original) choices.push({ name: variant.promo.name || 'Promo', variant: variant.name || '', original: original, final: final });
+      if (!variant.flash_promo) return;
+      var original = Number(variant.flash_promo.original_price != null ? variant.flash_promo.original_price : variant.price || 0);
+      var final = Number(variant.flash_promo.final_price || original);
+      if (final < original) choices.push({
+        code: variant.flash_promo.code || '',
+        name: variant.flash_promo.name || 'Promo',
+        variant: variant.name || '',
+        variantKey: variant.key || '',
+        original: original,
+        final: final,
+        sold: Number(variant.flash_sale_sold || 0)
+      });
     });
     choices.sort(function (a, b) {
-      var pa = a.original > 0 ? (a.original - a.final) / a.original : 0;
-      var pb = b.original > 0 ? (b.original - b.final) / b.original : 0;
-      return pb - pa || a.final - b.final;
+      return a.final - b.final || a.original - b.original || String(a.variant).localeCompare(String(b.variant), 'id');
     });
     return choices[0] || null;
   }
@@ -247,36 +256,39 @@
       if (els.flashSaleSection) els.flashSaleSection.classList.add('hidden');
       return;
     }
-    var codes = Array.isArray(settings.flash_sale_product_codes) ? settings.flash_sale_product_codes : [];
-    var products = codes.map(function (code) {
-      return state.products.find(function (product) { return String(product.code || '').toUpperCase() === String(code || '').toUpperCase(); });
-    }).filter(Boolean).filter(function (product) { return product.available; }).slice(0, 8);
+    var startAt = settings.flash_sale_start_at || '';
     var endAt = settings.flash_sale_end_at || '';
-    var endTime = new Date(endAt).getTime();
-    if (!products.length || !endTime || !isFinite(endTime) || endTime <= Date.now()) {
+    var startTime = startAt ? new Date(startAt).getTime() : NaN;
+    var endTime = endAt ? new Date(endAt).getTime() : NaN;
+    var now = Date.now();
+    var products = state.products.filter(function (product) {
+      return product.available && product.flash_sale_eligible && bestFlashPromo(product);
+    }).slice(0, 8);
+    if (!products.length || !endTime || !isFinite(endTime) || endTime <= now || (isFinite(startTime) && startTime > now)) {
       els.flashSaleSection.classList.add('hidden');
       return;
     }
     els.flashSaleTitle.textContent = settings.flash_sale_title || 'FLASH SALE';
     els.flashSaleGrid.innerHTML = products.map(function (product) {
       var promo = bestFlashPromo(product);
-      var original = promo ? promo.original : Number(product.price_min || 0);
-      var final = promo ? promo.final : Number(product.sale_price_min != null ? product.sale_price_min : product.price_min || 0);
-      var pct = promo && original > 0 ? Math.max(1, Math.round(((original - final) / original) * 100)) : 0;
+      var original = promo.original;
+      var final = promo.final;
+      var pct = original > 0 ? Math.max(1, Math.round(((original - final) / original) * 100)) : 0;
       var image = product.image_url
         ? '<img src="' + escapeHtml(product.image_url) + '" alt="' + escapeHtml(product.name) + '">'
         : '<div class="product-image-fallback">' + escapeHtml(String(product.name || 'P').slice(0, 1).toUpperCase()) + '</div>';
-      var price = promo
-        ? '<del>' + escapeHtml(rupiah(original)) + '</del><strong>' + escapeHtml(rupiah(final)) + '</strong>'
-        : '<strong>' + escapeHtml(rupiah(final)) + '</strong>';
-      var stockText = product.stock <= 5 ? 'STOK TERBATAS' : product.sold + ' TERJUAL';
-      var fill = Math.max(18, Math.min(92, product.stock <= 5 ? 82 : 38 + Math.min(50, Number(product.sold || 0))));
+      var price = '<del>' + escapeHtml(rupiah(original)) + '</del><strong>' + escapeHtml(rupiah(final)) + '</strong>';
+      var sold = Math.max(0, Number(promo.sold || 0));
+      var stockBase = promo.variant
+        ? Number(((product.variants || []).find(function (variant) { return variant.key === promo.variantKey; }) || {}).stock || 0)
+        : Number(product.stock || 0);
+      var fill = Math.max(8, Math.min(100, sold + stockBase > 0 ? Math.round((sold / (sold + stockBase)) * 100) : 8));
       return '<article class="flash-card" data-flash-product="' + escapeHtml(product.code) + '">' +
         '<div class="flash-image-wrap">' + image + (pct ? '<span class="flash-discount">⚡-' + pct + '%</span>' : '') + '</div>' +
         '<div class="flash-body"><h3 class="flash-name">' + escapeHtml(product.name) + '</h3>' +
-        (promo && promo.variant ? '<div class="flash-variant">Varian: ' + escapeHtml(promo.variant) + '</div>' : '') +
+        (promo.variant ? '<div class="flash-variant">' + escapeHtml(promo.variant) + '</div>' : '') +
         '<div class="flash-price">' + price + '</div>' +
-        '<div class="flash-stock-track"><div class="flash-stock-fill" style="width:' + fill + '%"></div><div class="flash-stock-label">' + escapeHtml(stockText) + '</div></div></div></article>';
+        '<div class="flash-stock-track"><div class="flash-stock-fill" style="width:' + fill + '%"></div><div class="flash-stock-label">' + sold + ' TERJUAL</div></div></div></article>';
     }).join('');
     els.flashSaleGrid.querySelectorAll('[data-flash-product]').forEach(function (card) {
       card.addEventListener('click', function () { openProduct(card.dataset.flashProduct); });
@@ -343,29 +355,26 @@
     return rows;
   }
 
-  function priceRange(min, max) {
-    return Number(min) === Number(max) ? rupiah(min) : rupiah(min) + ' – ' + rupiah(max);
-  }
   function productPriceText(product) {
-    return priceRange(product.price_min, product.price_max);
+    return rupiah(Number(product.price_min || product.price || 0));
   }
-  function salePriceText(product) {
-    return priceRange(product.sale_price_min != null ? product.sale_price_min : product.price_min, product.sale_price_max != null ? product.sale_price_max : product.price_max);
+  function cardBestPromo(product) {
+    var choices = [];
+    if (product && product.promo && Number(product.promo.final_price) < Number(product.promo.original_price)) {
+      choices.push({ original: Number(product.promo.original_price), final: Number(product.promo.final_price), name: product.promo.name || 'Promo' });
+    }
+    (product && product.variants || []).forEach(function (variant) {
+      if (!variant.promo) return;
+      var original = Number(variant.promo.original_price != null ? variant.promo.original_price : variant.price || 0);
+      var final = Number(variant.promo.final_price || original);
+      if (final < original) choices.push({ original: original, final: final, name: variant.promo.name || 'Promo' });
+    });
+    choices.sort(function (a, b) { return a.final - b.final || a.original - b.original; });
+    return choices[0] || null;
   }
   function promoPriceHtml(original, promo) {
     if (!promo) return '<strong>' + escapeHtml(rupiah(original)) + '</strong>';
     return '<del>' + escapeHtml(rupiah(promo.original_price != null ? promo.original_price : original)) + '</del><strong>' + escapeHtml(rupiah(promo.final_price)) + '</strong>';
-  }
-  function cardVariantPromoRows(product) {
-    if (!product.variants || !product.variants.length) return '';
-    var rows = product.variants.filter(function (variant) { return variant.promo; }).slice(0, 3);
-    if (!rows.length) return '';
-    var html = rows.map(function (variant) {
-      return '<div class="variant-promo-row"><span>' + escapeHtml(variant.name) + '</span><span><del>' + escapeHtml(rupiah(variant.price)) + '</del> <b>' + escapeHtml(rupiah(variant.promo.final_price)) + '</b></span><small>' + escapeHtml(variant.promo.name) + '</small></div>';
-    }).join('');
-    var total = product.variants.filter(function (variant) { return variant.promo; }).length;
-    if (total > rows.length) html += '<div class="variant-promo-more">+' + (total - rows.length) + ' varian promo lainnya</div>';
-    return '<div class="card-variant-promos">' + html + '</div>';
   }
   function productCard(product) {
     var image = product.image_url
@@ -374,8 +383,9 @@
     var badge = product.has_promo
       ? '<span class="card-badge promo">PROMO</span>'
       : (!product.available ? '<span class="card-badge empty">HABIS</span>' : '');
-    var priceHtml = product.has_promo
-      ? '<del>' + escapeHtml(productPriceText(product)) + '</del><strong>' + escapeHtml(salePriceText(product)) + '</strong>'
+    var bestPromo = cardBestPromo(product);
+    var priceHtml = bestPromo
+      ? '<del>' + escapeHtml(rupiah(bestPromo.original)) + '</del><strong>' + escapeHtml(rupiah(bestPromo.final)) + '</strong>'
       : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
     var promo = product.promo ? '<div class="card-promo-note"><b>' + escapeHtml(product.promo.name) + '</b><span>Hemat ' + escapeHtml(rupiah(product.promo.discount_amount)) + '</span></div>' : '';
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
@@ -385,7 +395,7 @@
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
         '<div class="product-price">' + priceHtml + '</div>' +
-        promo + cardVariantPromoRows(product) +
+        promo +
         '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? 'Beli Sekarang' : 'Stok Habis') + '</button></div>' +
       '</div></article>';
   }
