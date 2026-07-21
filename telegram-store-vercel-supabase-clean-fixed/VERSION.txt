@@ -1,10 +1,9 @@
-v52-blue-marketplace-link-manager-qris-download
+v53-flash-sale-hero-ratio-checkout-confirmation
 
-- Marketplace memakai tema biru.
-- Logo Marketplace dapat diatur dari URL/Google Drive.
-- Banner memakai daftar baris Nama Banner + Link, dengan tombol Tambah/Hapus.
-- Produk dapat dipilih tampil di Bot Telegram + Marketplace atau Marketplace saja.
-- Harga promo Marketplace menampilkan harga asli dicoret dan harga sesudah promo.
-- Promo varian ditampilkan langsung pada varian yang menerima promo.
-- Unduh QRIS memakai endpoint PNG server dan Telegram Mini Apps downloadFile bila tersedia.
-- Membutuhkan migrasi SQL update-v52-marketplace.sql.
+- Blok hero biru dan banner Marketplace memakai rasio 2,39:1.
+- Nama internal banner tidak ditampilkan pada Marketplace.
+- Flash Sale dapat diatur dari Reseller Dashboard: ON/OFF, judul, waktu berakhir, dan maksimal 8 produk.
+- Flash Sale menampilkan countdown, harga coret/harga promo, persentase diskon, serta indikator stok/terjual.
+- Blok Transaksi Aman, Proses Otomatis, Dukungan Telegram, Promo & Voucher dipindah ke bagian bawah Marketplace.
+- Sebelum membuat invoice QRIS, tombol Beli Sekarang menampilkan konfirmasi “Ya, Lanjut ke Pembayaran” atau “Kembali”.
+- Tidak ada SQL baru untuk upgrade dari v52. Instalasi dari v51 atau lebih lama tetap perlu update-v52-marketplace.sql.

@@ -72,6 +72,29 @@ function parseBannerItems(value) {
   return unique;
 }
 
+function parseFlashSaleProductCodes(value) {
+  let rows = [];
+  if (Array.isArray(value)) rows = value;
+  else {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) rows = parsed;
+      } catch (_) {}
+    }
+    if (!rows.length) rows = text.split(/[\r\n,;|]+/g);
+  }
+  const seen = new Set();
+  return rows.map((row) => String(typeof row === 'object' && row ? (row.code || row.kode || row.product_code || '') : row).trim().toUpperCase())
+    .filter((code) => {
+      if (!code || seen.has(code)) return false;
+      seen.add(code);
+      return true;
+    }).slice(0, 8);
+}
+
 function variantStock(variant) {
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
@@ -195,6 +218,10 @@ async function getCatalog(viewer = null) {
       banner_urls: bannerUrls,
       banner_items: bannerItems,
       banner_interval_ms: bannerIntervalSeconds * 1000,
+      flash_sale_enabled: String(settings.flash_sale_enabled || '').toLowerCase() === 'true',
+      flash_sale_title: String(settings.flash_sale_title || 'FLASH SALE').trim() || 'FLASH SALE',
+      flash_sale_end_at: String(settings.flash_sale_end_at || '').trim(),
+      flash_sale_product_codes: parseFlashSaleProductCodes(settings.flash_sale_products),
       customer_service_link: settings.customer_service_link || config.customerService || '',
       group_link: settings.group_link || config.channelStore || ''
     },
@@ -423,6 +450,7 @@ module.exports = {
   normalizePublicImageUrl,
   parseBannerUrls,
   parseBannerItems,
+  parseFlashSaleProductCodes,
   sanitizeProduct,
   getCatalog,
   createPayment,

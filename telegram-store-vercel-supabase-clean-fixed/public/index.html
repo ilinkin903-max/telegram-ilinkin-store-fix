@@ -61,11 +61,17 @@
         </div>
       </section>
 
-      <section class="benefits" aria-label="Keunggulan toko">
-        <article><span>🛡️</span><div><strong>Transaksi Aman</strong><small>Invoice unik dan verifikasi pembayaran</small></div></article>
-        <article><span>⚡</span><div><strong>Proses Otomatis</strong><small>Produk dikirim tanpa menunggu admin</small></div></article>
-        <article><span>💬</span><div><strong>Dukungan Telegram</strong><small>Riwayat dan produk tersimpan di chat</small></div></article>
-        <article><span>🏷️</span><div><strong>Promo & Voucher</strong><small>Diskon otomatis sesuai produk atau varian</small></div></article>
+      <section id="flashSaleSection" class="flash-sale-section hidden" aria-label="Flash Sale">
+        <div class="flash-sale-head">
+          <div class="flash-sale-title-wrap">
+            <span class="flash-sale-icon" aria-hidden="true">⚡</span>
+            <h2 id="flashSaleTitle">FLASH SALE</h2>
+          </div>
+          <div id="flashSaleCountdown" class="flash-sale-countdown" aria-label="Waktu flash sale tersisa">
+            <span id="flashHours">00</span><b>:</b><span id="flashMinutes">00</span><b>:</b><span id="flashSeconds">00</span>
+          </div>
+        </div>
+        <div id="flashSaleGrid" class="flash-sale-grid"></div>
       </section>
 
       <section id="catalogSection" class="catalog-section">
@@ -95,6 +101,14 @@
           <button id="resetFilterButton" class="button button-secondary" type="button">Reset Filter</button>
         </div>
       </section>
+
+      <section class="benefits" aria-label="Keunggulan toko">
+        <article><span>🛡️</span><div><strong>Transaksi Aman</strong><small>Invoice unik dan verifikasi pembayaran</small></div></article>
+        <article><span>⚡</span><div><strong>Proses Otomatis</strong><small>Produk dikirim tanpa menunggu admin</small></div></article>
+        <article><span>💬</span><div><strong>Dukungan Telegram</strong><small>Riwayat dan produk tersimpan di chat</small></div></article>
+        <article><span>🏷️</span><div><strong>Promo & Voucher</strong><small>Diskon otomatis sesuai produk atau varian</small></div></article>
+      </section>
+
     </main>
 
     <footer class="footer">
@@ -163,6 +177,22 @@
           <button id="buyNowButton" class="button button-primary button-full" type="button">Beli Sekarang</button>
           <p id="checkoutHelp" class="checkout-help">Pembayaran QRIS berlaku 10 menit. Produk dikirim otomatis ke Telegram.</p>
         </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="confirmModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="confirm"></div>
+    <section class="modal-sheet confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <button class="modal-close" data-close="confirm" type="button" aria-label="Tutup">×</button>
+      <div class="confirm-icon" aria-hidden="true">🛒</div>
+      <p class="eyebrow">KONFIRMASI PESANAN</p>
+      <h2 id="confirmTitle">Lanjutkan ke pembayaran?</h2>
+      <p class="confirm-copy">Periksa pilihan produk sebelum invoice QRIS dibuat.</p>
+      <div id="confirmOrderSummary" class="confirm-order-summary"></div>
+      <div class="confirm-actions">
+        <button id="confirmCheckoutButton" class="button button-primary" type="button">Ya, Lanjut ke Pembayaran</button>
+        <button id="cancelCheckoutConfirm" class="button button-secondary" type="button">Kembali</button>
       </div>
     </section>
   </div>

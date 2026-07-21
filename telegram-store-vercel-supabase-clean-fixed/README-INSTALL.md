@@ -1,102 +1,91 @@
-# v52 — Blue Marketplace, Link Manager, Product Visibility & QRIS Download
+# v53 — Marketplace Flash Sale, Hero 2,39:1 & Konfirmasi Checkout
 
-Versi ini melanjutkan v51 dan mempertahankan bot Telegram, pembayaran Pakasir, promo/voucher, auto delivery, broadcast, serta dashboard reseller.
+Versi ini melanjutkan v52 dan mempertahankan bot Telegram, pembayaran Pakasir, pengiriman produk otomatis, promo/voucher per produk atau varian, QRIS, banner, dashboard reseller, serta pengaturan kanal produk.
 
-## Perubahan v52
+## Perubahan v53
 
-### Marketplace tema biru
+### 1. Hero dan banner sama-sama 2,39:1
 
-- Warna utama Marketplace diubah dari oranye menjadi biru.
-- Header, tombol utama, indikator promo, bubble pembayaran, dan bubble Customer Service mengikuti tema biru.
-- Logo toko dapat diisi dengan URL gambar publik atau link Google Drive melalui **Dashboard Reseller → Pengaturan → Logo Marketplace**.
+Blok biru Marketplace sekarang memakai rasio **2,39:1**, sama seperti banner promosi. Jika banner tersedia, banner tetap bergeser otomatis ke kiri. Nama banner hanya dipakai di dashboard reseller untuk memudahkan pengelolaan dan **tidak ditampilkan di Marketplace**.
 
-### Banner dengan Nama + Link
+### 2. Flash Sale Marketplace
 
-Banner tidak lagi hanya berupa textarea URL. Setiap banner memiliki baris sendiri:
+Buka:
 
 ```text
-Nama Banner | Link Gambar | Hapus
+/reseller → Pengaturan → Flash Sale Marketplace
 ```
 
-Gunakan tombol **+ Tambah** untuk menambah banner. Maksimal 10 banner.
+Tersedia pengaturan:
 
-- Nama banner dapat dipakai untuk membedakan setiap promosi.
-- Rasio gambar yang disarankan: **2,39:1**.
-- URL HTTPS publik dan link Google Drive publik didukung.
-- Banner bergeser otomatis ke kiri sesuai interval yang dipilih.
+- Status Flash Sale: ON / OFF
+- Judul, default `FLASH SALE`
+- Waktu berakhir
+- Maksimal 8 produk pilihan
 
-### Pengaturan tampilan produk
-
-Saat menambah atau mengedit produk, tersedia pilihan:
+Produk yang memiliki promo aktif akan menampilkan:
 
 ```text
-Bot Telegram + Marketplace
-Marketplace saja
+harga asli dicoret → harga promo
+persentase diskon
+countdown Flash Sale
+stok terbatas / jumlah terjual
 ```
 
-Produk **Marketplace saja** tidak muncul pada daftar `/produk` dan daftar stok pembeli di bot Telegram, tetapi tetap dapat dibeli melalui Marketplace.
+Flash Sale otomatis hilang setelah waktu berakhir.
 
-### Tampilan harga promo
+### 3. Blok keunggulan dipindah ke bawah
 
-Marketplace sekarang menampilkan:
+Blok berikut sekarang berada setelah katalog produk:
+
+- Transaksi Aman
+- Proses Otomatis
+- Dukungan Telegram
+- Promo & Voucher
+
+### 4. Konfirmasi sebelum membuat invoice
+
+Saat pembeli menekan **Beli Sekarang** pada detail produk, sistem tidak langsung membuat invoice. Muncul konfirmasi berisi produk, varian, jumlah, perkiraan total, dan voucher.
+
+Pilihan:
 
 ```text
-Rp 45.000  → dicoret
-Rp 16.500  → harga promo
+Ya, Lanjut ke Pembayaran
+Kembali
 ```
 
-Untuk produk dengan varian, promo ditempel langsung pada varian yang menerima promo sehingga pembeli mengetahui varian mana yang sedang diskon.
+Invoice QRIS baru dibuat setelah pembeli memilih **Ya, Lanjut ke Pembayaran**.
 
-### Unduh QRIS diperbaiki
+## Database
 
-QRIS tidak lagi hanya mencoba mengunduh Data URL di browser. v52 menyimpan payload QRIS sementara pada pending order dan menyediakan file PNG dari server:
+### Sudah menggunakan v52
 
-```text
-/api/store-data?action=qr-download&invoice=INVOICE
-```
+**Tidak ada SQL baru.** Flash Sale disimpan di tabel `shop_settings` yang sudah bersifat key/value.
 
-Di Telegram Mini App, tombol **Unduh QRIS** memakai `Telegram.WebApp.downloadFile` jika tersedia. Browser biasa memakai download link sebagai fallback.
+### Upgrade dari v51 atau lebih lama
 
-## SQL WAJIB untuk upgrade dari v51 atau versi sebelumnya
-
-Sebelum mencoba fitur baru, buka **Supabase → SQL Editor** lalu jalankan:
+Tetap jalankan:
 
 ```text
 supabase/update-v52-marketplace.sql
 ```
 
-SQL tersebut menambahkan:
+karena v52 menambahkan:
 
 - `products.display_scope`
 - `pending_orders.qr_payload`
 
-File aman dijalankan ulang karena menggunakan `IF NOT EXISTS`.
-
-Untuk instalasi database baru, cukup jalankan:
-
-```text
-supabase/schema.sql
-```
-
-karena schema utama v52 sudah mencakup kedua kolom tersebut.
-
 ## Cara pemasangan
 
-1. Ekstrak ZIP v52.
-2. Unggah **isi folder `store_fix_v52`** ke root repository GitHub yang terhubung ke Vercel.
-3. Jalankan `supabase/update-v52-marketplace.sql` di Supabase SQL Editor.
+1. Ekstrak ZIP v53.
+2. Unggah **isi folder `store_fix_v53`** ke root repository GitHub yang terhubung ke Vercel dan timpa file lama.
+3. Jika sebelumnya sudah v52, tidak perlu menjalankan SQL tambahan.
 4. Pastikan Environment Variables lama tetap ada.
 5. Redeploy Vercel tanpa build cache.
-6. Setelah deployment berstatus **Ready**, pasang ulang webhook Telegram bila diperlukan:
+6. Tunggu deployment berstatus **Ready**.
+7. Buka `/reseller → Pengaturan` untuk mengatur Flash Sale.
 
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=ISI_WEBHOOK_SECRET
-```
-
-7. Buka `/reseller` dari Telegram owner dan atur logo/banner.
-8. Buat **invoice baru** untuk menguji tombol Unduh QRIS. Invoice lama sebelum v52 tidak memiliki `qr_payload`.
-
-## Environment Variables utama
+Environment Variables utama tetap sama:
 
 ```text
 PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
@@ -116,21 +105,11 @@ PAKASIR_API_KEY=api_key_pakasir
 PAKASIR_WEBHOOK_REQUIRE_SECRET=false
 ```
 
-Webhook Pakasir:
+Webhook Pakasir tetap:
 
 ```text
 https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 ```
-
-## Google Drive
-
-Logo, banner, dan gambar produk dapat memakai link berbagi Google Drive seperti:
-
-```text
-https://drive.google.com/file/d/FILE_ID/view?usp=sharing
-```
-
-Pastikan izin file adalah **Siapa saja yang memiliki link / Anyone with the link → Viewer**.
 
 ## Pengujian
 
@@ -139,6 +118,6 @@ npm ci
 npm test
 ```
 
-v52 telah lolos **31 pengujian otomatis** yang mencakup pembayaran, promo/voucher, promo varian, keamanan isi stok, banner bernama, tema Marketplace, pengaturan kanal produk, dan mekanisme unduh QRIS.
+v53 telah lolos **36 pengujian otomatis**, termasuk pembayaran, format notifikasi pesanan selesai, promo/voucher, target varian, keamanan stok, banner, QRIS download, Flash Sale, hero 2,39:1, dan konfirmasi checkout.
 
 Pengujian transaksi nyata tetap memerlukan akun Telegram, Pakasir, Supabase, dan Vercel Anda.

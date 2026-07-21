@@ -62,3 +62,31 @@ test('unduh QRIS memakai endpoint server dan Telegram downloadFile', () => {
   assert.match(api, /Content-Disposition/);
   assert.match(api, /Access-Control-Allow-Origin/);
 });
+
+test('v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace', () => {
+  const css = fs.readFileSync(path.join(root, 'public', 'store.css'), 'utf8');
+  assert.match(css, /aspect-ratio:\s*2\.39\s*\/\s*1/);
+  assert.doesNotMatch(js, /hero-slide-name/);
+});
+
+test('v53 menyediakan Flash Sale dengan countdown dan pengaturan reseller', () => {
+  assert.match(html, /id="flashSaleSection"/);
+  assert.match(html, /id="flashSaleCountdown"/);
+  assert.match(js, /renderFlashSale/);
+  assert.match(js, /bestFlashPromo/);
+  assert.match(reseller, /Flash Sale Marketplace/);
+  assert.match(reseller, /name="flash_sale_enabled"/);
+  assert.match(reseller, /name="flash_sale_end_at"/);
+  assert.match(reseller, /id="addFlashSaleRow"/);
+});
+
+test('v53 menempatkan blok benefit setelah katalog', () => {
+  assert.ok(html.indexOf('id="catalogSection"') < html.indexOf('class="benefits"'));
+});
+
+test('v53 meminta konfirmasi sebelum membuat pembayaran', () => {
+  assert.match(html, /id="confirmModal"/);
+  assert.match(html, /Ya, Lanjut ke Pembayaran/);
+  assert.match(js, /openCheckoutConfirmation/);
+  assert.match(js, /confirmCheckoutButton/);
+});

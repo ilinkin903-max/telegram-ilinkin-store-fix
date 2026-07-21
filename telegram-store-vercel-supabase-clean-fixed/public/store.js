@@ -23,7 +23,8 @@
     countdownTimer: null,
     bannerIndex: 0,
     bannerTimer: null,
-    bannerInterval: 5000
+    bannerInterval: 5000,
+    flashTimer: null
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -31,6 +32,8 @@
     brandLogo: $('brandLogo'), brandName: $('brandName'), searchInput: $('searchInput'), clearSearch: $('clearSearch'),
     telegramNotice: $('telegramNotice'), hero: $('hero'), heroTitle: $('heroTitle'), heroDescription: $('heroDescription'),
     heroCarousel: $('heroCarousel'), heroTrack: $('heroTrack'), heroDots: $('heroDots'),
+    flashSaleSection: $('flashSaleSection'), flashSaleTitle: $('flashSaleTitle'), flashSaleGrid: $('flashSaleGrid'),
+    flashHours: $('flashHours'), flashMinutes: $('flashMinutes'), flashSeconds: $('flashSeconds'),
     customerServiceBubble: $('customerServiceBubble'), groupFooter: $('groupFooter'),
     footerStoreName: $('footerStoreName'), categoryList: $('categoryList'), productGrid: $('productGrid'), productSummary: $('productSummary'),
     emptyState: $('emptyState'), sortSelect: $('sortSelect'), resellerButton: $('resellerButton'), mobilePanel: $('mobilePanel'),
@@ -43,7 +46,8 @@
     paymentExpiredView: $('paymentExpiredView'), paymentQr: $('paymentQr'), paymentCountdown: $('paymentCountdown'),
     paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'),
     paymentBubble: $('paymentBubble'), paymentBubbleText: $('paymentBubbleText'), historyModal: $('historyModal'), historyList: $('historyList'),
-    historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast')
+    historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast'),
+    confirmModal: $('confirmModal'), confirmOrderSummary: $('confirmOrderSummary'), confirmCheckoutButton: $('confirmCheckoutButton')
   };
 
   function escapeHtml(value) {
@@ -167,10 +171,10 @@
     }
     state.bannerInterval = Math.max(3000, Math.min(15000, Number(settings.banner_interval_ms || 5000)));
     els.heroTrack.innerHTML = items.map(function (item, index) {
-      return '<div class="hero-slide"><img src="' + escapeHtml(item.url) + '" alt="' + escapeHtml(item.name || ('Banner promosi ' + (index + 1))) + '"><span class="hero-slide-name">' + escapeHtml(item.name || ('Banner ' + (index + 1))) + '</span></div>';
+      return '<div class="hero-slide"><img src="' + escapeHtml(item.url) + '" alt="Banner promosi ' + (index + 1) + '"></div>';
     }).join('');
     els.heroDots.innerHTML = items.length > 1 ? items.map(function (item, index) {
-      return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan ' + escapeHtml(item.name || ('banner ' + (index + 1))) + '"></button>';
+      return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan banner ' + (index + 1) + '"></button>';
     }).join('') : '';
     els.heroDots.classList.toggle('hidden', items.length < 2);
     els.heroDots.querySelectorAll('[data-banner-index]').forEach(function (dot) {
@@ -193,6 +197,96 @@
     }).join('');
   }
 
+  function clearFlashTimer() {
+    if (state.flashTimer) clearInterval(state.flashTimer);
+    state.flashTimer = null;
+  }
+  function bestFlashPromo(product) {
+    var choices = [];
+    if (product && product.promo && Number(product.promo.final_price) < Number(product.promo.original_price)) {
+      choices.push({
+        name: product.promo.name || 'Promo',
+        variant: '',
+        original: Number(product.promo.original_price || product.price_min || 0),
+        final: Number(product.promo.final_price || product.sale_price_min || product.price_min || 0)
+      });
+    }
+    (product && product.variants || []).forEach(function (variant) {
+      if (!variant.promo) return;
+      var original = Number(variant.promo.original_price != null ? variant.promo.original_price : variant.price || 0);
+      var final = Number(variant.promo.final_price || original);
+      if (final < original) choices.push({ name: variant.promo.name || 'Promo', variant: variant.name || '', original: original, final: final });
+    });
+    choices.sort(function (a, b) {
+      var pa = a.original > 0 ? (a.original - a.final) / a.original : 0;
+      var pb = b.original > 0 ? (b.original - b.final) / b.original : 0;
+      return pb - pa || a.final - b.final;
+    });
+    return choices[0] || null;
+  }
+  function updateFlashCountdown(endAt) {
+    if (!els.flashSaleSection || els.flashSaleSection.classList.contains('hidden')) return;
+    var end = new Date(endAt || '').getTime();
+    var remaining = end - Date.now();
+    if (!end || !isFinite(end) || remaining <= 0) {
+      clearFlashTimer();
+      els.flashSaleSection.classList.add('hidden');
+      return;
+    }
+    var totalSeconds = Math.max(0, Math.floor(remaining / 1000));
+    var hours = Math.floor(totalSeconds / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var seconds = totalSeconds % 60;
+    els.flashHours.textContent = String(hours).padStart(2, '0');
+    els.flashMinutes.textContent = String(minutes).padStart(2, '0');
+    els.flashSeconds.textContent = String(seconds).padStart(2, '0');
+  }
+  function renderFlashSale(settings) {
+    clearFlashTimer();
+    if (!els.flashSaleSection || String(settings.flash_sale_enabled || '').toLowerCase() !== 'true') {
+      if (els.flashSaleSection) els.flashSaleSection.classList.add('hidden');
+      return;
+    }
+    var codes = Array.isArray(settings.flash_sale_product_codes) ? settings.flash_sale_product_codes : [];
+    var products = codes.map(function (code) {
+      return state.products.find(function (product) { return String(product.code || '').toUpperCase() === String(code || '').toUpperCase(); });
+    }).filter(Boolean).filter(function (product) { return product.available; }).slice(0, 8);
+    var endAt = settings.flash_sale_end_at || '';
+    var endTime = new Date(endAt).getTime();
+    if (!products.length || !endTime || !isFinite(endTime) || endTime <= Date.now()) {
+      els.flashSaleSection.classList.add('hidden');
+      return;
+    }
+    els.flashSaleTitle.textContent = settings.flash_sale_title || 'FLASH SALE';
+    els.flashSaleGrid.innerHTML = products.map(function (product) {
+      var promo = bestFlashPromo(product);
+      var original = promo ? promo.original : Number(product.price_min || 0);
+      var final = promo ? promo.final : Number(product.sale_price_min != null ? product.sale_price_min : product.price_min || 0);
+      var pct = promo && original > 0 ? Math.max(1, Math.round(((original - final) / original) * 100)) : 0;
+      var image = product.image_url
+        ? '<img src="' + escapeHtml(product.image_url) + '" alt="' + escapeHtml(product.name) + '">'
+        : '<div class="product-image-fallback">' + escapeHtml(String(product.name || 'P').slice(0, 1).toUpperCase()) + '</div>';
+      var price = promo
+        ? '<del>' + escapeHtml(rupiah(original)) + '</del><strong>' + escapeHtml(rupiah(final)) + '</strong>'
+        : '<strong>' + escapeHtml(rupiah(final)) + '</strong>';
+      var stockText = product.stock <= 5 ? 'STOK TERBATAS' : product.sold + ' TERJUAL';
+      var fill = Math.max(18, Math.min(92, product.stock <= 5 ? 82 : 38 + Math.min(50, Number(product.sold || 0))));
+      return '<article class="flash-card" data-flash-product="' + escapeHtml(product.code) + '">' +
+        '<div class="flash-image-wrap">' + image + (pct ? '<span class="flash-discount">⚡-' + pct + '%</span>' : '') + '</div>' +
+        '<div class="flash-body"><h3 class="flash-name">' + escapeHtml(product.name) + '</h3>' +
+        (promo && promo.variant ? '<div class="flash-variant">Varian: ' + escapeHtml(promo.variant) + '</div>' : '') +
+        '<div class="flash-price">' + price + '</div>' +
+        '<div class="flash-stock-track"><div class="flash-stock-fill" style="width:' + fill + '%"></div><div class="flash-stock-label">' + escapeHtml(stockText) + '</div></div></div></article>';
+    }).join('');
+    els.flashSaleGrid.querySelectorAll('[data-flash-product]').forEach(function (card) {
+      card.addEventListener('click', function () { openProduct(card.dataset.flashProduct); });
+    });
+    els.flashSaleGrid.querySelectorAll('img').forEach(function (img) { imageFallback(img, img.alt); });
+    els.flashSaleSection.classList.remove('hidden');
+    updateFlashCountdown(endAt);
+    state.flashTimer = setInterval(function () { updateFlashCountdown(endAt); }, 1000);
+  }
+
   function applySettings() {
     var settings = state.catalog.settings || {};
     document.title = (settings.store_name || 'iLink.in Store') + ' — Auto Order';
@@ -205,6 +299,7 @@
       imageFallback(els.brandLogo.querySelector('img'), settings.store_name);
     }
     renderHeroBanners(settings);
+    renderFlashSale(settings);
     setLink(els.customerServiceBubble, settings.customer_service_link);
     setLink(els.groupFooter, settings.group_link);
     var viewer = state.catalog.viewer || {};
@@ -405,6 +500,31 @@
     openModal(els.productModal);
   }
 
+  function openCheckoutConfirmation() {
+    if (!state.catalog.viewer.telegram_ready) {
+      toast('Checkout harus dibuka melalui Telegram.', true); openTelegram(); return;
+    }
+    var product = state.selectedProduct;
+    if (!product) return;
+    var variant = activeVariant();
+    var qty = clampQuantity();
+    if (product.variants.length && !variant) return toast('Pilih varian terlebih dahulu.', true);
+    var unit = selectedUnitPrice(qty);
+    var promo = variant && variant.promo ? variant.promo : product.promo;
+    var shownTotal = unit * qty;
+    if (promo && qty === 1 && Number(promo.original_price) === Number(unit)) shownTotal = Number(promo.final_price);
+    els.confirmOrderSummary.innerHTML = [
+      ['Produk', product.name],
+      ['Varian', variant ? variant.name : 'Tanpa varian'],
+      ['Jumlah', qty + ' item'],
+      ['Perkiraan total', rupiah(shownTotal)],
+      ['Voucher', els.voucherInput.value.trim() || 'Tidak digunakan']
+    ].map(function (row) {
+      return '<div class="confirm-order-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
+    }).join('');
+    openModal(els.confirmModal);
+  }
+
   async function startCheckout() {
     if (!state.catalog.viewer.telegram_ready) {
       toast('Checkout harus dibuka melalui Telegram.', true); openTelegram(); return;
@@ -422,6 +542,7 @@
         voucher_code: els.voucherInput.value.trim()
       }});
       state.activePayment = payment;
+      closeModal(els.confirmModal);
       closeModal(els.productModal);
       showPayment(payment);
     } catch (error) {
@@ -612,6 +733,7 @@
 
   document.querySelectorAll('[data-close="product"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.productModal); }); });
   document.querySelectorAll('[data-close="history"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.historyModal); }); });
+  document.querySelectorAll('[data-close="confirm"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.confirmModal); }); });
   $('shopNowButton').addEventListener('click', function () { $('catalogSection').scrollIntoView({ behavior: 'smooth' }); });
   $('openTelegramTop').addEventListener('click', openTelegram);
   $('historyButton').addEventListener('click', openHistory);
@@ -625,7 +747,9 @@
   $('minusQuantity').addEventListener('click', function () { els.quantityInput.value = Math.max(1, Number(els.quantityInput.value || 1) - 1); updateProductEstimate(); });
   $('plusQuantity').addEventListener('click', function () { els.quantityInput.value = Number(els.quantityInput.value || 1) + 1; updateProductEstimate(); });
   els.quantityInput.addEventListener('input', updateProductEstimate);
-  els.buyNowButton.addEventListener('click', startCheckout);
+  els.buyNowButton.addEventListener('click', openCheckoutConfirmation);
+  els.confirmCheckoutButton.addEventListener('click', startCheckout);
+  $('cancelCheckoutConfirm').addEventListener('click', function () { closeModal(els.confirmModal); });
   $('checkPaymentButton').addEventListener('click', function () { checkPayment(true); });
   els.downloadQrButton.addEventListener('click', downloadQr);
   els.paymentBubble.addEventListener('click', function () { if (state.activePayment) showPayment(state.activePayment, true); });
@@ -635,7 +759,8 @@
   $('expiredDoneButton').addEventListener('click', function () { clearActivePaymentStorage(); state.activePayment = null; state.paymentStatus = 'idle'; updatePaymentBubble(); closeModal(els.paymentModal); });
   window.addEventListener('keydown', function (event) {
     if (event.key !== 'Escape') return;
-    if (els.productModal.classList.contains('show')) closeModal(els.productModal);
+    if (els.confirmModal.classList.contains('show')) closeModal(els.confirmModal);
+    else if (els.productModal.classList.contains('show')) closeModal(els.productModal);
     else if (els.historyModal.classList.contains('show')) closeModal(els.historyModal);
     else if (els.paymentModal.classList.contains('show')) closeModal(els.paymentModal);
   });

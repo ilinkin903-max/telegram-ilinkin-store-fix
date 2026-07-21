@@ -1,75 +1,72 @@
-# Pengaturan Marketplace v52
+# Pengaturan Marketplace v53
 
-## 1. Jalankan SQL upgrade
+## Hero / Banner 2,39:1
 
-Buka Supabase SQL Editor dan jalankan:
+Banner yang disarankan tetap menggunakan rasio:
 
 ```text
-supabase/update-v52-marketplace.sql
+2,39:1
 ```
 
-Lakukan ini sebelum mengubah visibilitas produk atau mencoba unduh QRIS.
+Contoh ukuran:
 
-## 2. Logo Marketplace
+```text
+1195 × 500 px
+1434 × 600 px
+```
+
+Blok biru bawaan Marketplace sekarang juga mengikuti rasio yang sama.
+
+## Banner Promosi
 
 Buka:
 
 ```text
-/reseller → Pengaturan → Logo Marketplace
+/reseller → Pengaturan → Banner Promosi Marketplace
 ```
 
-Isi **Link Logo** dengan URL HTTPS publik atau link Google Drive publik.
+Setiap banner tetap memiliki **Nama Banner** dan **Link Gambar** untuk memudahkan pengelolaan di dashboard. Nama tersebut tidak ditampilkan pada Marketplace.
 
-## 3. Banner Promosi
+## Flash Sale
 
-Pada bagian **Banner Promosi Marketplace** tekan **+ Tambah**.
-
-Setiap baris memiliki:
+Buka:
 
 ```text
-Nama Banner | URL Gambar | ×
+/reseller → Pengaturan → Flash Sale Marketplace
 ```
 
-Contoh:
+Langkah:
+
+1. Pilih `ON`.
+2. Isi judul, misalnya `FLASH SALE`.
+3. Tentukan tanggal dan jam berakhir.
+4. Tekan **+ Tambah Produk**.
+5. Pilih produk yang ingin ditampilkan.
+6. Maksimal 8 produk.
+7. Tekan **Simpan Pengaturan**.
+
+Agar tampil seperti Flash Sale marketplace, buat promo otomatis untuk produk atau varian tersebut dari menu **Promo**. Harga asli dan harga promo akan ditampilkan secara otomatis.
+
+## Konfirmasi pembelian
+
+Pada detail produk, tombol **Beli Sekarang** sekarang menampilkan konfirmasi terlebih dahulu. Pembayaran hanya dibuat setelah pembeli memilih:
 
 ```text
-Promo Canva       | https://domain.com/canva.jpg
-Diskon ChatGPT    | https://domain.com/chatgpt.jpg
-Promo Gemini      | https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+Ya, Lanjut ke Pembayaran
 ```
 
-Gunakan rasio gambar **2,39:1**. Maksimal 10 banner.
+Pilihan `Kembali` menutup konfirmasi tanpa membuat invoice.
 
-## 4. Produk Marketplace saja
+## Posisi blok keunggulan
 
-Saat **Tambah Produk** atau **Edit Produk**, cari pilihan **Tampilkan Produk Di**.
+Transaksi Aman, Proses Otomatis, Dukungan Telegram, dan Promo & Voucher sekarang berada di bagian bawah setelah katalog.
 
-- **Bot Telegram + Marketplace**: tampil di kedua kanal.
-- **Marketplace saja**: tidak tampil di daftar produk pembeli pada bot Telegram.
+## Database
 
-## 5. Promo dan varian
+Jika sudah memakai v52, tidak ada SQL tambahan untuk v53.
 
-Jika promo berlaku untuk satu varian tertentu, Marketplace akan menampilkan harga asli dicoret dan harga promo tepat pada blok varian tersebut.
-
-Contoh:
+Untuk upgrade dari v51 atau versi lebih lama, tetap jalankan:
 
 ```text
-18 Bulan Invite
-Rp 45.000  → dicoret
-Rp 16.500
-Diskon Invite · hemat Rp 28.500
+supabase/update-v52-marketplace.sql
 ```
-
-Harga final saat checkout tetap dihitung ulang oleh server agar voucher/promo, jumlah beli, dan harga grosir tetap tervalidasi.
-
-## 6. Unduh QRIS
-
-Setelah v52 terpasang, buat **invoice baru**.
-
-1. Buka Marketplace dari Telegram.
-2. Pilih produk dan buat pembayaran.
-3. Saat QRIS muncul, tekan **⬇ Unduh QRIS**.
-4. Telegram akan menampilkan permintaan download native pada versi yang mendukung fitur tersebut.
-5. Pada browser/fallback, file PNG dibuka atau diunduh langsung dari endpoint server.
-
-Invoice yang dibuat sebelum v52 tidak memiliki payload QRIS di database, sehingga buat transaksi baru saat pengujian.

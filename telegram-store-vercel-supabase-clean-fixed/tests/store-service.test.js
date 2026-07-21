@@ -85,3 +85,11 @@ test('promo varian publik menyertakan harga asli dan harga setelah diskon', () =
   assert.equal(product.variants[0].promo.final_price, 16500);
   assert.equal(product.sale_price_min, 16500);
 });
+
+test('daftar produk Flash Sale menerima JSON, menghapus duplikat, dan membatasi 8 produk', () => {
+  assert.deepEqual(
+    store.parseFlashSaleProductCodes(JSON.stringify(['canva', 'GPT', 'CANVA', 'GEMINI'])),
+    ['CANVA', 'GPT', 'GEMINI']
+  );
+  assert.equal(store.parseFlashSaleProductCodes('A,B,C,D,E,F,G,H,I').length, 8);
+});
