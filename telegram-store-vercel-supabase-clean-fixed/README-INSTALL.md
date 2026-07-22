@@ -1,3 +1,9 @@
+# v56 — AutoGoPay Callback Verification Fix
+
+Versi ini memperbaiki error callback AutoGoPay yang mengharapkan HTTP 200 ketika melakukan verifikasi URL. Tidak ada SQL baru.
+
+Baca juga: `AUTOGOPAY-CALLBACK-FIX.md`.
+
 # iLink.in Store v55 — AutoGoPay QRIS Integration
 
 Versi ini melanjutkan seluruh fitur Marketplace v54 dan mengganti/menambahkan payment gateway **AutoGoPay** untuk QRIS otomatis.

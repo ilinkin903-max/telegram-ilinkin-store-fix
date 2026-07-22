@@ -28,9 +28,16 @@ function parseWebhookBody(req) {
   }
 }
 
+function normalizeSignature(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^sha256=/, '');
+}
+
 function safeEqualHex(left, right) {
-  const a = String(left || '').trim().toLowerCase();
-  const b = String(right || '').trim().toLowerCase();
+  const a = normalizeSignature(left);
+  const b = normalizeSignature(right);
   if (!a || !b || a.length !== b.length) return false;
   try {
     return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
@@ -60,6 +67,65 @@ function verifyAutoGopaySignature(req, payload) {
   });
 }
 
+function autoGopayRequestMeta(req, payload = {}) {
+  const event = String(
+    payload?.event ||
+    req?.headers?.['x-callback-event'] ||
+    ''
+  ).trim().toLowerCase();
+  const userAgent = String(req?.headers?.['user-agent'] || '').trim().toLowerCase();
+  const hasSignature = Boolean(
+    req?.headers?.['x-signature'] ||
+    req?.headers?.['x-callback-signature']
+  );
+  const transaction = payload?.transaction && typeof payload.transaction === 'object'
+    ? payload.transaction
+    : null;
+  const transactionId = String(
+    transaction?.id ||
+    transaction?.transaction_id ||
+    ''
+  ).trim();
+  const amount = Number(transaction?.amount || transaction?.total || 0);
+  const status = String(
+    transaction?.status ||
+    transaction?.transaction_status ||
+    ''
+  ).trim().toLowerCase();
+
+  return {
+    event,
+    userAgent,
+    hasSignature,
+    transaction,
+    transactionId,
+    amount,
+    status,
+    looksLikeAutoGopay: hasSignature || event.length > 0 || userAgent.includes('autogopay-callback')
+  };
+}
+
+function isAutoGopayCallbackProbe(req, payload = {}) {
+  const meta = autoGopayRequestMeta(req, payload);
+  const explicitProbe =
+    payload?.test === true ||
+    payload?.verification === true ||
+    payload?.challenge != null ||
+    ['ping', 'pong', 'test', 'callback.test', 'webhook.test', 'callback.verify', 'callback.verification'].includes(meta.event) ||
+    ['test', 'verify', 'verification'].includes(meta.status);
+  const hasUsableTransaction = Boolean(
+    meta.transaction &&
+    meta.transactionId &&
+    Number.isFinite(meta.amount) &&
+    meta.amount > 0
+  );
+
+  // AutoGoPay melakukan pengecekan URL saat callback disimpan. Probe tersebut
+  // tidak selalu membawa transaksi penjualan lengkap. Probe hanya di-ACK dan
+  // tidak pernah digunakan untuk menyelesaikan pesanan.
+  return meta.looksLikeAutoGopay && (explicitProbe || !hasUsableTransaction);
+}
+
 function pakasirSecretAllowed(req) {
   const incoming = requestSecret(req);
   const configured = String(config.pakasirWebhookSecret || '').trim();
@@ -70,14 +136,36 @@ function pakasirSecretAllowed(req) {
 }
 
 async function processAutoGopayWebhook(req, res, payload) {
-  if (!verifyAutoGopaySignature(req, payload)) {
-    return res.status(401).json({ ok: false, error: 'Signature AutoGoPay tidak valid.' });
+  const meta = autoGopayRequestMeta(req, payload);
+  const validSignature = verifyAutoGopaySignature(req, payload);
+
+  // Saat URL callback disimpan, AutoGoPay melakukan health-check/probe dan
+  // hanya mengharapkan HTTP 200. Probe tidak memproses transaksi apa pun.
+  // Jika probe membawa signature, signature tetap diverifikasi. Sebagian probe
+  // hanya mengirim User-Agent/event tanpa payload transaksi lengkap.
+  if (isAutoGopayCallbackProbe(req, payload)) {
+    if (meta.hasSignature && !validSignature) {
+      return res.status(401).json({ success: false, error: 'Signature AutoGoPay tidak valid.' });
+    }
+    console.info('AutoGoPay callback probe diterima.', {
+      event: meta.event || 'callback.probe',
+      signed: meta.hasSignature
+    });
+    return res.status(200).json({
+      success: true,
+      state: 'callback_probe_ok',
+      event: meta.event || 'callback.probe'
+    });
+  }
+
+  if (!validSignature) {
+    return res.status(401).json({ success: false, error: 'Signature AutoGoPay tidak valid.' });
   }
 
   const validation = paymentService.validateAutoGopayWebhookPayload(payload);
   if (!validation.ok) {
     console.warn('Webhook AutoGoPay ditolak:', validation.reason, payload);
-    return res.status(400).json({ ok: false, error: validation.reason });
+    return res.status(400).json({ success: false, error: validation.reason });
   }
 
   const incoming = validation.transaction;
@@ -148,12 +236,15 @@ async function processPakasirWebhook(req, res, payload) {
   return res.status(200).json({ ok: true, state: result.state, invoice: incoming.order_id });
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
+  if (req.method === 'OPTIONS' || req.method === 'HEAD') {
+    return res.status(200).end();
+  }
   if (req.method === 'GET') {
     return res.status(200).json({
       ok: true,
       message: 'Webhook pembayaran aktif.',
-      version: 'v55-autogopay-integration',
+      version: 'v56-autogopay-callback-probe-fix',
       active_provider: config.paymentProvider,
       configuration: {
         autogopayApiKeyConfigured: Boolean(config.autogopayApiKey),
@@ -169,8 +260,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const payload = parseWebhookBody(req);
-    const hasAutoGopaySignature = Boolean(req?.headers?.['x-signature'] || req?.headers?.['x-callback-signature']);
-    if (hasAutoGopaySignature || String(config.paymentProvider).toLowerCase() === 'autogopay') {
+    const autoGopayMeta = autoGopayRequestMeta(req, payload);
+    if (autoGopayMeta.looksLikeAutoGopay || String(config.paymentProvider).toLowerCase() === 'autogopay') {
       return await processAutoGopayWebhook(req, res, payload);
     }
     return await processPakasirWebhook(req, res, payload);
@@ -178,4 +269,14 @@ module.exports = async function handler(req, res) {
     console.error('payment webhook error:', error);
     return res.status(500).json({ ok: false, error: error.message || 'Server error' });
   }
+};
+
+
+module.exports = handler;
+module.exports._test = {
+  normalizeSignature,
+  safeEqualHex,
+  autoGopayRequestMeta,
+  isAutoGopayCallbackProbe,
+  verifyAutoGopaySignature
 };

@@ -1,4 +1,4 @@
-# Setup AutoGoPay untuk iLink.in Store
+# Setup AutoGoPay untuk iLink.in Store — v56
 
 ## Environment Variables
 
@@ -42,3 +42,8 @@ https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 5. Bot mencocokkan transaction ID dan nominal.
 6. Stok dipotong satu kali.
 7. Produk dan notifikasi transaksi dikirim otomatis.
+
+
+## Jika muncul error verifikasi callback 400
+
+Gunakan v56, redeploy, pastikan `/api/payment-webhook` menampilkan versi `v56-autogopay-callback-probe-fix`, lalu jalankan kembali `/api/setup-autogopay?secret=...`. Probe verifikasi akan dibalas HTTP 200 tanpa memproses order, sedangkan webhook transaksi nyata tetap wajib menggunakan signature.
