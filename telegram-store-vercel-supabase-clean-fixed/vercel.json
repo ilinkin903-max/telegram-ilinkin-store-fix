@@ -19,6 +19,9 @@
     "api/set-webhook.js": {
       "maxDuration": 30
     },
+    "api/setup-autogopay.js": {
+      "maxDuration": 30
+    },
     "api/backup-cron.js": {
       "maxDuration": 30
     },

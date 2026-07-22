@@ -1,4 +1,4 @@
-# Pengaturan Marketplace v54
+# Pengaturan Marketplace v55
 
 ## Flash Sale
 
@@ -33,3 +33,16 @@ Pada Flash Sale:
 - Harga selalu mengikuti promo Flash Sale yang berlaku.
 - Bila promo hanya untuk varian tertentu, nama varian tampil tepat di bawah nama produk.
 - Angka terjual hanya menghitung transaksi dalam periode Flash Sale.
+
+## Pembayaran AutoGoPay v55
+
+Marketplace menggunakan `PAYMENT_PROVIDER=autogopay` bila variabel tersebut diaktifkan. QRIS tetap muncul di modal Marketplace dan dapat diunduh. Bila AutoGoPay mengirim `checkout_url`, tersedia tombol **Buka Halaman Pembayaran**.
+
+Pengecekan status berjalan melalui:
+
+- webhook AutoGoPay;
+- polling Marketplace;
+- tombol **Cek Pembayaran**;
+- watcher server sebagai cadangan.
+
+Jalankan SQL `supabase/update-v55-autogopay.sql` dan pasang callback melalui `/api/setup-autogopay?secret=...` sebelum melakukan transaksi baru.

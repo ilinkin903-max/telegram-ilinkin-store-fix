@@ -4,14 +4,58 @@ const assert = require('node:assert/strict');
 process.env.PAKASIR_SLUG = process.env.PAKASIR_SLUG || 'ilinkin-store';
 
 const {
+  normalizePaymentStatus,
   normalizePakasirTransaction,
+  normalizeAutoGopayTransaction,
   validateWebhookPayload,
+  validateAutoGopayWebhookPayload,
   paymentMatchesOrder,
   sendOrderReceipt,
   sendOwnerLog
 } = require('../lib/paymentService');
 const tg = require('../lib/telegram');
 const { config } = require('../lib/config');
+
+
+test('normalisasi response AutoGoPay generate dan status settlement', () => {
+  const trx = normalizeAutoGopayTransaction({
+    success: true,
+    data: {
+      transaction_id: '53bc6ed2-441d-4bd0-bc39-11fdfff5fedb',
+      order_id: 'AUTOGOPAY-1774618440-2411',
+      amount: 10000,
+      transaction_status: 'settlement',
+      qr_string: '000201010212...',
+      checkout_url: 'https://autogopay.site/pay/token'
+    }
+  });
+  assert.equal(trx.transaction_id, '53bc6ed2-441d-4bd0-bc39-11fdfff5fedb');
+  assert.equal(trx.order_id, 'AUTOGOPAY-1774618440-2411');
+  assert.equal(trx.amount, 10000);
+  assert.equal(trx.status, 'completed');
+  assert.equal(trx.qr_string, '000201010212...');
+});
+
+test('webhook AutoGoPay memerlukan transaction id dan nominal valid', () => {
+  const valid = validateAutoGopayWebhookPayload({
+    event: 'transaction.received',
+    transaction: { id: 'TRX-001', amount: 50000, status: 'settlement' }
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.transaction.status, 'completed');
+
+  const invalid = validateAutoGopayWebhookPayload({
+    event: 'transaction.received',
+    transaction: { amount: 50000, status: 'settlement' }
+  });
+  assert.equal(invalid.ok, false);
+});
+
+test('status payment gateway dinormalisasi', () => {
+  assert.equal(normalizePaymentStatus('settlement'), 'completed');
+  assert.equal(normalizePaymentStatus('expire'), 'expired');
+  assert.equal(normalizePaymentStatus('cancel'), 'cancelled');
+});
 
 test('normalize payload webhook Pakasir completed', () => {
   const trx = normalizePakasirTransaction({

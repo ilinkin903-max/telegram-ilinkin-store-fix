@@ -676,6 +676,9 @@ async function upsertPendingOrder(input) {
     status: input.status || 'draft',
     expires_at: input.expires_at || null,
     qr_payload: String(input.qr_payload || ''),
+    payment_provider: String(input.payment_provider || 'pakasir').trim().toLowerCase(),
+    provider_transaction_id: String(input.provider_transaction_id || '').trim(),
+    provider_checkout_url: String(input.provider_checkout_url || '').trim(),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
@@ -693,6 +696,14 @@ async function getPendingOrderByInvoice(invoiceRef) {
   const ref = String(invoiceRef || '').trim();
   if (!ref) return null;
   const { data, error } = await sb().from('pending_orders').select('*').eq('invoice_ref', ref).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingOrderByProviderTransactionId(transactionId) {
+  const ref = String(transactionId || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('pending_orders').select('*').eq('provider_transaction_id', ref).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -851,7 +862,7 @@ async function getUserByTelegramId(telegramId) {
 }
 
 async function completeOrder(order, product, totalPrice, buyer = {}) {
-  // Webhook Pakasir dapat dikirim lebih dari sekali. Cek transaksi lebih dulu agar
+  // Webhook payment gateway dapat dikirim lebih dari sekali. Cek transaksi lebih dulu agar
   // stok, statistik, dan voucher tidak diproses ulang untuk invoice yang sama.
   const existingTransaction = await getTransactionByOrderRef(order.invoice_ref);
   if (existingTransaction) {
@@ -1531,6 +1542,7 @@ module.exports = {
   upsertPendingOrder,
   getPendingOrder,
   getPendingOrderByInvoice,
+  getPendingOrderByProviderTransactionId,
   deletePendingOrder,
   getVoucher,
   voucherIsValid,

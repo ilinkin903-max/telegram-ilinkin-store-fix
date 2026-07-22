@@ -44,7 +44,7 @@
     quantityInput: $('quantityInput'), voucherInput: $('voucherInput'), estimatedTotal: $('estimatedTotal'), buyNowButton: $('buyNowButton'),
     paymentModal: $('paymentModal'), paymentPendingView: $('paymentPendingView'), paymentSuccessView: $('paymentSuccessView'),
     paymentExpiredView: $('paymentExpiredView'), paymentQr: $('paymentQr'), paymentCountdown: $('paymentCountdown'),
-    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'),
+    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'), paymentCheckoutLink: $('paymentCheckoutLink'),
     paymentBubble: $('paymentBubble'), paymentBubbleText: $('paymentBubbleText'), historyModal: $('historyModal'), historyList: $('historyList'),
     historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast'),
     confirmModal: $('confirmModal'), confirmOrderSummary: $('confirmOrderSummary'), confirmCheckoutButton: $('confirmCheckoutButton')
@@ -611,6 +611,11 @@
     els.paymentExpiredView.classList.add('hidden');
     els.paymentQr.src = payment.qr_data_url;
     els.paymentBreakdown.innerHTML = paymentRows(payment);
+    if (els.paymentCheckoutLink) {
+      els.paymentCheckoutLink.classList.toggle('hidden', !payment.checkout_url);
+      if (payment.checkout_url) els.paymentCheckoutLink.href = payment.checkout_url;
+      else els.paymentCheckoutLink.removeAttribute('href');
+    }
     els.watcherInfo.textContent = payment.watcher_scheduled
       ? 'Sistem memeriksa pembayaran otomatis. Tombol cek hanya sebagai cadangan.'
       : 'Webhook pembayaran tetap aktif. Gunakan tombol cek jika status belum berubah.';

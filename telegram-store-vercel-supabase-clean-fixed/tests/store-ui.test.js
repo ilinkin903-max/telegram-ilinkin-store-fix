@@ -105,3 +105,10 @@ test('Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah te
   assert.match(js, /promo\.sold/);
   assert.match(js, /TERJUAL/);
 });
+
+
+test('v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia', () => {
+  assert.match(html, /id="paymentCheckoutLink"/);
+  assert.match(js, /payment\.checkout_url/);
+  assert.match(js, /Buka Halaman Pembayaran|paymentCheckoutLink/);
+});

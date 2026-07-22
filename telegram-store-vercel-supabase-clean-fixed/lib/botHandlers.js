@@ -1182,8 +1182,8 @@ async function changeQuantity(query, delta, reset = false) {
 }
 
 async function createPayment(query) {
-  if (!config.pakasirSlug || !config.pakasirApiKey) {
-    return tg.sendMessage(query.from.id, '⚠️ PAKASIR_SLUG dan PAKASIR_API_KEY belum diatur di Vercel.');
+  if (!paymentService.paymentConfigured()) {
+    return tg.sendMessage(query.from.id, `⚠️ Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap di Vercel.`);
   }
 
   const userId = query.from.id;
@@ -1221,21 +1221,27 @@ async function createPayment(query) {
   harga = Math.max(0, subtotal - appliedDiscount);
 
   const fee = randomFee();
-  const invoiceRef = randomRef();
+  const requestedInvoice = randomRef();
   const totalAmount = harga + fee;
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-  const response = await axios.post('https://app.pakasir.com/api/transactioncreate/qris', {
-    project: config.pakasirSlug,
-    order_id: invoiceRef,
-    amount: totalAmount,
-    api_key: config.pakasirApiKey
-  });
-
-  const qrText = response.data?.payment?.payment_number || response.data?.payment_number || response.data?.qr_string;
-  if (!qrText) throw new Error('Pakasir tidak mengirim data QRIS.');
+  const gatewayPayment = await paymentService.createPaymentTransaction({ amount: totalAmount, invoiceRef: requestedInvoice });
+  const invoiceRef = gatewayPayment.order_id || requestedInvoice;
+  const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const qrText = gatewayPayment.qr_string;
   const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
-  await db.upsertPendingOrder({ ...order, quantity, voucher_code: appliedCode, invoice_ref: invoiceRef, amount: totalAmount, fee, expires_at: expiresAt, status: 'awaiting_payment' });
+  await db.upsertPendingOrder({
+    ...order,
+    quantity,
+    voucher_code: appliedCode,
+    invoice_ref: invoiceRef,
+    amount: totalAmount,
+    fee,
+    expires_at: expiresAt,
+    status: 'awaiting_payment',
+    qr_payload: qrText,
+    payment_provider: gatewayPayment.provider,
+    provider_transaction_id: gatewayPayment.transaction_id,
+    provider_checkout_url: gatewayPayment.checkout_url
+  });
 
   const buffer = await QRCode.toBuffer(qrText, { type: 'png' });
   const discountLine = voucherApplied
@@ -1254,9 +1260,9 @@ async function createPayment(query) {
     (appliedDiscount > 0 ? `Setelah Diskon: *${formatRupiah(harga)}*\n` : '') +
     `Fee: *${formatRupiah(fee)}*\n` +
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
-    `Expired: *10 menit*\n` +
+    `Expired: *${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))} menit*\n` +
     `=======================\n` +
-    `Pembayaran akan terdeteksi otomatis. Produk langsung dikirim setelah status Pakasir menjadi berhasil. Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
+    `Pembayaran akan terdeteksi otomatis melalui ${paymentService.paymentProviderLabel({ payment_provider: gatewayPayment.provider })}. Produk langsung dikirim setelah pembayaran berhasil. Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   const paymentMessage = await tg.sendPhoto(userId, buffer, {
@@ -1264,21 +1270,22 @@ async function createPayment(query) {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
+        ...(gatewayPayment.checkout_url ? [[{ text: '🌐 Buka Halaman Pembayaran', url: gatewayPayment.checkout_url }]] : []),
         [{ text: '🔄 Cek Pembayaran Sekarang', callback_data: `cekbayar:${invoiceRef}` }],
         [{ text: '❌ Batal', callback_data: 'batalbeli' }]
       ]
     }
   });
 
-  // Selain webhook Pakasir, jalankan watcher latar belakang selama beberapa menit.
+  // Selain webhook payment gateway, jalankan watcher latar belakang selama beberapa menit.
   // Ini menjadi cadangan otomatis bila notifikasi webhook terlambat atau URL webhook
-  // di dashboard Pakasir belum tersimpan dengan benar.
+  // di dashboard payment gateway belum tersimpan dengan benar.
   const watcherScheduled = paymentService.schedulePaymentWatcher({
     invoiceRef,
     telegramId: userId
   });
   if (!watcherScheduled) {
-    console.warn(`Watcher pembayaran ${invoiceRef} tidak aktif; mengandalkan webhook Pakasir.`);
+    console.warn(`Watcher pembayaran ${invoiceRef} tidak aktif; mengandalkan webhook payment gateway.`);
   }
 
   return paymentMessage;
@@ -1304,10 +1311,10 @@ async function checkPayment(query, invoiceFromButton) {
     return tg.sendMessage(userId, 'Pesananmu telah expired, harap pesan kembali!');
   }
 
-  const transaction = await paymentService.verifyPakasirTransaction(order);
+  const transaction = await paymentService.verifyPaymentTransaction(order);
   if (transaction.status !== 'completed') {
     return tg.answerCallbackQuery(query.id, {
-      text: 'Pembayaran belum masuk. Sistem tetap memeriksa otomatis melalui webhook Pakasir.',
+      text: `Pembayaran belum masuk. Sistem tetap memeriksa otomatis melalui webhook ${paymentService.paymentProviderLabel(order)}.`,
       show_alert: true
     });
   }
@@ -1375,6 +1382,10 @@ async function handleCallbackQuery(query, req) {
     return editMessage(query, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk/varian\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Bayar sesuai nominal QRIS\n7. Sistem mendeteksi pembayaran dan mengirim produk otomatis', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
   }
   if (cmd === 'kembaliawal') {
+    const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);
+    if (activeOrder?.status === 'awaiting_payment') {
+      await paymentService.cancelPaymentTransaction(activeOrder).catch(() => null);
+    }
     await db.deletePendingOrder(query.from.id).catch(() => null);
     return editHome(query, req);
   }
@@ -1398,6 +1409,12 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'bayar') return createPayment(query);
   if (cmd.startsWith('cekbayar:')) return checkPayment(query, cmd.split(':')[1]);
   if (cmd === 'batalbeli') {
+    const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);
+    if (activeOrder?.status === 'awaiting_payment') {
+      await paymentService.cancelPaymentTransaction(activeOrder).catch((error) => {
+        console.warn('Gagal membatalkan transaksi di payment gateway:', error.message || error);
+      });
+    }
     await db.deletePendingOrder(query.from.id).catch(() => null);
     // Saat user membatalkan pesanan, selalu hapus pesan aktif.
     // Ini penting untuk halaman QRIS karena QR dikirim sebagai pesan foto;

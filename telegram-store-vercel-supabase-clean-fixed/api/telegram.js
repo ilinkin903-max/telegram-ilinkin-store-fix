@@ -1,7 +1,7 @@
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, message: 'Telegram webhook aktif.', version: 'v49-auto-payment-watcher-webhook-fix' });
+      return res.status(200).json({ ok: true, message: 'Telegram webhook aktif.', version: 'v55-autogopay-integration' });
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 

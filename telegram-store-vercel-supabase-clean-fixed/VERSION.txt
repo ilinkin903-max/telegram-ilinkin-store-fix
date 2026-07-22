@@ -1,1 +1,1 @@
-v54-flash-sale-promo-integration
+v55-autogopay-integration

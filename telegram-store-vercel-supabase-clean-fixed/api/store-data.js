@@ -33,7 +33,7 @@ module.exports = async function handler(req, res) {
       const file = await store.getQrDownload(user, req.query?.invoice);
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-      res.setHeader('Access-Control-Allow-Origin', 'https://web.telegram.org');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'private, no-store, max-age=0');
       return res.status(200).send(file.buffer);
     }

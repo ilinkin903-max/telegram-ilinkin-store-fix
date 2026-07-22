@@ -342,8 +342,8 @@ async function ensureNoActiveOrder(telegramId) {
 
 async function createPayment({ user, productCode, variantKey, quantity, voucherCode }) {
   if (!user?.id) throw httpError('Buka toko melalui Telegram agar identitas pembeli dapat diverifikasi.', 401, 'TELEGRAM_REQUIRED');
-  if (!config.pakasirSlug || !config.pakasirApiKey) {
-    throw httpError('Konfigurasi pembayaran Pakasir belum lengkap.', 503, 'PAYMENT_NOT_CONFIGURED');
+  if (!paymentService.paymentConfigured()) {
+    throw httpError(`Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap.`, 503, 'PAYMENT_NOT_CONFIGURED');
   }
 
   const qty = Math.max(1, Math.min(100, Number(quantity || 1)));
@@ -394,18 +394,16 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   const afterDiscount = Math.max(0, subtotal - discount);
   const fee = randomFee();
   const total = afterDiscount + fee;
-  const invoice = randomRef();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-  const response = await axios.post('https://app.pakasir.com/api/transactioncreate/qris', {
-    project: config.pakasirSlug,
-    order_id: invoice,
-    amount: total,
-    api_key: config.pakasirApiKey
-  }, { timeout: 20000 });
-
-  const qrText = response.data?.payment?.payment_number || response.data?.payment_number || response.data?.qr_string;
-  if (!qrText) throw httpError('Pakasir tidak mengirim QR pembayaran.', 502, 'QR_NOT_RECEIVED');
+  const requestedInvoice = randomRef();
+  let gatewayPayment;
+  try {
+    gatewayPayment = await paymentService.createPaymentTransaction({ amount: total, invoiceRef: requestedInvoice });
+  } catch (error) {
+    throw httpError(error.message || 'Payment gateway gagal membuat QRIS.', 502, 'QR_NOT_RECEIVED');
+  }
+  const invoice = gatewayPayment.order_id || requestedInvoice;
+  const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const qrText = gatewayPayment.qr_string;
 
   const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
   await db.upsertUser(user);
@@ -417,7 +415,10 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     fee,
     status: 'awaiting_payment',
     expires_at: expiresAt,
-    qr_payload: qrText
+    qr_payload: qrText,
+    payment_provider: gatewayPayment.provider,
+    provider_transaction_id: gatewayPayment.transaction_id,
+    provider_checkout_url: gatewayPayment.checkout_url
   });
 
   const watcher_scheduled = paymentService.schedulePaymentWatcher({
@@ -443,6 +444,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     total,
     expires_at: expiresAt,
     qr_data_url,
+    checkout_url: gatewayPayment.checkout_url || '',
+    payment_provider: gatewayPayment.provider,
     watcher_scheduled
   };
 }
@@ -482,6 +485,29 @@ async function getOrderStatus(user, invoice) {
   if (!order) return { status: 'not_found', invoice: ref };
   if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
   const expired = order.expires_at && Date.now() > new Date(order.expires_at).getTime();
+  if (!expired && String(order.status || '').toLowerCase() === 'awaiting_payment') {
+    try {
+      const verified = await paymentService.verifyPaymentTransaction(order);
+      if (verified.status === 'completed') {
+        const result = await paymentService.fulfillPaidOrder({ order, buyer: user, source: 'marketplace-status-check' });
+        const completed = result.transaction || await db.getTransactionByOrderRef(ref).catch(() => null);
+        return {
+          status: 'completed',
+          invoice: ref,
+          product: completed?.product_name || order.product_code,
+          variant: completed?.variant_name || order.variant_name || '',
+          quantity: Number(completed?.quantity || order.quantity || 1),
+          total: Number(completed?.total_price || order.amount || 0),
+          completed_at: completed?.created_at || new Date().toISOString()
+        };
+      }
+      if (['expired', 'cancelled', 'failed'].includes(verified.status)) {
+        return { status: verified.status, invoice: ref, amount: Number(order.amount || 0), expires_at: order.expires_at || null };
+      }
+    } catch (error) {
+      console.warn(`Pengecekan payment gateway ${ref} gagal:`, error.message || error);
+    }
+  }
   return {
     status: expired ? 'expired' : String(order.status || 'pending'),
     invoice: ref,
@@ -498,6 +524,9 @@ async function cancelOrder(user, invoice) {
   const order = ref ? await db.getPendingOrderByInvoice(ref) : await db.getPendingOrder(Number(user.id));
   if (!order) return { cancelled: false, status: 'not_found' };
   if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Pesanan bukan milik akun ini.', 403, 'FORBIDDEN');
+  await paymentService.cancelPaymentTransaction(order).catch((error) => {
+    console.warn('Gagal membatalkan transaksi di payment gateway:', error.message || error);
+  });
   await db.deletePendingOrder(Number(user.id));
   return { cancelled: true, invoice: order.invoice_ref || ref };
 }

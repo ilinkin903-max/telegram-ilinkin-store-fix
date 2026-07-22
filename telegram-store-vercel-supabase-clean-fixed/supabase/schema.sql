@@ -209,3 +209,12 @@ create index if not exists backup_logs_created_idx on public.backup_logs (create
 -- v52: visibilitas produk per kanal dan penyimpanan payload QRIS untuk unduhan Mini App.
 alter table public.products add column if not exists display_scope text not null default 'both';
 alter table public.pending_orders add column if not exists qr_payload text not null default '';
+
+
+-- v55: provider pembayaran AutoGoPay/Pakasir dan referensi transaksi gateway.
+alter table public.pending_orders add column if not exists payment_provider text not null default 'pakasir';
+alter table public.pending_orders add column if not exists provider_transaction_id text not null default '';
+alter table public.pending_orders add column if not exists provider_checkout_url text not null default '';
+create unique index if not exists pending_orders_provider_transaction_idx
+  on public.pending_orders (provider_transaction_id)
+  where provider_transaction_id <> '';

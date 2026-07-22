@@ -1,0 +1,7 @@
+iLink.in Store v55 — Test Report
+
+- JavaScript syntax check: passed for all files in api/, lib/, public/, scripts/, and tests/.
+- Automated unit/UI tests: 43 passed, 0 failed.
+- AutoGoPay gateway mock: generate QRIS, status settlement, and payload validation passed.
+- AutoGoPay signed webhook mock: HMAC-SHA256 verification, invoice lookup, nominal matching, and fulfillment dispatch passed.
+- Live AutoGoPay/GoPay Merchant, Telegram, Supabase, and Vercel transaction testing was not performed because private production credentials are not available in this environment.
