@@ -1,3 +1,25 @@
+# v58 — Promo Khusus Flash Sale, Invoice Bersih, dan Submenu Rapi
+
+Versi ini melanjutkan v56 (bukan v57 Grosir). Tidak memerlukan SQL baru.
+
+Perubahan utama:
+
+- Prefix `AUTOGOPAY` disembunyikan dari Invoice/Trx ID yang dilihat user, owner, Marketplace, riwayat, dashboard, dan nama file QRIS. ID asli tetap tersimpan untuk verifikasi gateway.
+- Promo yang dicentang **Masukkan ke Flash Sale** hanya aktif selama status Flash Sale ON dan waktu sekarang berada di antara jadwal mulai–berakhir. Di luar jadwal, promo tersebut tidak memotong harga di bot maupun Marketplace.
+- Daftar Flash Sale selalu satu baris ke samping dan dapat digeser horizontal.
+- Menu **Pengaturan** memiliki submenu satu baris: Pengaturan Toko, Banner Promosi, dan Media /start.
+- Menu **Promo** memiliki submenu satu baris: Daftar, Buat Promo & Voucher, dan Flash Sale.
+
+## Cara update
+
+1. Unggah seluruh isi folder ini untuk menggantikan v56.
+2. Redeploy Vercel tanpa cache.
+3. Tidak perlu menjalankan SQL tambahan.
+4. Buka Reseller Dashboard dan periksa jadwal Flash Sale.
+5. Buat transaksi baru untuk menguji harga dan tampilan Invoice.
+
+---
+
 # v56 — AutoGoPay Callback Verification Fix
 
 Versi ini memperbaiki error callback AutoGoPay yang mengharapkan HTTP 200 ketika melakukan verifikasi URL. Tidak ada SQL baru.

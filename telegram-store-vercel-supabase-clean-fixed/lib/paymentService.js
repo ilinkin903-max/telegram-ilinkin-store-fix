@@ -22,6 +22,12 @@ function normalizedText(value) {
   return String(value == null ? '' : value).trim();
 }
 
+function displayPaymentReference(value) {
+  const original = normalizedText(value);
+  const cleaned = original.replace(/^AUTOGOPAY(?:[-_: ]+)?/i, '');
+  return cleaned || original || '-';
+}
+
 function sameProject(left, right) {
   return normalizedText(left).toLowerCase() === normalizedText(right).toLowerCase();
 }
@@ -294,7 +300,7 @@ function receiptContext(order, product, transaction, delivered) {
   const fee = Number(order?.fee || 0);
   const subtotal = Math.max(0, total - fee);
   return {
-    invoice: transaction?.order_ref || order?.invoice_ref || '-',
+    invoice: displayPaymentReference(transaction?.order_ref || order?.invoice_ref || '-'),
     productName: transaction?.product_name || product?.nama || order?.product_code || '-',
     productCode: transaction?.product_code || product?.kode || order?.product_code || '',
     variantName: transaction?.variant_name || order?.variant_name || '',
@@ -349,7 +355,7 @@ async function sendOwnerLog(order, product, transaction, buyer = {}) {
       `✅ PESANAN SELESAI\n` +
       `=======================\n` +
       `User: ${username}\n` +
-      `Trx ID: ${transaction?.order_ref || order?.invoice_ref || '-'}\n` +
+      `Trx ID: ${displayPaymentReference(transaction?.order_ref || order?.invoice_ref || '-')}\n` +
       `Produk: ${productName}${variantName ? ' - ' + variantName : ''}\n` +
       `Harga: ${formatRupiah(subtotal)}\n` +
       `Jumlah Beli: ${Number(transaction?.quantity || order?.quantity || 1)}\n` +
@@ -490,6 +496,7 @@ module.exports = {
   paymentProviderForOrder,
   paymentProviderLabel,
   paymentConfigured,
+  displayPaymentReference,
   createPaymentTransaction,
   verifyPakasirTransaction,
   verifyAutoGopayTransaction,

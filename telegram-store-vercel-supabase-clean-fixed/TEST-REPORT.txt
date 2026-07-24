@@ -1,11 +1,17 @@
-v56 AutoGoPay callback verification fix
+v58 — Promo Khusus Flash Sale, Invoice Bersih, dan Submenu Rapi
 
-Result: 48/48 tests passed.
-Checks include:
-- JavaScript syntax checks for API, library, public, and script files
-- Signed AutoGoPay callback verification probe returns HTTP 200
-- Unsigned health-check probe cannot process a payment
-- Real transaction payload still requires X-Signature
-- Existing payment, promo, voucher, marketplace, QRIS, and receipt tests
+Hasil: 55/55 pengujian berhasil.
 
-Note: unit tests used local no-network dependency stubs because the execution environment did not install npm packages. Production dependencies remain unchanged in package.json/package-lock.json and are installed by Vercel.
+Pemeriksaan mencakup:
+- Sintaks JavaScript seluruh API, library, Marketplace, dashboard, dan script.
+- Callback AutoGoPay probe tetap membalas HTTP 200 dan transaksi asli tetap wajib signature.
+- Prefix AUTOGOPAY disembunyikan dari Invoice/Trx ID yang tampil, tanpa mengubah ID internal gateway.
+- Promo yang dipilih untuk Flash Sale ditolak sebelum jadwal, setelah jadwal, atau ketika Flash Sale OFF.
+- Promo biasa tetap dapat aktif di luar Flash Sale.
+- Flash Sale tampil satu baris horizontal.
+- Submenu Pengaturan dan Promo tampil satu baris horizontal tanpa ID HTML ganda.
+- Promo/voucher produk dan varian, QRIS, Marketplace, serta notifikasi PESANAN SELESAI tetap lulus.
+
+Catatan:
+- Pengujian memakai stub dependency lokal tanpa jaringan. Dependency produksi di package.json/package-lock.json tidak diubah dan akan dipasang oleh Vercel.
+- Transaksi AutoGoPay, Telegram, dan Supabase secara langsung tetap perlu diuji setelah deployment menggunakan kredensial aktif.

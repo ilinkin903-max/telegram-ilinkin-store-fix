@@ -112,3 +112,34 @@ test('v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia', () => {
   assert.match(js, /payment\.checkout_url/);
   assert.match(js, /Buka Halaman Pembayaran|paymentCheckoutLink/);
 });
+
+
+test('v58 dashboard memakai submenu horizontal untuk pengaturan dan promo', () => {
+  const reseller = fs.readFileSync(path.join(__dirname, '..', 'api', 'reseller.js'), 'utf8');
+  assert.match(reseller, /data-settings-sub="store"/);
+  assert.match(reseller, /data-settings-sub="banner"/);
+  assert.match(reseller, /data-settings-sub="start"/);
+  assert.match(reseller, /data-promo-sub="flash"/);
+  assert.match(reseller, /settingsSubNav/);
+});
+
+test('v58 flash sale selalu satu baris horizontal', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'store.css'), 'utf8');
+  assert.match(css, /flash-sale-grid[^{]*\{[^}]*display:\s*flex/i);
+  assert.match(css, /flash-sale-grid[^{]*\{[^}]*flex-wrap:\s*nowrap/i);
+  assert.match(css, /flash-sale-grid[^{]*\{[^}]*overflow-x:\s*auto/i);
+});
+
+test('marketplace memakai invoice_display agar prefix gateway tidak terlihat', () => {
+  const storeJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'store.js'), 'utf8');
+  assert.match(storeJs, /payment\.invoice_display \|\| payment\.invoice/);
+  assert.match(storeJs, /row\.invoice_display \|\| row\.invoice/);
+});
+
+test('promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif', () => {
+  const db = fs.readFileSync(path.join(__dirname, '..', 'lib', 'db.js'), 'utf8');
+  const service = fs.readFileSync(path.join(__dirname, '..', 'lib', 'storeService.js'), 'utf8');
+  assert.match(db, /promoAllowedByFlashSale/);
+  assert.match(db, /flashSaleWindowState/);
+  assert.match(service, /return !flashPromoCodeSet\.has\(code\) \|\| flashWindow\.active/);
+});

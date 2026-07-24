@@ -1,4 +1,4 @@
-# Pengaturan Marketplace v55
+# Pengaturan Marketplace v58
 
 ## Flash Sale
 
@@ -18,6 +18,10 @@ Kemudian buka **Buat Promo / Voucher**, pilih **Promo Otomatis**, tentukan targe
 `Masukkan target promo ini ke Flash Sale Marketplace`
 
 Produk tidak dipilih lagi secara manual dari panel Flash Sale. Sumber produk Flash Sale sekarang adalah promo otomatis yang diberi tanda tersebut.
+
+**Penting:** promo yang dicentang untuk Flash Sale hanya aktif dan memotong harga ketika status Flash Sale ON serta waktu sekarang berada di antara jadwal mulai dan berakhir. Di luar jadwal tersebut, promo tidak berlaku di bot maupun Marketplace.
+
+Daftar Flash Sale ditampilkan dalam satu baris horizontal. Pada layar kecil, pembeli dapat menggesernya ke samping.
 
 ## Harga Marketplace
 

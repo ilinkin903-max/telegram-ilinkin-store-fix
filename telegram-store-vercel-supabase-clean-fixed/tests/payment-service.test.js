@@ -10,6 +10,7 @@ const {
   validateWebhookPayload,
   validateAutoGopayWebhookPayload,
   paymentMatchesOrder,
+  displayPaymentReference,
   sendOrderReceipt,
   sendOwnerLog
 } = require('../lib/paymentService');
@@ -49,6 +50,12 @@ test('webhook AutoGoPay memerlukan transaction id dan nominal valid', () => {
     transaction: { amount: 50000, status: 'settlement' }
   });
   assert.equal(invalid.ok, false);
+});
+
+test('prefix AUTOGOPAY disembunyikan hanya pada tampilan invoice', () => {
+  assert.equal(displayPaymentReference('AUTOGOPAY-1774618440-2411'), '1774618440-2411');
+  assert.equal(displayPaymentReference('AUTOGOPAY:ABC123'), 'ABC123');
+  assert.equal(displayPaymentReference('INV-001'), 'INV-001');
 });
 
 test('status payment gateway dinormalisasi', () => {

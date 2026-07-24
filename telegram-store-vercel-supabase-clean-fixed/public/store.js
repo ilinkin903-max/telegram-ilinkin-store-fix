@@ -557,14 +557,14 @@
       showPayment(payment);
     } catch (error) {
       if (error.code === 'ACTIVE_ORDER' && error.details && error.details.invoice) {
-        toast('Masih ada invoice aktif: ' + error.details.invoice, true);
+        toast('Masih ada invoice aktif: ' + (error.details.invoice_display || error.details.invoice), true);
       } else toast(error.message, true);
     } finally { showLoading(false); }
   }
 
   function paymentRows(payment) {
     var rows = [
-      ['Invoice', payment.invoice],
+      ['Invoice', payment.invoice_display || payment.invoice],
       ['Produk', payment.product + (payment.variant ? ' - ' + payment.variant : '')],
       ['Harga satuan', rupiah(payment.unit_price)],
       ['Jumlah', payment.quantity],
@@ -593,7 +593,7 @@
     var modalOpen = els.paymentModal.classList.contains('show');
     var visible = Boolean(state.activePayment && state.paymentStatus === 'pending' && !modalOpen);
     els.paymentBubble.classList.toggle('hidden', !visible);
-    if (visible) els.paymentBubbleText.textContent = state.activePayment.invoice + ' · ' + rupiah(state.activePayment.total);
+    if (visible) els.paymentBubbleText.textContent = (state.activePayment.invoice_display || state.activePayment.invoice) + ' · ' + rupiah(state.activePayment.total);
   }
   function startPaymentTimers() {
     clearPaymentTimers();
@@ -640,7 +640,7 @@
   }
   async function downloadQr() {
     if (!state.activePayment || !state.activePayment.invoice) return toast('QRIS belum tersedia.', true);
-    var filename = 'QRIS-' + String(state.activePayment.invoice || 'pembayaran').replace(/[^a-z0-9_-]/gi, '-') + '.png';
+    var filename = 'QRIS-' + String(state.activePayment.invoice_display || state.activePayment.invoice || 'pembayaran').replace(/[^a-z0-9_-]/gi, '-') + '.png';
     var url = qrDownloadUrl();
     if (!url) return toast('Link unduhan QRIS tidak tersedia.', true);
     try {
@@ -721,7 +721,7 @@
         els.historyList.innerHTML = '<div class="empty-state"><span>🧾</span><h3>Belum ada pesanan</h3><p>Pesanan selesai akan tampil di sini.</p></div>';
       } else {
         els.historyList.innerHTML = history.map(function (row) {
-          return '<article class="history-card"><div><h3>' + escapeHtml(row.product + (row.variant ? ' - ' + row.variant : '')) + '</h3><p>' + escapeHtml(row.invoice || '-') + ' · ' + escapeHtml(formatDate(row.created_at)) + ' · ' + row.quantity + ' item</p></div><strong>' + rupiah(row.total) + '</strong><span></span><span class="history-status">SELESAI</span></article>';
+          return '<article class="history-card"><div><h3>' + escapeHtml(row.product + (row.variant ? ' - ' + row.variant : '')) + '</h3><p>' + escapeHtml(row.invoice_display || row.invoice || '-') + ' · ' + escapeHtml(formatDate(row.created_at)) + ' · ' + row.quantity + ' item</p></div><strong>' + rupiah(row.total) + '</strong><span></span><span class="history-status">SELESAI</span></article>';
         }).join('');
       }
     } catch (error) {

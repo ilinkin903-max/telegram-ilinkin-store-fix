@@ -128,3 +128,28 @@ test('voucher varian tertentu hanya valid pada varian yang dipilih', () => {
   assert.equal(db.voucherIsValid(voucher, 'GEMINI', 200, 1, 16000, '18-BULAN-INVITE'), true);
   assert.equal(db.voucherIsValid(voucher, 'GEMINI', 200, 1, 45000, '18-BULAN'), false);
 });
+
+test('promo yang dipilih untuk Flash Sale hanya diizinkan selama jadwal Flash Sale aktif', () => {
+  const promo = { code: 'FLASH10' };
+  const base = {
+    flash_sale_enabled: 'true',
+    flash_sale_promo_codes: '["FLASH10"]',
+    flash_sale_start_at: '2026-07-24T10:00:00.000Z',
+    flash_sale_end_at: '2026-07-24T12:00:00.000Z'
+  };
+
+  assert.equal(db.promoAllowedByFlashSale(promo, base, Date.parse('2026-07-24T11:00:00.000Z')), true);
+  assert.equal(db.promoAllowedByFlashSale(promo, base, Date.parse('2026-07-24T09:59:59.000Z')), false);
+  assert.equal(db.promoAllowedByFlashSale(promo, base, Date.parse('2026-07-24T12:00:00.000Z')), false);
+  assert.equal(db.promoAllowedByFlashSale(promo, { ...base, flash_sale_enabled: 'false' }, Date.parse('2026-07-24T11:00:00.000Z')), false);
+});
+
+test('promo biasa tetap diizinkan walaupun Flash Sale tidak aktif', () => {
+  const settings = {
+    flash_sale_enabled: 'false',
+    flash_sale_promo_codes: '["FLASH10"]',
+    flash_sale_start_at: '2026-07-24T10:00:00.000Z',
+    flash_sale_end_at: '2026-07-24T12:00:00.000Z'
+  };
+  assert.equal(db.promoAllowedByFlashSale({ code: 'PROMOBIASA' }, settings, Date.parse('2026-07-24T11:00:00.000Z')), true);
+});

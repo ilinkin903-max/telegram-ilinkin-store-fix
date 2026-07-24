@@ -1439,6 +1439,40 @@ async function deleteAutoPromo(code) {
   if (error) throw error;
 }
 
+function parseFlashSalePromoCodes(value) {
+  let rows = [];
+  if (Array.isArray(value)) rows = value;
+  else {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    if (raw.startsWith('[')) {
+      try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) rows = parsed; } catch (_) {}
+    }
+    if (!rows.length) rows = raw.split(/[\r\n,;|]+/g);
+  }
+  return [...new Set(rows.map((item) => String(typeof item === 'object' && item ? (item.code || item.kode || '') : item).trim().toUpperCase()).filter(Boolean))];
+}
+
+function flashSaleWindowState(settings = {}, now = Date.now()) {
+  const enabled = boolValue(settings.flash_sale_enabled, false);
+  const startAt = normalizeDateTime(settings.flash_sale_start_at);
+  const endAt = normalizeDateTime(settings.flash_sale_end_at);
+  const start = startAt ? new Date(startAt).getTime() : NaN;
+  const end = endAt ? new Date(endAt).getTime() : NaN;
+  const time = Number(now);
+  const scheduled = Number.isFinite(start) && start > time;
+  const expired = Number.isFinite(end) && end <= time;
+  const validWindow = Number.isFinite(start) && Number.isFinite(end) && end > start;
+  return { enabled, start_at: startAt, end_at: endAt, scheduled, expired, valid_window: validWindow, active: enabled && validWindow && !scheduled && !expired };
+}
+
+function promoAllowedByFlashSale(row, settings = {}, now = Date.now()) {
+  const code = String(row?.code || '').trim().toUpperCase();
+  const flashCodes = new Set(parseFlashSalePromoCodes(settings.flash_sale_promo_codes));
+  if (!code || !flashCodes.has(code)) return true;
+  return flashSaleWindowState(settings, now).active;
+}
+
 function promoIsActive(row, productCode, quantity, subtotal, variantKeyValue = '') {
   const promo = normalizePromo(row);
   return Boolean(promo && promoEligible(promo, {
@@ -1455,8 +1489,13 @@ function promoDiscountAmount(promo, subtotal) {
 }
 
 async function getBestAutoPromo(productCode, telegramId, quantity, subtotal, variantKeyValue = '') {
-  const promos = await listAutoPromos(200);
-  const candidates = promos.filter((p) => promoIsActive(p, productCode, quantity, subtotal, variantKeyValue)).map((p) => ({ ...p, discount_amount: promoDiscountAmount(p, subtotal) })).filter((p) => p.discount_amount > 0);
+  const [promos, settings] = await Promise.all([listAutoPromos(200), getShopSettings()]);
+  const now = Date.now();
+  const candidates = promos
+    .filter((p) => promoAllowedByFlashSale(p, settings, now))
+    .filter((p) => promoIsActive(p, productCode, quantity, subtotal, variantKeyValue))
+    .map((p) => ({ ...p, discount_amount: promoDiscountAmount(p, subtotal) }))
+    .filter((p) => p.discount_amount > 0);
   candidates.sort((a, b) => b.discount_amount - a.discount_amount || String(a.code).localeCompare(String(b.code)));
   return candidates[0] || null;
 }
@@ -1584,5 +1623,8 @@ module.exports = {
   normalizeVoucher,
   normalizePromo,
   promoIsActive,
+  parseFlashSalePromoCodes,
+  flashSaleWindowState,
+  promoAllowedByFlashSale,
   promoDiscountAmount
 };

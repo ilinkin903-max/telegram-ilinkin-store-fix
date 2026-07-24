@@ -238,10 +238,17 @@ async function getCatalog(viewer = null) {
   ]);
   const flashPromoCodes = parseFlashSalePromoCodes(settings.flash_sale_promo_codes);
   const flashPromoCodeSet = new Set(flashPromoCodes);
-  const flashPromos = promos.filter((promo) => flashPromoCodeSet.has(String(promo.code || '').trim().toUpperCase()));
+  const flashWindow = db.flashSaleWindowState(settings);
+  const activePromos = promos.filter((promo) => {
+    const code = String(promo.code || '').trim().toUpperCase();
+    return !flashPromoCodeSet.has(code) || flashWindow.active;
+  });
+  const flashPromos = flashWindow.active
+    ? promos.filter((promo) => flashPromoCodeSet.has(String(promo.code || '').trim().toUpperCase()))
+    : [];
   const publicProducts = products
     .filter((product) => String(product.display_scope || 'both') !== 'telegram')
-    .map((product) => sanitizeProduct(product, promos, flashPromos));
+    .map((product) => sanitizeProduct(product, activePromos, flashPromos));
 
   const flashStartAt = String(settings.flash_sale_start_at || '').trim();
   const flashEndAt = String(settings.flash_sale_end_at || '').trim();
@@ -335,7 +342,7 @@ async function ensureNoActiveOrder(telegramId) {
       'Masih ada pembayaran aktif. Selesaikan atau batalkan pesanan tersebut terlebih dahulu.',
       409,
       'ACTIVE_ORDER',
-      { invoice: current.invoice_ref, expires_at: current.expires_at }
+      { invoice: current.invoice_ref, invoice_display: paymentService.displayPaymentReference(current.invoice_ref), expires_at: current.expires_at }
     );
   }
 }
@@ -429,6 +436,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
 
   return {
     invoice,
+    invoice_display: paymentService.displayPaymentReference(invoice),
     product: product.nama,
     product_code: product.kode,
     variant: selected.variant?.name || '',
@@ -459,7 +467,8 @@ async function getQrDownload(user, invoice) {
   if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
   if (!String(order.qr_payload || '').trim()) throw httpError('Data QRIS belum tersedia. Buat invoice baru setelah update v52.', 409, 'QR_PAYLOAD_MISSING');
   const buffer = await QRCode.toBuffer(String(order.qr_payload), { type: 'png', width: 900, margin: 2, errorCorrectionLevel: 'M' });
-  return { buffer, filename: `QRIS-${ref.replace(/[^A-Z0-9_-]/gi, '-')}.png` };
+  const displayRef = paymentService.displayPaymentReference(ref);
+  return { buffer, filename: `QRIS-${displayRef.replace(/[^A-Z0-9_-]/gi, '-')}.png` };
 }
 
 async function getOrderStatus(user, invoice) {
@@ -473,6 +482,7 @@ async function getOrderStatus(user, invoice) {
     return {
       status: 'completed',
       invoice: ref,
+      invoice_display: paymentService.displayPaymentReference(ref),
       product: transaction.product_name,
       variant: transaction.variant_name || '',
       quantity: Number(transaction.quantity || 1),
@@ -482,7 +492,7 @@ async function getOrderStatus(user, invoice) {
   }
 
   const order = await db.getPendingOrderByInvoice(ref);
-  if (!order) return { status: 'not_found', invoice: ref };
+  if (!order) return { status: 'not_found', invoice: ref, invoice_display: paymentService.displayPaymentReference(ref) };
   if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
   const expired = order.expires_at && Date.now() > new Date(order.expires_at).getTime();
   if (!expired && String(order.status || '').toLowerCase() === 'awaiting_payment') {
@@ -494,6 +504,7 @@ async function getOrderStatus(user, invoice) {
         return {
           status: 'completed',
           invoice: ref,
+          invoice_display: paymentService.displayPaymentReference(ref),
           product: completed?.product_name || order.product_code,
           variant: completed?.variant_name || order.variant_name || '',
           quantity: Number(completed?.quantity || order.quantity || 1),
@@ -502,7 +513,7 @@ async function getOrderStatus(user, invoice) {
         };
       }
       if (['expired', 'cancelled', 'failed'].includes(verified.status)) {
-        return { status: verified.status, invoice: ref, amount: Number(order.amount || 0), expires_at: order.expires_at || null };
+        return { status: verified.status, invoice: ref, invoice_display: paymentService.displayPaymentReference(ref), amount: Number(order.amount || 0), expires_at: order.expires_at || null };
       }
     } catch (error) {
       console.warn(`Pengecekan payment gateway ${ref} gagal:`, error.message || error);
@@ -511,6 +522,7 @@ async function getOrderStatus(user, invoice) {
   return {
     status: expired ? 'expired' : String(order.status || 'pending'),
     invoice: ref,
+    invoice_display: paymentService.displayPaymentReference(ref),
     amount: Number(order.amount || 0),
     expires_at: order.expires_at || null
   };
@@ -528,7 +540,7 @@ async function cancelOrder(user, invoice) {
     console.warn('Gagal membatalkan transaksi di payment gateway:', error.message || error);
   });
   await db.deletePendingOrder(Number(user.id));
-  return { cancelled: true, invoice: order.invoice_ref || ref };
+  return { cancelled: true, invoice: order.invoice_ref || ref, invoice_display: paymentService.displayPaymentReference(order.invoice_ref || ref) };
 }
 
 async function getHistory(user, limit = 20) {
@@ -536,6 +548,7 @@ async function getHistory(user, limit = 20) {
   const rows = await db.listTransactionsByUser(Number(user.id), Math.max(1, Math.min(50, Number(limit || 20))));
   return rows.map((row) => ({
     invoice: row.order_ref,
+    invoice_display: paymentService.displayPaymentReference(row.order_ref),
     product: row.product_name,
     variant: row.variant_name || '',
     quantity: Number(row.quantity || 1),

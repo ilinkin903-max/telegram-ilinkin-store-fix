@@ -1,1 +1,1 @@
-v56-autogopay-callback-probe-fix
+v58-flash-only-submenu-clean-invoice

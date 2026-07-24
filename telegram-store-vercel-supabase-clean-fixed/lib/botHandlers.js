@@ -644,7 +644,7 @@ async function sendCheckOrder(chatId, userId, query = null) {
       `Produk: *${escapeMarkdownText(product?.nama || pending.product_code || '-')}*${pending.variant_name ? ' - *' + escapeMarkdownText(pending.variant_name) + '*' : ''}\n` +
       `Jumlah: *${Number(pending.quantity || 1)}*\n` +
       `Status: *${escapeMarkdownText(pendingStatusText(pending.status))}*\n`;
-    if (pending.invoice_ref) text += `Invoice: \`${escapeMarkdownText(pending.invoice_ref)}\`\n`;
+    if (pending.invoice_ref) text += `Invoice: \`${escapeMarkdownText(paymentService.displayPaymentReference(pending.invoice_ref))}\`\n`;
     if (Number(pending.amount || 0) > 0) text += `Total Bayar: *${formatRupiah(pending.amount)}*\n`;
     if (pending.expires_at) text += `Expired: *${formatWIB(pending.expires_at)}*\n`;
     text += `-----------------------\n`;
@@ -656,7 +656,7 @@ async function sendCheckOrder(chatId, userId, query = null) {
   } else {
     text += `*Riwayat Transaksi Terakhir:*\n` + rows.map((item, idx) => (
       `${idx + 1}. *${escapeMarkdownText(item.product_name || '-')}*${item.variant_name ? ' - ' + escapeMarkdownText(item.variant_name) : ''}\n` +
-      `   Invoice: \`${escapeMarkdownText(item.order_ref || '-')}\`\n` +
+      `   Invoice: \`${escapeMarkdownText(paymentService.displayPaymentReference(item.order_ref || '-'))}\`\n` +
       `   Jumlah: *${Number(item.quantity || 0)}*\n` +
       `   Total: *${formatRupiah(item.total_price || 0)}*\n` +
       `   Tanggal: *${formatWIB(item.created_at)}*`
@@ -1251,7 +1251,7 @@ async function createPayment(query) {
       : '');
   const caption = `💸 *PEMBAYARAN OTOMATIS*\n` +
     `=======================\n` +
-    `Invoice: *${invoiceRef}*\n` +
+    `Invoice: *${escapeMarkdownText(paymentService.displayPaymentReference(invoiceRef))}*\n` +
     `Produk: *${escapeMarkdownText(product.nama)}${order.variant_name ? ' - ' + escapeMarkdownText(order.variant_name) : ''}*\n` +
     `Harga Satuan: *${formatRupiah(unit)}*\n` +
     `Jumlah Beli: *${quantity}*\n` +
