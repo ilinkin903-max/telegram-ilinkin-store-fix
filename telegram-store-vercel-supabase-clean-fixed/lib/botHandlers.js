@@ -1196,6 +1196,8 @@ async function createPayment(query) {
 
   const unit = orderUnitPrice(product, order);
   const quantity = Math.max(1, Number(order.quantity || 1));
+  const costUnit = db.orderUnitCost(product, order);
+  const costTotal = costUnit * quantity;
   const subtotal = quantity * unit;
   let harga = subtotal;
   let promoApplied = null;
@@ -1231,6 +1233,9 @@ async function createPayment(query) {
   await db.upsertPendingOrder({
     ...order,
     quantity,
+    cost_unit: costUnit,
+    cost_total: costTotal,
+    cost_source: costUnit > 0 ? 'snapshot' : 'unset',
     voucher_code: appliedCode,
     invoice_ref: invoiceRef,
     amount: totalAmount,

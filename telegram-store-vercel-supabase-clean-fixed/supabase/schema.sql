@@ -18,6 +18,7 @@ create table if not exists public.products (
   name text not null,
   code text not null unique,
   price integer not null default 0,
+  cost_price integer not null default 0,
   description text not null default '',
   terms text not null default '',
   image_url text not null default '',
@@ -41,6 +42,12 @@ create table if not exists public.transactions (
   product_code text not null,
   quantity integer not null default 1,
   total_price integer not null default 0,
+  payment_fee integer not null default 0,
+  cost_unit integer not null default 0,
+  cost_total integer not null default 0,
+  cost_source text not null default 'unset',
+  cost_updated_at timestamptz,
+  profit_amount integer not null default 0,
   order_ref text unique,
   created_at timestamptz not null default now()
 );
@@ -57,6 +64,9 @@ create table if not exists public.pending_orders (
   invoice_ref text unique,
   amount integer not null default 0,
   fee integer not null default 0,
+  cost_unit integer not null default 0,
+  cost_total integer not null default 0,
+  cost_source text not null default 'unset',
   status text not null default 'draft',
   expires_at timestamptz,
   created_at timestamptz not null default now(),
@@ -85,6 +95,16 @@ create table if not exists public.vouchers (
 -- Jangan pernah taruh SERVICE_ROLE_KEY di frontend / public JavaScript.
 
 -- Update fitur owner tools lengkap.
+alter table public.products add column if not exists cost_price integer not null default 0;
+alter table public.transactions add column if not exists payment_fee integer not null default 0;
+alter table public.transactions add column if not exists cost_unit integer not null default 0;
+alter table public.transactions add column if not exists cost_total integer not null default 0;
+alter table public.transactions add column if not exists cost_source text not null default 'unset';
+alter table public.transactions add column if not exists cost_updated_at timestamptz;
+alter table public.transactions add column if not exists profit_amount integer not null default 0;
+alter table public.pending_orders add column if not exists cost_unit integer not null default 0;
+alter table public.pending_orders add column if not exists cost_total integer not null default 0;
+alter table public.pending_orders add column if not exists cost_source text not null default 'unset';
 alter table public.products add column if not exists image_url text not null default '';
 alter table public.products add column if not exists category text not null default '';
 alter table public.products add column if not exists bulk_prices jsonb not null default '[]'::jsonb;

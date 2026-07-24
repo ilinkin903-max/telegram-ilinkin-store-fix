@@ -69,6 +69,81 @@ test('health-check AutoGoPay tanpa transaksi tidak diproses sebagai pembayaran',
   assert.equal(res.body.state, 'callback_probe_ok');
 });
 
+
+test('probe generik tanpa header AutoGoPay tetap mendapat HTTP 200 saat provider aktif', async () => {
+  const req = {
+    method: 'POST',
+    headers: { 'user-agent': 'axios/1.7.7' },
+    body: {}
+  };
+  const res = makeResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.state, 'callback_probe_ok');
+});
+
+test('probe kosong dengan signature tidak valid tetap hanya di-ACK dan tidak memproses order', async () => {
+  const req = {
+    method: 'POST',
+    headers: {
+      'user-agent': 'AutoGopay-Callback/1.0',
+      'x-signature': 'deadbeef'
+    },
+    body: {}
+  };
+  const res = makeResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.state, 'callback_probe_ok');
+});
+
+
+test('URL verifikasi v60 meng-ACK payload transaksi tiruan tanpa signature', async () => {
+  const payload = {
+    event: 'transaction.received',
+    transaction: { id: 'VERIFY-ONLY', amount: 1, status: 'settlement' }
+  };
+  const req = {
+    method: 'POST',
+    query: { provider: 'autogopay', verify: '1' },
+    headers: { 'user-agent': 'AutoGopay-Callback/1.0' },
+    body: payload
+  };
+  const res = makeResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.state, 'callback_probe_ok');
+});
+
+
+test('URL verify tetap menolak transaksi bertanda tangan tidak valid', async () => {
+  const payload = {
+    event: 'transaction.received',
+    transaction: { id: 'TRX-BAD-SIGNATURE', amount: 50000, status: 'settlement' }
+  };
+  const req = {
+    method: 'POST',
+    query: { provider: 'autogopay', verify: '1' },
+    headers: {
+      'user-agent': 'AutoGopay-Callback/1.0',
+      'x-signature': 'deadbeef'
+    },
+    body: payload
+  };
+  const res = makeResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /Signature AutoGoPay tidak valid/);
+});
+
 test('payload transaksi nyata tetap wajib memakai signature', async () => {
   const payload = {
     event: 'transaction.received',

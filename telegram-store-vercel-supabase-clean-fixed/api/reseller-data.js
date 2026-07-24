@@ -80,6 +80,7 @@ function parseVariants(value) {
     value.map((item, index) => ({
       name: String(item.name || item.nama || '').trim(),
       price: numberOf(item.price || item.harga),
+      cost_price: numberOf(item.cost_price || item.costPrice || item.modal || item.harga_modal),
       sku: String(item.sku || item.kode || `VAR${index + 1}`).trim().toUpperCase(),
       note: String(item.note || item.catatan || '').trim(),
       description: String(item.description || item.deskripsi || '').trim(),
@@ -123,7 +124,8 @@ function parseVariants(value) {
       description: parts[5] || '',
       snk: parts[6] || '',
       active: parts[7] === undefined ? true : boolOf(parts[7]),
-      note: parts.slice(8).join(' | ')
+      cost_price: numberOf(parts[8]),
+      note: parts.slice(9).join(' | ')
     };
   }).filter(Boolean);
 }
@@ -310,6 +312,7 @@ module.exports = async function handler(req, res) {
       const nama = String(body.nama || '').trim();
       const kode = String(body.kode || '').trim().toUpperCase();
       const harga = numberOf(body.harga);
+      const cost_price = numberOf(body.cost_price || body.modal || body.harga_modal);
       const deskripsi = String(body.deskripsi || '').trim();
       const snk = String(body.snk || '').trim();
       const image_url = String(body.image_url || '').trim();
@@ -319,10 +322,11 @@ module.exports = async function handler(req, res) {
       const variants = parseVariantPayload(body);
       const hasVariants = variants.length > 0;
       const finalHarga = harga || (hasVariants ? numberOf(variants[0].price) : 0);
+      const finalCostPrice = cost_price || (hasVariants ? numberOf(variants[0].cost_price) : 0);
       const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
       const finalSnk = snk || (hasVariants ? (variants[0].snk || 'Syarat mengikuti varian yang dipilih.') : '');
       if (!nama || !kode || !finalHarga || !finalDeskripsi || !finalSnk) return json(res, 400, { ok: false, error: hasVariants ? 'Nama, kode, dan minimal satu varian dengan harga wajib diisi.' : 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga: finalHarga, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, bulk_prices, variants, data: splitStock(body.stock_text || '') });
+      const product = await db.addProduct({ nama, kode, harga: finalHarga, cost_price: finalCostPrice, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, bulk_prices, variants, data: splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 
@@ -368,10 +372,11 @@ module.exports = async function handler(req, res) {
       if (body.active !== undefined) updates.active = boolOf(body.active);
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);
+      if (body.cost_price !== undefined || body.modal !== undefined || body.harga_modal !== undefined) updates.cost_price = numberOf(body.cost_price || body.modal || body.harga_modal);
       if (body.bulk_text !== undefined || body.bulk_prices !== undefined) updates.bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
       if (body.variants_text !== undefined || body.variant_text !== undefined || body.variants !== undefined) updates.variants = parseVariantPayload(body);
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
-      if (body.field && body.value !== undefined) updates[body.field] = body.field === 'harga' ? numberOf(body.value) : String(body.value || '').trim();
+      if (body.field && body.value !== undefined) updates[body.field] = ['harga','cost_price','modal','harga_modal'].includes(body.field) ? numberOf(body.value) : String(body.value || '').trim();
       const product = await db.updateProductByCode(code, updates);
       if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
       return json(res, 200, { ok: true, data: product });
@@ -433,6 +438,15 @@ module.exports = async function handler(req, res) {
       if (!code) return json(res, 400, { ok: false, error: 'Kode voucher wajib diisi.' });
       await db.deleteVoucher(code);
       return json(res, 200, { ok: true });
+    }
+
+    if (action === 'update-order-cost') {
+      const orderRef = String(body.order_ref || body.invoice || '').trim();
+      const costTotal = numberOf(body.cost_total || body.modal_total || body.modal);
+      if (!orderRef) return json(res, 400, { ok: false, error: 'Invoice transaksi wajib diisi.' });
+      const transaction = await db.updateTransactionCost(orderRef, costTotal);
+      if (!transaction) return json(res, 404, { ok: false, error: 'Transaksi tidak ditemukan.' });
+      return json(res, 200, { ok: true, data: transaction });
     }
 
     if (action === 'broadcast') {

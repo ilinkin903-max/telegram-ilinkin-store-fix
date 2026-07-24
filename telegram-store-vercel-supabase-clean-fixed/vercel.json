@@ -20,7 +20,7 @@
       "maxDuration": 30
     },
     "api/setup-autogopay.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/backup-cron.js": {
       "maxDuration": 30

@@ -1,4 +1,4 @@
-# Pengaturan Marketplace v58
+# Pengaturan Marketplace v60
 
 ## Flash Sale
 
@@ -49,4 +49,4 @@ Pengecekan status berjalan melalui:
 - tombol **Cek Pembayaran**;
 - watcher server sebagai cadangan.
 
-Jalankan SQL `supabase/update-v55-autogopay.sql` dan pasang callback melalui `/api/setup-autogopay?secret=...` sebelum melakukan transaksi baru.
+Pastikan migrasi AutoGoPay v55 sudah pernah dijalankan, lalu jalankan SQL `supabase/update-v60-profit-modal.sql`. Daftarkan callback melalui `/api/setup-autogopay?secret=...`; v60 otomatis memakai URL verifikasi `/api/payment-webhook?provider=autogopay&verify=1`.

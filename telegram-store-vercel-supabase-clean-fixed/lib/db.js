@@ -133,6 +133,7 @@ function normalizeVariant(item, index = 0) {
   return {
     name,
     price: Number(item?.price || item?.harga || 0),
+    cost_price: Number(item?.cost_price || item?.costPrice || item?.modal || item?.harga_modal || 0),
     sku: variantKey(item, index),
     note: String(item?.note || item?.catatan || '').trim(),
     description: String(item?.description || item?.deskripsi || '').trim(),
@@ -167,6 +168,7 @@ function normalizeProduct(row) {
     nama: row.name,
     kode: row.code,
     harga: Number(row.price || 0),
+    cost_price: Number(row.cost_price || 0),
     deskripsi: row.description || '',
     snk: row.terms || '',
     image_url: row.image_url || '',
@@ -218,6 +220,18 @@ function orderUnitPrice(product, order = {}) {
   return unit;
 }
 
+function orderUnitCost(product, order = {}) {
+  const found = findVariant(product, order.variant_key);
+  const variant = found.variant;
+  return Math.max(0, Number(order.cost_unit || variant?.cost_price || product?.cost_price || 0));
+}
+
+function calculateProfit(totalPrice, paymentFee, costTotal, costKnown = true) {
+  if (!costKnown) return 0;
+  const netSales = Math.max(0, Number(totalPrice || 0) - Math.max(0, Number(paymentFee || 0)));
+  return netSales - Math.max(0, Number(costTotal || 0));
+}
+
 async function upsertUser(from) {
   const telegramId = Number(from.id || from.telegram_id || from);
   const payload = {
@@ -242,6 +256,8 @@ function normalizeHistoricalStats(value = {}) {
     orders_total: Math.max(0, Number(raw.orders_total || raw.orders || raw.total_transactions || 0)),
     revenue_total: Math.max(0, Number(raw.revenue_total || raw.omzet_total || raw.total_revenue || 0)),
     quantity_sold: Math.max(0, Number(raw.quantity_sold || raw.total_quantity || raw.items_sold || 0)),
+    cost_total: Math.max(0, Number(raw.cost_total || raw.modal_total || 0)),
+    profit_total: Number(raw.profit_total || raw.laba_total || 0),
     updated_at: raw.updated_at || null
   };
 }
@@ -253,6 +269,8 @@ function mergeHistoricalStats(saved = {}, current = {}) {
     orders_total: Math.max(a.orders_total, b.orders_total),
     revenue_total: Math.max(a.revenue_total, b.revenue_total),
     quantity_sold: Math.max(a.quantity_sold, b.quantity_sold),
+    cost_total: Math.max(a.cost_total, b.cost_total),
+    profit_total: Math.max(a.profit_total, b.profit_total),
     updated_at: new Date().toISOString()
   };
 }
@@ -286,13 +304,15 @@ async function saveHistoricalStats(stats = {}) {
 }
 
 async function summarizeAllTransactions() {
-  const { data, count, error } = await sb().from('transactions').select('total_price,quantity', { count: 'exact' });
+  const { data, count, error } = await sb().from('transactions').select('total_price,quantity,cost_total,profit_amount,payment_fee', { count: 'exact' });
   if (error) throw error;
   const rows = data || [];
   return {
     orders_total: Number(count || rows.length || 0),
     revenue_total: rows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
     quantity_sold: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    cost_total: rows.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
+    profit_total: rows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
     updated_at: new Date().toISOString()
   };
 }
@@ -301,7 +321,7 @@ async function ensureHistoricalStatsFromCurrentTransactions(currentSummary = nul
   const current = currentSummary || await summarizeAllTransactions();
   const saved = await readHistoricalStats();
   const merged = mergeHistoricalStats(saved, current);
-  if (merged.orders_total !== saved.orders_total || merged.revenue_total !== saved.revenue_total || merged.quantity_sold !== saved.quantity_sold) {
+  if (merged.orders_total !== saved.orders_total || merged.revenue_total !== saved.revenue_total || merged.quantity_sold !== saved.quantity_sold || merged.cost_total !== saved.cost_total || merged.profit_total !== saved.profit_total) {
     return saveHistoricalStats(merged);
   }
   return merged;
@@ -313,6 +333,8 @@ async function incrementHistoricalStats(delta = {}) {
     orders_total: Number(saved.orders_total || 0) + Number(delta.orders_total || delta.orders || 0),
     revenue_total: Number(saved.revenue_total || 0) + Number(delta.revenue_total || delta.revenue || 0),
     quantity_sold: Number(saved.quantity_sold || 0) + Number(delta.quantity_sold || delta.quantity || 0),
+    cost_total: Number(saved.cost_total || 0) + Number(delta.cost_total || delta.cost || 0),
+    profit_total: Number(saved.profit_total || 0) + Number(delta.profit_total || delta.profit || 0),
     updated_at: new Date().toISOString()
   };
   return saveHistoricalStats(next);
@@ -321,8 +343,8 @@ async function incrementHistoricalStats(delta = {}) {
 async function getStats() {
   const [{ count: usersCount }, { data: products }, { data: transactions, count: ordersCount }] = await Promise.all([
     sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }),
-    sb().from('products').select('stock,sold,price,variants'),
-    sb().from('transactions').select('total_price,quantity', { count: 'exact' })
+    sb().from('products').select('stock,sold,price,cost_price,variants'),
+    sb().from('transactions').select('total_price,quantity,cost_total,profit_amount,payment_fee,created_at', { count: 'exact' })
   ]);
 
   const stokTersedia = (products || []).reduce((sum, row) => sum + productAvailableStock(normalizeProduct(row)), 0);
@@ -330,7 +352,9 @@ async function getStats() {
   const liveSummary = {
     orders_total: Number(ordersCount || 0),
     revenue_total: (transactions || []).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-    quantity_sold: (transactions || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    quantity_sold: (transactions || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    cost_total: (transactions || []).reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
+    profit_total: (transactions || []).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0)
   };
   const historical = await ensureHistoricalStatsFromCurrentTransactions(liveSummary).catch(() => liveSummary);
 
@@ -342,7 +366,11 @@ async function getStats() {
     stokTersedia,
     stokTerjual: Math.max(stokTerjual, Number(historical.quantity_sold || 0)),
     omzet: Math.max(liveSummary.revenue_total, Number(historical.revenue_total || 0)),
-    liveOmzet: liveSummary.revenue_total
+    liveOmzet: liveSummary.revenue_total,
+    modal: liveSummary.cost_total,
+    profit: liveSummary.profit_total,
+    profitToday: (transactions || []).filter((item) => wibDateKey(item.created_at) === wibDateKey(new Date())).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+    profitMonth: (transactions || []).filter((item) => wibDateKey(item.created_at).slice(0, 7) === wibDateKey(new Date()).slice(0, 7)).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0)
   };
 }
 
@@ -366,6 +394,7 @@ async function addProduct(input) {
     name: String(input.nama || input.name || '').trim(),
     code,
     price: Number(input.harga || input.price || 0),
+    cost_price: Number(input.cost_price || input.costPrice || input.modal || input.harga_modal || 0),
     description: String(input.deskripsi || input.description || ''),
     terms: String(input.snk || input.terms || ''),
     image_url: String(input.image_url || input.imageUrl || '').trim(),
@@ -409,6 +438,7 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.nama !== undefined || updates.name !== undefined) payload.name = String(updates.nama ?? updates.name).trim();
   if (updates.kode !== undefined || updates.code !== undefined) payload.code = String(updates.kode ?? updates.code).trim().toUpperCase();
   if (updates.harga !== undefined || updates.price !== undefined) payload.price = Number(updates.harga ?? updates.price);
+  if (updates.cost_price !== undefined || updates.costPrice !== undefined || updates.modal !== undefined || updates.harga_modal !== undefined) payload.cost_price = Number(updates.cost_price ?? updates.costPrice ?? updates.modal ?? updates.harga_modal);
   if (updates.deskripsi !== undefined || updates.description !== undefined) payload.description = String(updates.deskripsi ?? updates.description);
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
@@ -673,6 +703,9 @@ async function upsertPendingOrder(input) {
     invoice_ref: input.invoice_ref || null,
     amount: Number(input.amount || 0),
     fee: Number(input.fee || 0),
+    cost_unit: Number(input.cost_unit || 0),
+    cost_total: Number(input.cost_total || (Number(input.cost_unit || 0) * Number(input.quantity || 1))),
+    cost_source: String(input.cost_source || (Number(input.cost_total || input.cost_unit || 0) > 0 ? 'snapshot' : 'unset')),
     status: input.status || 'draft',
     expires_at: input.expires_at || null,
     qr_payload: String(input.qr_payload || ''),
@@ -902,6 +935,12 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   await ensureHistoricalStatsFromCurrentTransactions().catch(() => null);
 
   const nowIso = new Date().toISOString();
+  const paymentFee = Math.max(0, Number(order.fee || 0));
+  const costUnit = Math.max(0, Number(order.cost_unit || 0));
+  const costTotal = Math.max(0, Number(order.cost_total || (costUnit * quantity)));
+  const costSource = String(order.cost_source || (costTotal > 0 ? 'snapshot' : 'unset'));
+  const costKnown = costSource !== 'unset';
+  const profitAmount = calculateProfit(totalPrice, paymentFee, costTotal, costKnown);
   const transaction = {
     telegram_id: Number(order.telegram_id),
     username: buyer.username || null,
@@ -912,6 +951,12 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     unit_price: Number(order.unit_price || 0),
     quantity,
     total_price: Number(totalPrice),
+    payment_fee: paymentFee,
+    cost_unit: costUnit,
+    cost_total: costTotal,
+    cost_source: costSource,
+    cost_updated_at: costKnown ? nowIso : null,
+    profit_amount: profitAmount,
     order_ref: order.invoice_ref || null,
     delivered_items: delivered,
     delivered_text: delivered.join('\n'),
@@ -922,7 +967,7 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   const isDuplicateTrx = trxError && String(trxError.message || '').toLowerCase().includes('duplicate');
   if (trxError && !isDuplicateTrx) throw trxError;
   if (!trxError) {
-    await incrementHistoricalStats({ orders_total: 1, revenue_total: Number(totalPrice), quantity_sold: quantity }).catch(() => null);
+    await incrementHistoricalStats({ orders_total: 1, revenue_total: Number(totalPrice), quantity_sold: quantity, cost_total: costTotal, profit_total: profitAmount }).catch(() => null);
   }
 
   const { data: user } = await sb().from('bot_users').select('*').eq('telegram_id', Number(order.telegram_id)).maybeSingle();
@@ -944,6 +989,40 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   // dikirim. Bila Telegram sedang gangguan, webhook/manual check dapat mencoba
   // mengirim ulang tanpa memotong stok lagi karena order_ref sudah tercatat.
   return { delivered, transaction, already_completed: false };
+}
+
+
+async function updateTransactionCost(orderRef, costTotalInput) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) throw new Error('Invoice transaksi wajib diisi.');
+  const current = await getTransactionByOrderRef(ref);
+  if (!current) return null;
+
+  const quantity = Math.max(1, Number(current.quantity || 1));
+  const costTotal = Math.max(0, Number(costTotalInput || 0));
+  const costUnit = quantity ? Math.round(costTotal / quantity) : costTotal;
+  const paymentFee = Math.max(0, Number(current.payment_fee || 0));
+  const profitAmount = calculateProfit(current.total_price, paymentFee, costTotal, true);
+  const previousCost = Math.max(0, Number(current.cost_total || 0));
+  const previousProfit = Number(current.profit_amount || 0);
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await sb().from('transactions').update({
+    cost_unit: costUnit,
+    cost_total: costTotal,
+    cost_source: 'manual',
+    cost_updated_at: nowIso,
+    profit_amount: profitAmount
+  }).eq('order_ref', ref).select('*').maybeSingle();
+  if (error) throw error;
+
+  if (data) {
+    await incrementHistoricalStats({
+      cost_total: costTotal - previousCost,
+      profit_total: profitAmount - previousProfit
+    }).catch(() => null);
+  }
+  return data;
 }
 
 
@@ -1518,13 +1597,21 @@ async function getDeepStats() {
   const todayRevenue = transactions.filter((x) => wibDateKey(x.created_at) === todayKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
   const monthRevenue = transactions.filter((x) => wibDateKey(x.created_at).slice(0, 7) === monthKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
   const liveQtySold = transactions.reduce((s, x) => s + Number(x.quantity || 0), 0);
+  const liveCost = transactions.reduce((s, x) => s + Number(x.cost_total || 0), 0);
+  const liveProfit = transactions.reduce((s, x) => s + Number(x.profit_amount || 0), 0);
+  const todayProfit = transactions.filter((x) => wibDateKey(x.created_at) === todayKey).reduce((s, x) => s + Number(x.profit_amount || 0), 0);
+  const monthProfit = transactions.filter((x) => wibDateKey(x.created_at).slice(0, 7) === monthKey).reduce((s, x) => s + Number(x.profit_amount || 0), 0);
   const historical = await ensureHistoricalStatsFromCurrentTransactions({
     orders_total: transactions.length,
     revenue_total: liveRevenue,
-    quantity_sold: liveQtySold
-  }).catch(() => ({ orders_total: transactions.length, revenue_total: liveRevenue, quantity_sold: liveQtySold }));
+    quantity_sold: liveQtySold,
+    cost_total: liveCost,
+    profit_total: liveProfit
+  }).catch(() => ({ orders_total: transactions.length, revenue_total: liveRevenue, quantity_sold: liveQtySold, cost_total: liveCost, profit_total: liveProfit }));
   const revenue = Math.max(liveRevenue, Number(historical.revenue_total || 0));
   const qtySold = Math.max(liveQtySold, Number(historical.quantity_sold || 0));
+  const costTotal = liveCost;
+  const profitTotal = liveProfit;
   const ordersTotal = Math.max(transactions.length, Number(historical.orders_total || 0));
   const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active })).filter((p) => p.active !== false && p.stock <= 5).sort((a, b) => a.stock - b.stock).slice(0, 20);
   const topUsers = users.slice().sort((a, b) => Number(b.spending || 0) - Number(a.spending || 0)).slice(0, 10);
@@ -1539,6 +1626,10 @@ async function getDeepStats() {
     revenue_total: revenue,
     revenue_today: todayRevenue,
     revenue_month: monthRevenue,
+    cost_total: costTotal,
+    profit_total: profitTotal,
+    profit_today: todayProfit,
+    profit_month: monthProfit,
     orders_total: ordersTotal,
     live_orders_total: transactions.length,
     quantity_sold: qtySold,
@@ -1591,6 +1682,7 @@ module.exports = {
   listTransactionsInRange,
   listTransactionsByUser,
   getTransactionByOrderRef,
+  updateTransactionCost,
   getUserByTelegramId,
   completeOrder,
   normalizeBulkPrices,
@@ -1599,6 +1691,8 @@ module.exports = {
   findVariant,
   productAvailableStock,
   orderUnitPrice,
+  orderUnitCost,
+  calculateProfit,
   createBroadcastPoll,
   getBroadcastPoll,
   updateBroadcastPoll,

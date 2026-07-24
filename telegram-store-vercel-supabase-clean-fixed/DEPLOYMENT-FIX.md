@@ -1,5 +1,7 @@
 # Perbaikan Error npm di Vercel
 
+> Catatan v60: panduan ini hanya membahas npm. Fitur modal dan profit tetap mewajibkan `supabase/update-v60-profit-modal.sql`.
+
 Error yang diperbaiki:
 
 ```text
@@ -26,4 +28,4 @@ Error: Command "npm install" exited with 1
 8. Nonaktifkan penggunaan build cache atau pilih **Redeploy without cache**.
 9. Tunggu sampai status **Ready**.
 
-Tidak ada SQL baru dan environment variable lama tidak perlu dihapus.
+Environment variable lama tidak perlu dihapus. Untuk fitur v60, tetap jalankan SQL yang disebutkan pada `README-INSTALL.md`.

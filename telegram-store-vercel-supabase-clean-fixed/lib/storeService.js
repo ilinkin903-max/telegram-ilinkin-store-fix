@@ -379,6 +379,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     status: 'draft'
   };
   const unitPrice = db.orderUnitPrice(product, draftOrder);
+  const costUnit = db.orderUnitCost(product, draftOrder);
+  const costTotal = costUnit * qty;
   const subtotal = unitPrice * qty;
   let voucherApplied = null;
   let promoApplied = null;
@@ -416,6 +418,9 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   await db.upsertUser(user);
   await db.upsertPendingOrder({
     ...draftOrder,
+    cost_unit: costUnit,
+    cost_total: costTotal,
+    cost_source: costUnit > 0 ? 'snapshot' : 'unset',
     voucher_code: appliedCode,
     invoice_ref: invoice,
     amount: total,

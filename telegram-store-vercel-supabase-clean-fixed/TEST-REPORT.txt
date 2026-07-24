@@ -1,17 +1,20 @@
-v58 — Promo Khusus Flash Sale, Invoice Bersih, dan Submenu Rapi
+v60 — AutoGoPay Callback, Modal Checkout, dan Profit
 
-Hasil: 55/55 pengujian berhasil.
+Hasil: 64/64 pengujian otomatis berhasil.
 
 Pemeriksaan mencakup:
 - Sintaks JavaScript seluruh API, library, Marketplace, dashboard, dan script.
-- Callback AutoGoPay probe tetap membalas HTTP 200 dan transaksi asli tetap wajib signature.
-- Prefix AUTOGOPAY disembunyikan dari Invoice/Trx ID yang tampil, tanpa mengubah ID internal gateway.
-- Promo yang dipilih untuk Flash Sale ditolak sebelum jadwal, setelah jadwal, atau ketika Flash Sale OFF.
-- Promo biasa tetap dapat aktif di luar Flash Sale.
-- Flash Sale tampil satu baris horizontal.
-- Submenu Pengaturan dan Promo tampil satu baris horizontal tanpa ID HTML ganda.
-- Promo/voucher produk dan varian, QRIS, Marketplace, serta notifikasi PESANAN SELESAI tetap lulus.
+- Probe callback AutoGoPay mendapat HTTP 200.
+- URL verify v60 menerima payload verifikasi realistis tanpa signature.
+- Transaksi asli dan transaksi dengan signature salah tetap ditolak.
+- Prefix AUTOGOPAY disembunyikan dari Invoice/Trx ID tampilan.
+- Modal default produk dan varian tersimpan.
+- Modal dapat dikoreksi persis per checkout.
+- Profit mendukung hasil positif maupun rugi/negatif.
+- Alat Toko berada di dalam Pengaturan Toko.
+- Promo Flash Sale, QRIS, Marketplace, dan notifikasi PESANAN SELESAI tetap lulus.
 
 Catatan:
-- Pengujian memakai stub dependency lokal tanpa jaringan. Dependency produksi di package.json/package-lock.json tidak diubah dan akan dipasang oleh Vercel.
-- Transaksi AutoGoPay, Telegram, dan Supabase secara langsung tetap perlu diuji setelah deployment menggunakan kredensial aktif.
+- Pengujian dependency memakai stub lokal tanpa jaringan; folder node_modules tidak disertakan dalam ZIP.
+- Instalasi produksi tetap memakai package.json dan package-lock.json resmi.
+- Transaksi AutoGoPay, Telegram, dan Supabase nyata perlu diuji setelah deployment dengan kredensial aktif.

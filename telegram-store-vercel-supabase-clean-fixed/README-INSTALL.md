@@ -1,79 +1,51 @@
-# v58 — Promo Khusus Flash Sale, Invoice Bersih, dan Submenu Rapi
+# iLink.in Store v60 — AutoGoPay Callback, Modal Checkout, dan Profit
 
-Versi ini melanjutkan v56 (bukan v57 Grosir). Tidak memerlukan SQL baru.
+Versi ini melanjutkan v58/v56 tanpa membawa fitur rekomendasi grosir v57.
 
-Perubahan utama:
+## Perubahan utama
 
-- Prefix `AUTOGOPAY` disembunyikan dari Invoice/Trx ID yang dilihat user, owner, Marketplace, riwayat, dashboard, dan nama file QRIS. ID asli tetap tersimpan untuk verifikasi gateway.
-- Promo yang dicentang **Masukkan ke Flash Sale** hanya aktif selama status Flash Sale ON dan waktu sekarang berada di antara jadwal mulai–berakhir. Di luar jadwal, promo tersebut tidak memotong harga di bot maupun Marketplace.
-- Daftar Flash Sale selalu satu baris ke samping dan dapat digeser horizontal.
-- Menu **Pengaturan** memiliki submenu satu baris: Pengaturan Toko, Banner Promosi, dan Media /start.
-- Menu **Promo** memiliki submenu satu baris: Daftar, Buat Promo & Voucher, dan Flash Sale.
+- Setup callback AutoGoPay memakai URL verifikasi khusus:
+  `/api/payment-webhook?provider=autogopay&verify=1`.
+- Sebelum mendaftarkan callback, sistem menguji endpoint milik sendiri dan memastikan respons HTTP 200.
+- Probe verifikasi tanpa signature hanya di-ACK dan tidak menyentuh transaksi.
+- Webhook pembayaran asli tetap wajib memiliki signature HMAC-SHA256 yang valid.
+- Submenu **Alat Toko** (Lisensi, Statistik, Backup, Maintenance) berada di dalam **Pengaturan → Pengaturan Toko**.
+- Produk dan setiap varian memiliki **Modal Supplier** default.
+- Modal default disalin sebagai snapshot ketika pembeli checkout, sehingga perubahan modal berikutnya tidak mengubah transaksi lama.
+- Pada setiap penjualan tersedia tombol **Atur Modal** untuk memasukkan total modal supplier yang benar-benar dibayar pada checkout tersebut.
+- Dashboard menampilkan profit hari ini, bulan ini, total profit, modal, omzet bersih, dan profit per transaksi.
+- Prefix `AUTOGOPAY` tetap disembunyikan pada Invoice/Trx ID yang dilihat pembeli dan owner.
 
-## Cara update
+## Rumus profit
 
-1. Unggah seluruh isi folder ini untuk menggantikan v56.
-2. Redeploy Vercel tanpa cache.
-3. Tidak perlu menjalankan SQL tambahan.
-4. Buka Reseller Dashboard dan periksa jadwal Flash Sale.
-5. Buat transaksi baru untuk menguji harga dan tampilan Invoice.
+```text
+Omzet bersih = Total dibayar pembeli - fee pembayaran
+Profit kotor = Omzet bersih - total modal supplier transaksi
+```
 
----
+Profit dapat bernilai negatif apabila modal lebih besar daripada omzet bersih. Angka ini belum mengurangi biaya operasional lain seperti iklan, server, atau gaji.
 
-# v56 — AutoGoPay Callback Verification Fix
-
-Versi ini memperbaiki error callback AutoGoPay yang mengharapkan HTTP 200 ketika melakukan verifikasi URL. Tidak ada SQL baru.
-
-Baca juga: `AUTOGOPAY-CALLBACK-FIX.md`.
-
-# iLink.in Store v55 — AutoGoPay QRIS Integration
-
-Versi ini melanjutkan seluruh fitur Marketplace v54 dan mengganti/menambahkan payment gateway **AutoGoPay** untuk QRIS otomatis.
-
-## Perubahan v55
-
-- Mendukung `PAYMENT_PROVIDER=autogopay` tanpa menghapus dukungan Pakasir.
-- QRIS dibuat melalui `POST /qris/generate` AutoGoPay.
-- Menyimpan `transaction_id`, `order_id`, QR string, checkout URL, dan waktu kedaluwarsa.
-- Pembayaran otomatis diproses dari webhook AutoGoPay yang diverifikasi dengan HMAC-SHA256.
-- Pengecekan manual dan polling Marketplace menggunakan endpoint status AutoGoPay.
-- Produk dikirim otomatis setelah status `settlement`.
-- Tombol **Buka Halaman Pembayaran** muncul bila AutoGoPay mengirim `checkout_url`.
-- Tombol unduh QRIS tetap menggunakan file PNG dari server bot.
-- Pembatalan invoice akan mencoba membatalkan QRIS AutoGoPay.
-- Notifikasi admin **✅ PESANAN SELESAI** tetap dipertahankan.
-- Endpoint baru `/api/setup-autogopay` untuk memasang callback URL secara otomatis.
-
-## 1. Persiapan AutoGoPay
-
-1. Login ke `https://autogopay.site/settings`.
-2. Pastikan akun AutoGoPay aktif dan GoPay Merchant/Business sudah terhubung.
-3. Salin API Key dari halaman Settings.
-4. Jangan menaruh API Key di frontend, GitHub publik, atau mengirimkannya melalui chat.
-
-## 2. Jalankan SQL wajib
+## 1. Jalankan SQL v60 (wajib)
 
 Buka:
 
-`Supabase → SQL Editor → New query`
+```text
+Supabase → SQL Editor → New query
+```
 
-Jalankan file:
+Jalankan isi file:
 
-`supabase/update-v55-autogopay.sql`
+```text
+supabase/update-v60-profit-modal.sql
+```
 
-SQL ini menambah kolom:
+SQL menambahkan kolom modal produk, snapshot modal pending order, modal transaksi, sumber modal, waktu koreksi, fee pembayaran, dan profit.
 
-- `payment_provider`
-- `provider_transaction_id`
-- `provider_checkout_url`
+Untuk instalasi baru dari nol, jalankan `supabase/schema.sql`. Jika database lama belum pernah menjalankan pembaruan AutoGoPay v55, jalankan juga `supabase/update-v55-autogopay.sql` sebelum v60.
 
-## 3. Environment Variables Vercel
+## 2. Environment Variables Vercel
 
-Buka:
-
-`Vercel → Project → Settings → Environment Variables`
-
-Tambahkan:
+Pastikan environment **Production** memiliki:
 
 ```env
 PAYMENT_PROVIDER=autogopay
@@ -83,49 +55,20 @@ AUTOGOPAY_REDIRECT_URL=https://telegram-ilinkin-store-fix.vercel.app
 PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
 STORE_URL=https://telegram-ilinkin-store-fix.vercel.app
 MINIAPP_URL=https://telegram-ilinkin-store-fix.vercel.app/reseller
-WEBHOOK_SECRET=RAHASIA_RANDOM_TANPA_SPASI
+WEBHOOK_SECRET=RAHASIA_RANDOM_BARU_TANPA_SPASI
 ```
 
-Nilai pada kolom Vercel diisi **hanya nilainya**, tidak perlu menulis `NAMA_VARIABEL=` pada kolom Value.
+Masukkan hanya nilainya pada kolom Value. Jangan menambahkan tanda kutip atau spasi di awal/akhir.
 
-Variabel Pakasir lama boleh dibiarkan. Sistem akan memakai AutoGoPay karena `PAYMENT_PROVIDER=autogopay`.
+## 3. Upload dan deploy
 
-## 4. Upload dan deploy
+1. Ekstrak ZIP v60.
+2. Unggah seluruh isi folder `store_fix_v60` ke root repository GitHub.
+3. Commit perubahan.
+4. Di Vercel pilih **Redeploy** tanpa build cache.
+5. Tunggu status menjadi **Ready**.
 
-1. Upload seluruh isi folder v55 ke repository GitHub.
-2. Commit perubahan.
-3. Redeploy Vercel tanpa cache.
-4. Tunggu status deployment menjadi `Ready`.
-
-## 5. Pasang webhook Telegram
-
-Buka di browser dan ganti `ISI_WEBHOOK_SECRET` dengan nilai `WEBHOOK_SECRET` di Vercel:
-
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=ISI_WEBHOOK_SECRET
-```
-
-## 6. Pasang callback AutoGoPay
-
-Setelah deployment `Ready`, buka:
-
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/setup-autogopay?secret=ISI_WEBHOOK_SECRET
-```
-
-Jika berhasil, respons menampilkan:
-
-```json
-{
-  "ok": true,
-  "callback_url": "https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook",
-  "redirect_url": "https://telegram-ilinkin-store-fix.vercel.app"
-}
-```
-
-Endpoint tersebut mengirim callback URL ke AutoGoPay menggunakan API Key yang tersimpan aman di Vercel.
-
-## 7. Pemeriksaan endpoint
+## 4. Pastikan v60 aktif
 
 Buka:
 
@@ -133,50 +76,78 @@ Buka:
 https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 ```
 
-Pastikan respons berisi:
+Respons harus memuat:
 
 ```json
 {
   "ok": true,
+  "version": "v60-profit-cost-autogopay-fix",
   "active_provider": "autogopay"
 }
 ```
 
-## 8. Uji transaksi
+## 5. Daftarkan ulang callback AutoGoPay
 
-1. Buat transaksi baru dari bot atau Marketplace.
-2. Pastikan QRIS dan tombol **Buka Halaman Pembayaran** muncul.
-3. Bayar sesuai nominal tepat.
-4. Tunggu webhook atau polling mendeteksi `settlement`.
-5. Produk harus terkirim ke Telegram dan log **PESANAN SELESAI** masuk ke channel admin.
+Ganti `WEBHOOK_SECRET_ANDA` dengan nilai `WEBHOOK_SECRET` baru yang tersimpan di Vercel:
 
-Gunakan invoice baru setelah v55. Invoice Pakasir lama tidak memiliki `provider_transaction_id` AutoGoPay.
+```text
+https://telegram-ilinkin-store-fix.vercel.app/api/setup-autogopay?secret=WEBHOOK_SECRET_ANDA
+```
+
+Respons berhasil akan menampilkan `ok: true` dan callback URL yang berisi:
+
+```text
+/api/payment-webhook?provider=autogopay&verify=1
+```
+
+Query `verify=1` hanya membantu proses verifikasi callback. Webhook pembayaran asli dengan signature valid tetap diproses normal.
+
+## 6. Pasang ulang webhook Telegram bila diperlukan
+
+```text
+https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=WEBHOOK_SECRET_ANDA
+```
+
+## 7. Cara mengatur modal agar persis per konsumen
+
+### Modal default untuk transaksi berikutnya
+
+```text
+Dashboard Reseller → Produk → Edit Produk
+```
+
+- Produk tanpa varian: isi **Modal Supplier / Item**.
+- Produk dengan varian: isi **Modal Supplier** pada masing-masing varian.
+
+Saat pembeli checkout, sistem menyimpan modal saat itu sebagai snapshot.
+
+### Koreksi modal checkout tertentu
+
+```text
+Dashboard Reseller → Penjualan → pilih transaksi → Atur Modal
+```
+
+Masukkan **total modal supplier untuk seluruh jumlah item pada invoice tersebut**. Contoh:
+
+```text
+Pembeli membeli 3 item
+Total yang dibayar ke supplier = Rp28.500
+Isi Modal Total Aktual = 28500
+```
+
+Sistem langsung menghitung ulang modal per item dan profit transaksi. Perubahan ini hanya berlaku untuk invoice tersebut.
+
+## Troubleshooting AutoGoPay 502
+
+- Pastikan endpoint `/api/payment-webhook` sudah menampilkan versi v60.
+- Pastikan `PAYMENT_PROVIDER=autogopay` dan API key berada pada Production.
+- Setelah mengubah Environment Variables, selalu redeploy.
+- Jalankan kembali endpoint `/api/setup-autogopay?secret=...` setelah deployment Ready.
+- Periksa **Vercel → Logs** bila respons masih gagal; respons v60 menyertakan status preflight dan riwayat percobaan upstream.
+- Buat invoice baru untuk pengujian.
 
 ## Keamanan
 
-- Webhook AutoGoPay wajib memiliki header signature HMAC-SHA256.
-- Signature diverifikasi menggunakan `AUTOGOPAY_API_KEY`.
-- `transaction_id` dan nominal harus cocok dengan pending order.
-- Proses fulfillment bersifat idempotent agar webhook ganda tidak memotong stok dua kali.
-- API Key hanya berada di Environment Variables server.
-
-## Troubleshooting
-
-### `AUTOGOPAY_API_KEY belum diisi`
-
-Pastikan variabel dibuat untuk **Production**, lalu redeploy.
-
-### `Secret setup salah`
-
-Nilai setelah `?secret=` harus sama persis dengan `WEBHOOK_SECRET`, tanpa tanda kutip dan tanpa spasi.
-
-### `ID transaksi AutoGoPay tidak ditemukan`
-
-Jalankan SQL v55 dan buat invoice baru.
-
-### Webhook tidak mengirim produk
-
-- Buka `/api/payment-webhook` dan pastikan provider aktif `autogopay`.
-- Jalankan kembali `/api/setup-autogopay?secret=...`.
-- Periksa Runtime Logs Vercel untuk pesan `Signature AutoGoPay tidak valid` atau `Nominal pembayaran tidak cocok`.
-- Pastikan AutoGoPay masih aktif dan GoPay Merchant tetap terhubung.
+- Jangan menaruh API key atau secret di GitHub.
+- Karena secret setup pernah ditulis di percakapan, ganti `WEBHOOK_SECRET` dengan nilai baru lalu redeploy.
+- ID internal AutoGoPay tetap disimpan untuk verifikasi, tetapi prefix tidak ditampilkan ke pembeli.

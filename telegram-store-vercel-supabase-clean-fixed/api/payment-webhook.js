@@ -74,6 +74,8 @@ function autoGopayRequestMeta(req, payload = {}) {
     ''
   ).trim().toLowerCase();
   const userAgent = String(req?.headers?.['user-agent'] || '').trim().toLowerCase();
+  const queryProvider = String(req?.query?.provider || '').trim().toLowerCase();
+  const verificationMode = ['1', 'true', 'yes'].includes(String(req?.query?.verify || '').trim().toLowerCase());
   const hasSignature = Boolean(
     req?.headers?.['x-signature'] ||
     req?.headers?.['x-callback-signature']
@@ -101,11 +103,13 @@ function autoGopayRequestMeta(req, payload = {}) {
     transactionId,
     amount,
     status,
-    looksLikeAutoGopay: hasSignature || event.length > 0 || userAgent.includes('autogopay-callback')
+    queryProvider,
+    verificationMode,
+    looksLikeAutoGopay: queryProvider === 'autogopay' || hasSignature || event.length > 0 || userAgent.includes('autogopay-callback')
   };
 }
 
-function isAutoGopayCallbackProbe(req, payload = {}) {
+function isAutoGopayCallbackProbe(req, payload = {}, validSignature = false) {
   const meta = autoGopayRequestMeta(req, payload);
   const explicitProbe =
     payload?.test === true ||
@@ -119,11 +123,15 @@ function isAutoGopayCallbackProbe(req, payload = {}) {
     Number.isFinite(meta.amount) &&
     meta.amount > 0
   );
+  const providerIsAutoGopay = String(config.paymentProvider || '').toLowerCase() === 'autogopay';
 
-  // AutoGoPay melakukan pengecekan URL saat callback disimpan. Probe tersebut
-  // tidak selalu membawa transaksi penjualan lengkap. Probe hanya di-ACK dan
-  // tidak pernah digunakan untuk menyelesaikan pesanan.
-  return meta.looksLikeAutoGopay && (explicitProbe || !hasUsableTransaction);
+  // v60 mendaftarkan callback dengan query verify=1. Request verifikasi yang
+  // belum memiliki signature valid selalu dibalas HTTP 200 tanpa menyentuh order.
+  // Webhook pembayaran asli tetap diproses karena membawa signature HMAC valid.
+  if (meta.verificationMode && !meta.hasSignature) return true;
+
+  // Probe eksplisit atau payload tanpa transaksi lengkap juga aman dijawab 200.
+  return explicitProbe || (!hasUsableTransaction && (meta.looksLikeAutoGopay || providerIsAutoGopay));
 }
 
 function pakasirSecretAllowed(req) {
@@ -143,13 +151,11 @@ async function processAutoGopayWebhook(req, res, payload) {
   // hanya mengharapkan HTTP 200. Probe tidak memproses transaksi apa pun.
   // Jika probe membawa signature, signature tetap diverifikasi. Sebagian probe
   // hanya mengirim User-Agent/event tanpa payload transaksi lengkap.
-  if (isAutoGopayCallbackProbe(req, payload)) {
-    if (meta.hasSignature && !validSignature) {
-      return res.status(401).json({ success: false, error: 'Signature AutoGoPay tidak valid.' });
-    }
+  if (isAutoGopayCallbackProbe(req, payload, validSignature)) {
     console.info('AutoGoPay callback probe diterima.', {
       event: meta.event || 'callback.probe',
-      signed: meta.hasSignature
+      signed: meta.hasSignature,
+      signature_valid: meta.hasSignature ? validSignature : null
     });
     return res.status(200).json({
       success: true,
@@ -244,14 +250,15 @@ async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       message: 'Webhook pembayaran aktif.',
-      version: 'v56-autogopay-callback-probe-fix',
+      version: 'v60-profit-cost-autogopay-fix',
       active_provider: config.paymentProvider,
       configuration: {
         autogopayApiKeyConfigured: Boolean(config.autogopayApiKey),
         pakasirProjectConfigured: Boolean(config.pakasirSlug),
         pakasirApiKeyConfigured: Boolean(config.pakasirApiKey)
       },
-      webhook_url: `${String(config.publicUrl || '').replace(/\/$/, '')}/api/payment-webhook`
+      webhook_url: `${String(config.publicUrl || '').replace(/\/$/, '')}/api/payment-webhook`,
+      callback_registration_url: `${String(config.publicUrl || '').replace(/\/$/, '')}/api/payment-webhook?provider=autogopay&verify=1`
     });
   }
   if (req.method !== 'POST') {
