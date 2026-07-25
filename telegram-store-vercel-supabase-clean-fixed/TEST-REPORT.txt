@@ -1,18 +1,17 @@
-v60 — AutoGoPay Callback, Modal Checkout, dan Profit
+v61 — Dashboard Reseller Lebih Bersih
 
-Hasil: 64/64 pengujian otomatis berhasil.
+Hasil: 66/66 pengujian otomatis berhasil.
 
 Pemeriksaan mencakup:
 - Sintaks JavaScript seluruh API, library, Marketplace, dashboard, dan script.
-- Probe callback AutoGoPay mendapat HTTP 200.
-- URL verify v60 menerima payload verifikasi realistis tanpa signature.
-- Transaksi asli dan transaksi dengan signature salah tetap ditolak.
-- Prefix AUTOGOPAY disembunyikan dari Invoice/Trx ID tampilan.
-- Modal default produk dan varian tersimpan.
-- Modal dapat dikoreksi persis per checkout.
-- Profit mendukung hasil positif maupun rugi/negatif.
-- Alat Toko berada di dalam Pengaturan Toko.
-- Promo Flash Sale, QRIS, Marketplace, dan notifikasi PESANAN SELESAI tetap lulus.
+- Callback AutoGoPay dan verifikasi pembayaran tetap berjalan.
+- Prefix AUTOGOPAY tetap disembunyikan dari Invoice/Trx ID tampilan.
+- Modal produk/varian dan koreksi modal per checkout tetap tersedia.
+- Kartu produk tidak menampilkan modal, margin, atau harga grosir.
+- Penjualan dan detail penjualan tidak menampilkan rincian profit/modal.
+- Dialog Atur Modal memakai istilah Profit Bersih.
+- Seluruh alat toko berada langsung di submenu Pengaturan vertikal.
+- Promo Flash Sale, QRIS, Marketplace, dan notifikasi PESANAN SELESAI tetap diuji.
 
 Catatan:
 - Pengujian dependency memakai stub lokal tanpa jaringan; folder node_modules tidak disertakan dalam ZIP.

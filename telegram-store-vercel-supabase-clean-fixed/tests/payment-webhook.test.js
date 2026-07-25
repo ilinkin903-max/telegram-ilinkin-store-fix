@@ -102,7 +102,7 @@ test('probe kosong dengan signature tidak valid tetap hanya di-ACK dan tidak mem
 });
 
 
-test('URL verifikasi v60 meng-ACK payload transaksi tiruan tanpa signature', async () => {
+test('URL verifikasi AutoGoPay meng-ACK payload transaksi tiruan tanpa signature', async () => {
   const payload = {
     event: 'transaction.received',
     transaction: { id: 'VERIFY-ONLY', amount: 1, status: 'settlement' }

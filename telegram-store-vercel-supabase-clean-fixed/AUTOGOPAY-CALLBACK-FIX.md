@@ -10,8 +10,8 @@ Request verifikasi tanpa signature dibalas HTTP 200 dan tidak memproses order. W
 
 ## Langkah
 
-1. Deploy v60 dan tunggu Ready.
-2. Buka `/api/payment-webhook`; pastikan versi `v60-profit-cost-autogopay-fix`.
+1. Deploy v61 dan tunggu Ready.
+2. Buka `/api/payment-webhook`; pastikan versi `v61-clean-reseller-dashboard`.
 3. Buka `/api/setup-autogopay?secret=WEBHOOK_SECRET_ANDA`.
 4. Pastikan respons `ok: true`.
 5. Uji menggunakan invoice baru.

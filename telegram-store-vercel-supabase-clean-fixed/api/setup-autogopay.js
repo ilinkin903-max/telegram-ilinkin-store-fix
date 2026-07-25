@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { config, getPublicBaseUrl } = require('../lib/config');
 
-const VERSION = 'v60-profit-cost-autogopay-fix';
+const VERSION = 'v61-clean-reseller-dashboard';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -28,11 +28,15 @@ test('dashboard menyediakan modal default produk, modal varian, dan koreksi per 
   assert.match(resellerData, /action === 'update-order-cost'/);
 });
 
-test('alat toko berada di dalam panel Pengaturan Toko', () => {
-  const panelStart = reseller.indexOf('id="settingsStorePanel"');
-  const panelEnd = reseller.indexOf('id="settingsBannerPanel"');
-  const tools = reseller.indexOf('class="storeToolsInline"');
-  assert.ok(panelStart >= 0 && tools > panelStart && tools < panelEnd);
+test('alat toko menjadi submenu langsung di Pengaturan tanpa submenu bertingkat', () => {
+  const menuStart = reseller.indexOf('class="settingsSubNav"');
+  const menuEnd = reseller.indexOf('</div>', menuStart);
+  const menu = reseller.slice(menuStart, menuEnd);
+  assert.match(menu, /data-tab="license"/);
+  assert.match(menu, /data-tab="deepStats"/);
+  assert.match(menu, /data-tab="backup"/);
+  assert.match(menu, /data-tab="maintenance"/);
+  assert.doesNotMatch(reseller, /storeToolsInline/);
 });
 
 test('SQL v60 menyimpan sumber modal agar profit lama tidak salah dihitung', () => {
@@ -45,5 +49,5 @@ test('setup AutoGoPay memeriksa callback dan mencoba payload cadangan', () => {
   assert.match(setup, /preflightCallback/);
   assert.match(setup, /callback-only/);
   assert.match(setup, /attempts/);
-  assert.match(setup, /v60-profit-cost-autogopay-fix/);
+  assert.match(setup, /v61-clean-reseller-dashboard/);
 });

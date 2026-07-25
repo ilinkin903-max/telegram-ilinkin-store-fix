@@ -1,29 +1,27 @@
-# iLink.in Store v60 — AutoGoPay Callback, Modal Checkout, dan Profit
+# iLink.in Store v61 — Dashboard Reseller Lebih Bersih
 
 Versi ini melanjutkan v58/v56 tanpa membawa fitur rekomendasi grosir v57.
 
 ## Perubahan utama
 
-- Setup callback AutoGoPay memakai URL verifikasi khusus:
-  `/api/payment-webhook?provider=autogopay&verify=1`.
-- Sebelum mendaftarkan callback, sistem menguji endpoint milik sendiri dan memastikan respons HTTP 200.
-- Probe verifikasi tanpa signature hanya di-ACK dan tidak menyentuh transaksi.
-- Webhook pembayaran asli tetap wajib memiliki signature HMAC-SHA256 yang valid.
-- Submenu **Alat Toko** (Lisensi, Statistik, Backup, Maintenance) berada di dalam **Pengaturan → Pengaturan Toko**.
-- Produk dan setiap varian memiliki **Modal Supplier** default.
-- Modal default disalin sebagai snapshot ketika pembeli checkout, sehingga perubahan modal berikutnya tidak mengubah transaksi lama.
-- Pada setiap penjualan tersedia tombol **Atur Modal** untuk memasukkan total modal supplier yang benar-benar dibayar pada checkout tersebut.
-- Dashboard menampilkan profit hari ini, bulan ini, total profit, modal, omzet bersih, dan profit per transaksi.
-- Prefix `AUTOGOPAY` tetap disembunyikan pada Invoice/Trx ID yang dilihat pembeli dan owner.
+- Perbaikan callback AutoGoPay v60 tetap dipertahankan.
+- Prefix `AUTOGOPAY` tetap disembunyikan pada Invoice/Trx ID.
+- Kartu dashboard hanya menampilkan Omset Hari Ini, Profit Hari Ini, Order, dan Stok.
+- Kartu produk tidak lagi menampilkan modal, margin, atau harga grosir.
+- Ringkasan varian hanya menampilkan nama, harga jual, stok, dan status.
+- Kartu Penjualan serta Detail Penjualan tidak lagi menampilkan omzet bersih, modal supplier, atau profit.
+- Tombol **Atur Modal** tetap tersedia dan hasilnya diberi nama **Profit Bersih**.
+- Pengaturan Toko, Banner, Media `/start`, Lisensi, Statistik Lengkap, Backup, dan Maintenance disatukan dalam submenu Pengaturan vertikal.
+- Tidak ada SQL baru untuk pengguna yang sudah memasang v60.
 
 ## Rumus profit
 
 ```text
 Omzet bersih = Total dibayar pembeli - fee pembayaran
-Profit kotor = Omzet bersih - total modal supplier transaksi
+Profit bersih = pendapatan setelah fee - total modal supplier transaksi
 ```
 
-Profit dapat bernilai negatif apabila modal lebih besar daripada omzet bersih. Angka ini belum mengurangi biaya operasional lain seperti iklan, server, atau gaji.
+Profit dapat bernilai negatif apabila modal lebih besar daripada pendapatan setelah fee. Nama “profit bersih” di dashboard mengikuti istilah yang digunakan pada toko; biaya operasional lain seperti iklan, server, atau gaji belum ikut dihitung.
 
 ## 1. Jalankan SQL v60 (wajib)
 
@@ -62,13 +60,13 @@ Masukkan hanya nilainya pada kolom Value. Jangan menambahkan tanda kutip atau sp
 
 ## 3. Upload dan deploy
 
-1. Ekstrak ZIP v60.
-2. Unggah seluruh isi folder `store_fix_v60` ke root repository GitHub.
+1. Ekstrak ZIP v61.
+2. Unggah seluruh isi folder `store_fix_v61` ke root repository GitHub.
 3. Commit perubahan.
 4. Di Vercel pilih **Redeploy** tanpa build cache.
 5. Tunggu status menjadi **Ready**.
 
-## 4. Pastikan v60 aktif
+## 4. Pastikan v61 aktif
 
 Buka:
 
@@ -81,7 +79,7 @@ Respons harus memuat:
 ```json
 {
   "ok": true,
-  "version": "v60-profit-cost-autogopay-fix",
+  "version": "v61-clean-reseller-dashboard",
   "active_provider": "autogopay"
 }
 ```
@@ -135,15 +133,15 @@ Total yang dibayar ke supplier = Rp28.500
 Isi Modal Total Aktual = 28500
 ```
 
-Sistem langsung menghitung ulang modal per item dan profit transaksi. Perubahan ini hanya berlaku untuk invoice tersebut.
+Sistem langsung menghitung ulang modal per item dan profit bersih transaksi. Perubahan ini hanya berlaku untuk invoice tersebut.
 
 ## Troubleshooting AutoGoPay 502
 
-- Pastikan endpoint `/api/payment-webhook` sudah menampilkan versi v60.
+- Pastikan endpoint `/api/payment-webhook` sudah menampilkan versi v61.
 - Pastikan `PAYMENT_PROVIDER=autogopay` dan API key berada pada Production.
 - Setelah mengubah Environment Variables, selalu redeploy.
 - Jalankan kembali endpoint `/api/setup-autogopay?secret=...` setelah deployment Ready.
-- Periksa **Vercel → Logs** bila respons masih gagal; respons v60 menyertakan status preflight dan riwayat percobaan upstream.
+- Periksa **Vercel → Logs** bila respons masih gagal; respons v61 menyertakan status preflight dan riwayat percobaan upstream.
 - Buat invoice baru untuk pengujian.
 
 ## Keamanan

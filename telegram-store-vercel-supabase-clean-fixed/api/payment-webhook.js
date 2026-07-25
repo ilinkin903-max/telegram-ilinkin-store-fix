@@ -250,7 +250,7 @@ async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       message: 'Webhook pembayaran aktif.',
-      version: 'v60-profit-cost-autogopay-fix',
+      version: 'v61-clean-reseller-dashboard',
       active_provider: config.paymentProvider,
       configuration: {
         autogopayApiKeyConfigured: Boolean(config.autogopayApiKey),

@@ -114,13 +114,19 @@ test('v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia', () => {
 });
 
 
-test('v58 dashboard memakai submenu horizontal untuk pengaturan dan promo', () => {
+test('v61 menyatukan seluruh alat toko ke submenu Pengaturan vertikal', () => {
   const reseller = fs.readFileSync(path.join(__dirname, '..', 'api', 'reseller.js'), 'utf8');
   assert.match(reseller, /data-settings-sub="store"/);
   assert.match(reseller, /data-settings-sub="banner"/);
   assert.match(reseller, /data-settings-sub="start"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="license"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="deepStats"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="backup"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="maintenance"/);
+  assert.match(reseller, /\.settingsSubNav\{display:grid;grid-template-columns:1fr/);
+  assert.doesNotMatch(reseller, /storeToolsInline/);
+  assert.doesNotMatch(reseller, /class="storeSubBtn"/);
   assert.match(reseller, /data-promo-sub="flash"/);
-  assert.match(reseller, /settingsSubNav/);
 });
 
 test('v58 flash sale selalu satu baris horizontal', () => {
@@ -142,4 +148,41 @@ test('promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif', () 
   assert.match(db, /promoAllowedByFlashSale/);
   assert.match(db, /flashSaleWindowState/);
   assert.match(service, /return !flashPromoCodeSet\.has\(code\) \|\| flashWindow\.active/);
+});
+
+
+test('v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang tidak perlu', () => {
+  const statsStart = reseller.indexOf('function renderStats()');
+  const statsEnd = reseller.indexOf('function renderCharts()', statsStart);
+  const statsBlock = reseller.slice(statsStart, statsEnd);
+  assert.doesNotMatch(statsBlock, /Profit Bulan Ini/);
+  assert.doesNotMatch(statsBlock, /Total Profit/);
+
+  const productStart = reseller.indexOf('function renderProducts()');
+  const productEnd = reseller.indexOf('function findProduct(', productStart);
+  const productBlock = reseller.slice(productStart, productEnd);
+  assert.doesNotMatch(productBlock, /Modal default|Margin normal|modal /i);
+  assert.doesNotMatch(productBlock, /productBulkChips/);
+  assert.match(productBlock, /stok ·/);
+
+  const ordersStart = reseller.indexOf('function renderOrders()');
+  const ordersEnd = reseller.indexOf('function userMatches(', ordersStart);
+  const ordersBlock = reseller.slice(ordersStart, ordersEnd);
+  assert.doesNotMatch(ordersBlock, /Omzet bersih|Modal supplier:|Profit kotor/i);
+});
+
+test('v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih', () => {
+  const detailStart = reseller.indexOf('function openOrderProducts(');
+  const detailEnd = reseller.indexOf('function orderMatches(', detailStart);
+  const detailBlock = reseller.slice(detailStart, detailEnd);
+  assert.doesNotMatch(detailBlock, /Omzet Bersih|Modal Supplier<|Profit Kotor/i);
+  assert.match(detailBlock, /Fee Pembayaran/);
+  assert.match(detailBlock, /Status<\/b><br>COMPLETED/);
+
+  const costStart = reseller.indexOf('function openOrderCost(');
+  const costEnd = reseller.indexOf('function openOrderProducts(', costStart);
+  const costBlock = reseller.slice(costStart, costEnd);
+  assert.match(costBlock, /Profit bersih/);
+  assert.match(costBlock, /Simpan Modal & Hitung Profit Bersih/);
+  assert.doesNotMatch(costBlock, /Profit kotor/);
 });

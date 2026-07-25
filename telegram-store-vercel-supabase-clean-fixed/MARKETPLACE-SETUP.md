@@ -1,4 +1,4 @@
-# Pengaturan Marketplace v60
+# Pengaturan Marketplace v61
 
 ## Flash Sale
 
@@ -42,7 +42,7 @@ Pada Flash Sale:
 
 Marketplace menggunakan `PAYMENT_PROVIDER=autogopay` bila variabel tersebut diaktifkan. QRIS tetap muncul di modal Marketplace dan dapat diunduh. Bila AutoGoPay mengirim `checkout_url`, tersedia tombol **Buka Halaman Pembayaran**.
 
-Pengecekan status berjalan melalui:
+Pengecekan status pembayaran berjalan melalui:
 
 - webhook AutoGoPay;
 - polling Marketplace;
