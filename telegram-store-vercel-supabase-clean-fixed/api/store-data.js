@@ -30,11 +30,11 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'GET' && action === 'qr-download') {
-      const file = await store.getQrDownload(user, req.query?.invoice);
+      const file = await store.getQrDownloadByToken(req.query?.token);
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      res.setHeader('Referrer-Policy', 'no-referrer');
       return res.status(200).send(file.buffer);
     }
 
@@ -63,6 +63,10 @@ module.exports = async function handler(req, res) {
         voucherCode: body.voucher_code
       });
       return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'qr-download-token') {
+      return json(res, 200, { ok: true, data: { token: await store.createQrDownloadToken(user, body.invoice) } });
     }
 
     if (action === 'cancel-order') {

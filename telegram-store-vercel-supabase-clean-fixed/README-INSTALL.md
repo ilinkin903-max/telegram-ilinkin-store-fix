@@ -1,72 +1,86 @@
-# iLink.in Store v61 — Dashboard Reseller Lebih Bersih
+# iLink.in Store v62 — Security & Reliability Fix
 
-Versi ini melanjutkan v58/v56 tanpa membawa fitur rekomendasi grosir v57.
+v62 dibuat dari paket terbaru v61 dan menerapkan temuan audit yang berpengaruh pada keamanan, stok, pembayaran, statistik, serta data sensitif. Tampilan dashboard reseller v61 tetap dipertahankan.
 
-## Perubahan utama
+## Perubahan terpenting
 
-- Perbaikan callback AutoGoPay v60 tetap dipertahankan.
-- Prefix `AUTOGOPAY` tetap disembunyikan pada Invoice/Trx ID.
-- Kartu dashboard hanya menampilkan Omset Hari Ini, Profit Hari Ini, Order, dan Stok.
-- Kartu produk tidak lagi menampilkan modal, margin, atau harga grosir.
-- Ringkasan varian hanya menampilkan nama, harga jual, stok, dan status.
-- Kartu Penjualan serta Detail Penjualan tidak lagi menampilkan omzet bersih, modal supplier, atau profit.
-- Tombol **Atur Modal** tetap tersedia dan hasilnya diberi nama **Profit Bersih**.
-- Pengaturan Toko, Banner, Media `/start`, Lisensi, Statistik Lengkap, Backup, dan Maintenance disatukan dalam submenu Pengaturan vertikal.
-- Tidak ada SQL baru untuk pengguna yang sudah memasang v60.
+- Pemotongan stok dan pencatatan transaksi dipindahkan ke satu fungsi PostgreSQL atomik.
+- Dua pembayaran bersamaan untuk produk yang sama tidak lagi membaca stok yang sama.
+- Satu invoice hanya dapat diselesaikan satu kali melalui unique constraint dan advisory lock database.
+- Lock pembayaran bersifat **fail-closed**; error lock tidak membiarkan dua proses pembayaran berjalan bersamaan.
+- `MINIAPP_DEV_MODE` otomatis ditolak pada Vercel Production/`NODE_ENV=production`.
+- Verifikasi Telegram `initData` tidak lagi melempar HTTP 500 untuk hash dengan panjang salah.
+- Statistik menggunakan agregasi database dan tetap akurat setelah transaksi melebihi 1.000 baris.
+- Profit negatif tetap disimpan; koreksi modal tidak lagi dipaksa menjadi nol.
+- Invoice AutoGoPay tidak lagi diubah paksa menjadi huruf besar.
+- Ditambahkan payment sweeper `/api/payment-cron` sebagai jalur pemulihan jika webhook dan watcher sementara gagal.
+- Backup cron sekarang wajib memakai `CRON_SECRET`.
+- QRIS diunduh memakai token HMAC singkat; `initData` Telegram tidak lagi dikirim pada query URL.
+- Checkout memiliki lock 30 detik per pengguna untuk mengurangi spam pembuatan invoice.
+- Lock pekerjaan dipindahkan dari `shop_settings` ke tabel `job_locks`.
+- Data produksi pada `Database/*.json` dikosongkan dan diabaikan oleh Git.
+- Versi API membaca satu sumber versi yang sama.
 
-## Rumus profit
+## 1. Jalankan SQL v62 terlebih dahulu — wajib
 
-```text
-Omzet bersih = Total dibayar pembeli - fee pembayaran
-Profit bersih = pendapatan setelah fee - total modal supplier transaksi
-```
-
-Profit dapat bernilai negatif apabila modal lebih besar daripada pendapatan setelah fee. Nama “profit bersih” di dashboard mengikuti istilah yang digunakan pada toko; biaya operasional lain seperti iklan, server, atau gaji belum ikut dihitung.
-
-## 1. Jalankan SQL v60 (wajib)
-
-Buka:
+Untuk database yang sudah memakai v60/v61, buka:
 
 ```text
 Supabase → SQL Editor → New query
 ```
 
-Jalankan isi file:
+Jalankan seluruh isi:
 
 ```text
-supabase/update-v60-profit-modal.sql
+supabase/update-v62-security-reliability.sql
 ```
 
-SQL menambahkan kolom modal produk, snapshot modal pending order, modal transaksi, sumber modal, waktu koreksi, fee pembayaran, dan profit.
+**SQL harus dijalankan sebelum deploy kode v62.** Tanpa RPC v62, pembayaran sengaja dihentikan agar stok tidak dipotong dengan metode lama yang tidak atomik.
 
-Untuk instalasi baru dari nol, jalankan `supabase/schema.sql`. Jika database lama belum pernah menjalankan pembaruan AutoGoPay v55, jalankan juga `supabase/update-v55-autogopay.sql` sebelum v60.
+Untuk instalasi baru dari nol, cukup jalankan:
 
-## 2. Environment Variables Vercel
+```text
+supabase/schema.sql
+```
 
-Pastikan environment **Production** memiliki:
+`schema.sql` v62 sudah mencakup struktur v52, v55, v60, dan v62 untuk instalasi baru.
+
+## 2. Periksa Environment Variables Vercel
+
+Pastikan environment **Production** memiliki variabel utama Anda dan tambahkan:
 
 ```env
 PAYMENT_PROVIDER=autogopay
 AUTOGOPAY_API_KEY=API_KEY_DARI_AUTOGOPAY
 AUTOGOPAY_BASE_URL=https://v1-gateway.autogopay.site
 AUTOGOPAY_REDIRECT_URL=https://telegram-ilinkin-store-fix.vercel.app
+
 PUBLIC_URL=https://telegram-ilinkin-store-fix.vercel.app
 STORE_URL=https://telegram-ilinkin-store-fix.vercel.app
 MINIAPP_URL=https://telegram-ilinkin-store-fix.vercel.app/reseller
-WEBHOOK_SECRET=RAHASIA_RANDOM_BARU_TANPA_SPASI
+
+WEBHOOK_SECRET=RAHASIA_SETUP_BARU
+CRON_SECRET=RAHASIA_CRON_YANG_BERBEDA
+QR_DOWNLOAD_SECRET=RAHASIA_TOKEN_QRIS_YANG_BERBEDA
+MINIAPP_DEV_MODE=false
 ```
 
-Masukkan hanya nilainya pada kolom Value. Jangan menambahkan tanda kutip atau spasi di awal/akhir.
+Catatan:
+
+- Jangan memakai secret yang pernah dibagikan di percakapan atau repository.
+- `QR_DOWNLOAD_SECRET` boleh dikosongkan; sistem akan memakai `WEBHOOK_SECRET`. Nilai terpisah lebih disarankan.
+- Hapus `MINIAPP_DEV_MODE` dari Production atau isi `false`. Walaupun salah diisi `true`, v62 tetap menolaknya pada Production.
 
 ## 3. Upload dan deploy
 
-1. Ekstrak ZIP v61.
-2. Unggah seluruh isi folder `store_fix_v61` ke root repository GitHub.
-3. Commit perubahan.
-4. Di Vercel pilih **Redeploy** tanpa build cache.
-5. Tunggu status menjadi **Ready**.
+1. Ekstrak ZIP v62.
+2. Unggah **isi folder `store_fix_v62`** ke root repository GitHub.
+3. Ganti file lama, lalu commit.
+4. Di Vercel buka **Deployments → Redeploy**.
+5. Redeploy tanpa build cache.
+6. Tunggu status **Ready**.
 
-## 4. Pastikan v61 aktif
+## 4. Pastikan v62 aktif
 
 Buka:
 
@@ -79,26 +93,28 @@ Respons harus memuat:
 ```json
 {
   "ok": true,
-  "version": "v61-clean-reseller-dashboard",
+  "version": "v62-security-reliability-fix",
   "active_provider": "autogopay"
 }
 ```
 
+Jika versi masih v61/v56, deployment terbaru belum menjadi Production.
+
 ## 5. Daftarkan ulang callback AutoGoPay
 
-Ganti `WEBHOOK_SECRET_ANDA` dengan nilai `WEBHOOK_SECRET` baru yang tersimpan di Vercel:
+Ganti placeholder dengan nilai `WEBHOOK_SECRET` baru:
 
 ```text
 https://telegram-ilinkin-store-fix.vercel.app/api/setup-autogopay?secret=WEBHOOK_SECRET_ANDA
 ```
 
-Respons berhasil akan menampilkan `ok: true` dan callback URL yang berisi:
+Callback yang didaftarkan adalah:
 
 ```text
-/api/payment-webhook?provider=autogopay&verify=1
+https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook?provider=autogopay&verify=1
 ```
 
-Query `verify=1` hanya membantu proses verifikasi callback. Webhook pembayaran asli dengan signature valid tetap diproses normal.
+Request probe AutoGoPay dibalas 200, sedangkan pembayaran asli tetap harus lolos signature HMAC.
 
 ## 6. Pasang ulang webhook Telegram bila diperlukan
 
@@ -106,46 +122,86 @@ Query `verify=1` hanya membantu proses verifikasi callback. Webhook pembayaran a
 https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=WEBHOOK_SECRET_ANDA
 ```
 
-## 7. Cara mengatur modal agar persis per konsumen
+## 7. Aktifkan payment sweeper
 
-### Modal default untuk transaksi berikutnya
-
-```text
-Dashboard Reseller → Produk → Edit Produk
-```
-
-- Produk tanpa varian: isi **Modal Supplier / Item**.
-- Produk dengan varian: isi **Modal Supplier** pada masing-masing varian.
-
-Saat pembeli checkout, sistem menyimpan modal saat itu sebagai snapshot.
-
-### Koreksi modal checkout tertentu
+Endpoint pemulihan pembayaran:
 
 ```text
-Dashboard Reseller → Penjualan → pilih transaksi → Atur Modal
+POST https://telegram-ilinkin-store-fix.vercel.app/api/payment-cron
+Authorization: Bearer CRON_SECRET_ANDA
 ```
 
-Masukkan **total modal supplier untuk seluruh jumlah item pada invoice tersebut**. Contoh:
+Jalankan setiap 1–2 menit memakai scheduler yang mendukung header Authorization. Payment sweeper akan:
+
+- memeriksa pending order tertua;
+- memverifikasi status langsung ke gateway;
+- mengirim produk jika sudah dibayar;
+- menghapus pending order yang expired/cancelled/failed;
+- tidak mengirim dua kali karena fulfillment dijaga database.
+
+`vercel.json` tetap menjadwalkan backup harian. Untuk payment sweeper berinterval pendek, gunakan scheduler eksternal atau paket Vercel yang mendukung cron lebih sering.
+
+## 8. Keamanan data repository — wajib diperhatikan
+
+Paket v62 berisi file berikut dalam keadaan kosong:
 
 ```text
-Pembeli membeli 3 item
-Total yang dibayar ke supplier = Rp28.500
-Isi Modal Total Aktual = 28500
+Database/Produk.json
+Database/Trx.json
+Database/User.json
+Database/Voucher.json
 ```
 
-Sistem langsung menghitung ulang modal per item dan profit bersih transaksi. Perubahan ini hanya berlaku untuk invoice tersebut.
+`.gitignore` juga mengabaikan `Database/*.json`. Namun, jika file produksi pernah di-commit sebelumnya:
 
-## Troubleshooting AutoGoPay 502
+1. Hapus file sensitif dari riwayat Git/GitHub, bukan hanya commit terbaru.
+2. Ganti password akun produk yang pernah masuk repository/ZIP.
+3. Ganti API key dan secret yang pernah dipublikasikan.
+4. Simpan stok hanya di Supabase, bukan pada file repository.
 
-- Pastikan endpoint `/api/payment-webhook` sudah menampilkan versi v61.
-- Pastikan `PAYMENT_PROVIDER=autogopay` dan API key berada pada Production.
-- Setelah mengubah Environment Variables, selalu redeploy.
-- Jalankan kembali endpoint `/api/setup-autogopay?secret=...` setelah deployment Ready.
-- Periksa **Vercel → Logs** bila respons masih gagal; respons v61 menyertakan status preflight dan riwayat percobaan upstream.
-- Buat invoice baru untuk pengujian.
+## 9. Pengujian setelah deploy
 
-## Keamanan
+Gunakan invoice baru dan lakukan urutan berikut:
 
-- Jangan menaruh API key atau secret di GitHub.
-- Karena secret setup pernah ditulis di percakapan, ganti `WEBHOOK_SECRET` dengan nilai baru lalu redeploy.
-- ID internal AutoGoPay tetap disimpan untuk verifikasi, tetapi prefix tidak ditampilkan ke pembeli.
+1. Beli satu produk dengan stok uji.
+2. Bayar QRIS.
+3. Pastikan webhook atau payment sweeper mengirim produk.
+4. Pastikan stok berkurang satu kali.
+5. Panggil webhook/status lagi dan pastikan produk tidak dikirim ulang.
+6. Uji dua checkout bersamaan pada produk dengan stok terbatas.
+7. Uji tombol Unduh QRIS dan pastikan URL hanya berisi token singkat, bukan `initData`.
+8. Uji dashboard reseller dari Telegram owner.
+
+## Troubleshooting
+
+### Pesan “Fungsi stok atomik v62 belum tersedia”
+
+Jalankan ulang:
+
+```text
+supabase/update-v62-security-reliability.sql
+```
+
+Setelah itu tunggu schema cache Supabase beberapa saat dan coba invoice baru.
+
+### `/api/payment-cron` mengembalikan 401
+
+Pastikan header dikirim persis:
+
+```text
+Authorization: Bearer NILAI_CRON_SECRET
+```
+
+### Dashboard reseller tidak dapat dibuka saat test lokal
+
+`MINIAPP_DEV_MODE=true` hanya berlaku saat bukan Production. Untuk Production, buka dashboard melalui tombol owner Telegram agar `initData` valid.
+
+### AutoGoPay setup masih 502
+
+Periksa respons `/api/setup-autogopay`, Vercel Logs, API key Production, dan pastikan `/api/payment-webhook` sudah menampilkan versi v62.
+
+## Status pengujian paket
+
+- Pemeriksaan sintaks JavaScript: berhasil.
+- Unit/static tests: **76/76 berhasil** dengan dependency stub lokal karena container pengujian tidak memiliki akses internet.
+- `npm install`, koneksi Supabase nyata, transaksi AutoGoPay nyata, dan pengiriman Telegram nyata belum dijalankan di lingkungan ini.

@@ -372,7 +372,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
   if (!order?.invoice_ref) throw new Error('Invoice lokal tidak ditemukan.');
   const invoice = String(order.invoice_ref);
   const processKey = `payment_process:${invoice}`;
-  const claimed = await db.claimOnce(processKey, 365 * 24 * 60 * 60, { invoice, source });
+  const claimed = await db.claimOnce(processKey, 10 * 60, { invoice, source }, { failClosed: true });
 
   if (!claimed) {
     const existing = await db.getTransactionByOrderRef(invoice).catch(() => null);
@@ -399,7 +399,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     }
 
     await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
-    await db.deletePendingOrder(order.telegram_id);
+    await db.deletePendingOrder(order.telegram_id, order.invoice_ref);
     await sendOwnerLog(order, product, result.transaction, currentBuyer);
     await db.markClaimDone(processKey, { invoice, source, state: 'completed' });
 

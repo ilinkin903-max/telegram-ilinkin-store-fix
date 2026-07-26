@@ -61,7 +61,9 @@ test('unduh QRIS memakai endpoint server dan Telegram downloadFile', () => {
   assert.match(js, /tg\.downloadFile/);
   const api = fs.readFileSync(path.join(root, 'api', 'store-data.js'), 'utf8');
   assert.match(api, /Content-Disposition/);
-  assert.match(api, /Access-Control-Allow-Origin/);
+  assert.match(api, /getQrDownloadByToken/);
+  assert.match(api, /qr-download-token/);
+  assert.doesNotMatch(api, /Access-Control-Allow-Origin/);
 });
 
 test('v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace', () => {

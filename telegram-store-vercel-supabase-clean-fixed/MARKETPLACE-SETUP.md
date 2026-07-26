@@ -1,52 +1,29 @@
-# Pengaturan Marketplace v61
+# Pengaturan Marketplace v62
 
-## Flash Sale
+Fitur marketplace dari v61 tetap tersedia: tema biru, logo URL, banner 2,39:1, flash sale satu baris, promo varian, konfirmasi checkout, bubble detail pembayaran, unduh QRIS, serta pilihan produk Bot + Marketplace atau Marketplace saja.
 
-Buka:
+## Upgrade database
 
-`Reseller Dashboard → Promo → Flash Sale Marketplace`
+Database v61/v60 wajib menjalankan:
 
-Atur:
+```text
+supabase/update-v62-security-reliability.sql
+```
 
-- Status Flash Sale: ON/OFF
-- Judul
-- Mulai Flash Sale
-- Berakhir Flash Sale
+Instalasi baru cukup menjalankan `supabase/schema.sql`.
 
-Kemudian buka **Buat Promo / Voucher**, pilih **Promo Otomatis**, tentukan target produk/varian, dan aktifkan:
+## Pengaturan utama
 
-`Masukkan target promo ini ke Flash Sale Marketplace`
+```text
+Dashboard Reseller → Pengaturan
+```
 
-Produk tidak dipilih lagi secara manual dari panel Flash Sale. Sumber produk Flash Sale sekarang adalah promo otomatis yang diberi tanda tersebut.
+Submenu vertikal tetap berisi Pengaturan Toko, Banner Promosi, Media `/start`, Lisensi, Statistik Lengkap, Backup, dan Maintenance.
 
-**Penting:** promo yang dicentang untuk Flash Sale hanya aktif dan memotong harga ketika status Flash Sale ON serta waktu sekarang berada di antara jadwal mulai dan berakhir. Di luar jadwal tersebut, promo tidak berlaku di bot maupun Marketplace.
+## QRIS
 
-Daftar Flash Sale ditampilkan dalam satu baris horizontal. Pada layar kecil, pembeli dapat menggesernya ke samping.
+Unduhan QRIS sekarang meminta token singkat dari server. URL unduhan tidak lagi membawa `initData` Telegram. Atur `QR_DOWNLOAD_SECRET` di Vercel atau biarkan sistem memakai `WEBHOOK_SECRET`.
 
-## Harga Marketplace
+## Pembayaran tertunda
 
-Pada kartu katalog:
-
-- Tidak ada range harga.
-- Produk tanpa promo menampilkan harga termurah.
-- Promo ditampilkan dengan harga asli dicoret dan harga promo.
-- Daftar varian promo tidak ditampilkan sebagai blok tambahan pada kartu agar tampilan lebih ringkas.
-
-Pada Flash Sale:
-
-- Harga selalu mengikuti promo Flash Sale yang berlaku.
-- Bila promo hanya untuk varian tertentu, nama varian tampil tepat di bawah nama produk.
-- Angka terjual hanya menghitung transaksi dalam periode Flash Sale.
-
-## Pembayaran AutoGoPay v55
-
-Marketplace menggunakan `PAYMENT_PROVIDER=autogopay` bila variabel tersebut diaktifkan. QRIS tetap muncul di modal Marketplace dan dapat diunduh. Bila AutoGoPay mengirim `checkout_url`, tersedia tombol **Buka Halaman Pembayaran**.
-
-Pengecekan status pembayaran berjalan melalui:
-
-- webhook AutoGoPay;
-- polling Marketplace;
-- tombol **Cek Pembayaran**;
-- watcher server sebagai cadangan.
-
-Pastikan migrasi AutoGoPay v55 sudah pernah dijalankan, lalu jalankan SQL `supabase/update-v60-profit-modal.sql`. Daftarkan callback melalui `/api/setup-autogopay?secret=...`; v60 otomatis memakai URL verifikasi `/api/payment-webhook?provider=autogopay&verify=1`.
+Selain webhook dan pengecekan dari browser, v62 menyediakan `/api/payment-cron`. Jalankan endpoint ini setiap 1–2 menit memakai `Authorization: Bearer CRON_SECRET` agar pesanan yang sudah dibayar tetap diselesaikan saat pembeli menutup Marketplace.

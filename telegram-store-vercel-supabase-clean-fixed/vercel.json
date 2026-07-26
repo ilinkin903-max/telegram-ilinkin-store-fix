@@ -27,6 +27,9 @@
     },
     "api/store-data.js": {
       "maxDuration": 300
+    },
+    "api/payment-cron.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [

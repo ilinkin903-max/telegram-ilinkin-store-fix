@@ -15,7 +15,15 @@ function verifyTelegramWebAppData(initData) {
 
   const secret = crypto.createHmac('sha256', 'WebAppData').update(config.botToken).digest();
   const calcHash = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex');
-  if (!crypto.timingSafeEqual(Buffer.from(calcHash, 'hex'), Buffer.from(hash, 'hex'))) return null;
+  let valid = false;
+  try {
+    const calculated = Buffer.from(calcHash, 'hex');
+    const supplied = Buffer.from(String(hash), 'hex');
+    valid = calculated.length === supplied.length && crypto.timingSafeEqual(calculated, supplied);
+  } catch (_) {
+    valid = false;
+  }
+  if (!valid) return null;
 
   const authDate = Number(params.get('auth_date') || '0');
   if (authDate && Date.now() / 1000 - authDate > 60 * 60 * 24) return null;
@@ -29,7 +37,10 @@ function verifyTelegramWebAppData(initData) {
 
 function getMiniAppUser(req) {
   const initData = req.headers['x-telegram-init-data'] || req.body?.initData || req.query?.initData;
-  if (config.miniAppDevMode) {
+  const devModeAllowed = config.miniAppDevMode
+    && process.env.VERCEL_ENV !== 'production'
+    && process.env.NODE_ENV !== 'production';
+  if (devModeAllowed) {
     return { id: config.ownerId || Number(req.headers['x-dev-owner-id'] || 0), first_name: 'Dev Owner' };
   }
   return verifyTelegramWebAppData(initData);

@@ -632,18 +632,19 @@
     showPayment(stored, false);
     checkPayment(false);
   }
-  function qrDownloadUrl() {
+  async function qrDownloadUrl() {
     if (!state.activePayment || !state.activePayment.invoice) return '';
-    var url = window.location.origin + '/api/store-data?action=qr-download&invoice=' + encodeURIComponent(state.activePayment.invoice);
-    if (initData) url += '&initData=' + encodeURIComponent(initData);
-    return url;
+    var result = await api('qr-download-token', { body: { invoice: state.activePayment.invoice } });
+    var token = result && result.token ? result.token : '';
+    if (!token) return '';
+    return window.location.origin + '/api/store-data?action=qr-download&token=' + encodeURIComponent(token);
   }
   async function downloadQr() {
     if (!state.activePayment || !state.activePayment.invoice) return toast('QRIS belum tersedia.', true);
     var filename = 'QRIS-' + String(state.activePayment.invoice_display || state.activePayment.invoice || 'pembayaran').replace(/[^a-z0-9_-]/gi, '-') + '.png';
-    var url = qrDownloadUrl();
-    if (!url) return toast('Link unduhan QRIS tidak tersedia.', true);
     try {
+      var url = await qrDownloadUrl();
+      if (!url) return toast('Link unduhan QRIS tidak tersedia.', true);
       if (tg && typeof tg.downloadFile === 'function') {
         tg.downloadFile({ url: url, file_name: filename }, function (accepted) {
           toast(accepted ? 'Unduhan QRIS dimulai.' : 'Unduhan QRIS dibatalkan.');

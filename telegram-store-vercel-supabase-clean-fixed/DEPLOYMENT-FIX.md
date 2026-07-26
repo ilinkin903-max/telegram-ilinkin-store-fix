@@ -1,6 +1,6 @@
 # Perbaikan Error npm di Vercel
 
-> Catatan v60: panduan ini hanya membahas npm. Fitur modal dan profit tetap mewajibkan `supabase/update-v60-profit-modal.sql`.
+> Catatan v62: panduan ini hanya membahas npm. Upgrade dari v61/v60 tetap mewajibkan `supabase/update-v62-security-reliability.sql` sebelum deploy.
 
 Error yang diperbaiki:
 
@@ -28,4 +28,4 @@ Error: Command "npm install" exited with 1
 8. Nonaktifkan penggunaan build cache atau pilih **Redeploy without cache**.
 9. Tunggu sampai status **Ready**.
 
-Environment variable lama tidak perlu dihapus. Untuk fitur v60, tetap jalankan SQL yang disebutkan pada `README-INSTALL.md`.
+Environment variable lama tidak perlu dihapus. Tambahkan `CRON_SECRET`, pastikan `MINIAPP_DEV_MODE=false`, dan jalankan SQL v62 yang disebutkan pada `README-INSTALL.md`.

@@ -2,14 +2,21 @@ const db = require('../lib/db');
 const tg = require('../lib/telegram');
 const { config } = require('../lib/config');
 
+function bearerToken(req) {
+  const auth = String(req.headers?.authorization || '');
+  const bearer = auth.replace(/^Bearer\s+/i, '').trim();
+  return bearer || String(req.headers?.['x-cron-secret'] || '').trim();
+}
+
 module.exports = async function handler(req, res) {
+  if (!config.cronSecret) {
+    return res.status(503).json({ ok: false, error: 'CRON_SECRET belum diatur.' });
+  }
+  if (bearerToken(req) !== String(config.cronSecret)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized.' });
+  }
+
   try {
-    const secret = req.query?.secret || req.headers['x-cron-secret'] || req.headers.authorization?.replace(/^Bearer\s+/i, '');
-    // Vercel Cron usually calls without custom secret. If WEBHOOK_SECRET is set and a secret is provided,
-    // validate it. Manual calls should use ?secret=WEBHOOK_SECRET.
-    if (secret && config.webhookSecret && secret !== config.webhookSecret) {
-      return res.status(401).json({ ok: false, error: 'Secret salah.' });
-    }
     const backup = await db.exportBackupData();
     const content = JSON.stringify(backup, null, 2);
     const filename = `auto-backup-${new Date().toISOString().slice(0, 10)}.json`;

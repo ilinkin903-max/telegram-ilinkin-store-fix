@@ -1,4 +1,5 @@
 const test = require('node:test');
+process.env.WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'test_qr_secret_123';
 const assert = require('node:assert/strict');
 const store = require('../lib/storeService');
 
@@ -115,4 +116,13 @@ test('sanitizeProduct memisahkan promo umum dan promo yang dipilih untuk Flash S
   }, allPromos, allPromos);
   assert.equal(product.flash_sale_eligible, true);
   assert.equal(product.variants[0].flash_promo.final_price, 8000);
+});
+
+
+test('token unduh QRIS ditandatangani, memiliki masa berlaku, dan menolak perubahan', () => {
+  const token = store.issueQrDownloadToken('autogopay-lower-case-001', 12345, new Date(Date.now() + 600000).toISOString());
+  const parsed = store.verifyQrDownloadToken(token);
+  assert.equal(parsed.invoice, 'autogopay-lower-case-001');
+  assert.equal(parsed.telegramId, 12345);
+  assert.equal(store.verifyQrDownloadToken(token + 'x'), null);
 });

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const db = require('./db');
 const paymentService = require('./paymentService');
@@ -11,6 +12,50 @@ function httpError(message, statusCode = 400, code = 'BAD_REQUEST', details = {}
   error.code = code;
   error.details = details;
   return error;
+}
+
+function qrTokenSecret() {
+  return String(config.qrDownloadSecret || config.botToken || '').trim();
+}
+
+function safeEqualText(left, right) {
+  try {
+    const a = Buffer.from(String(left || ''), 'utf8');
+    const b = Buffer.from(String(right || ''), 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch (_) {
+    return false;
+  }
+}
+
+function issueQrDownloadToken(invoice, telegramId, expiresAt = null) {
+  const secret = qrTokenSecret();
+  if (!secret) throw httpError('QR_DOWNLOAD_SECRET belum diatur.', 503, 'QR_TOKEN_NOT_CONFIGURED');
+  const gatewayExpiry = expiresAt ? new Date(expiresAt).getTime() : 0;
+  const maxExpiry = Date.now() + 20 * 60 * 1000;
+  const expiryMs = gatewayExpiry > Date.now() ? Math.min(gatewayExpiry, maxExpiry) : maxExpiry;
+  const payload = Buffer.from(JSON.stringify({
+    i: String(invoice || '').trim(),
+    u: Number(telegramId || 0),
+    e: Math.floor(expiryMs / 1000)
+  })).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyQrDownloadToken(token) {
+  const secret = qrTokenSecret();
+  const [payload, signature, extra] = String(token || '').split('.');
+  if (!secret || !payload || !signature || extra !== undefined) return null;
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  if (!safeEqualText(signature, expected)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data?.i || !Number(data?.u) || !Number(data?.e) || Date.now() >= Number(data.e) * 1000) return null;
+    return { invoice: String(data.i), telegramId: Number(data.u), expiresAt: Number(data.e) * 1000 };
+  } catch (_) {
+    return null;
+  }
 }
 
 function driveFileId(url) {
@@ -334,7 +379,7 @@ async function ensureNoActiveOrder(telegramId) {
   if (!current) return;
   const expired = current.expires_at && Date.now() > new Date(current.expires_at).getTime();
   if (expired || ['expired', 'cancelled', 'canceled', 'failed'].includes(String(current.status || '').toLowerCase())) {
-    await db.deletePendingOrder(telegramId);
+    await db.deletePendingOrder(telegramId, current.invoice_ref);
     return;
   }
   if (current.status === 'awaiting_payment' && current.invoice_ref) {
@@ -403,11 +448,18 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   const afterDiscount = Math.max(0, subtotal - discount);
   const fee = randomFee();
   const total = afterDiscount + fee;
+  const checkoutKey = `checkout_rate:${Number(user.id)}`;
+  const checkoutClaimed = await db.claimOnce(checkoutKey, 30, { telegram_id: Number(user.id) }, { failClosed: true });
+  if (!checkoutClaimed) {
+    throw httpError('Permintaan checkout sedang diproses. Tunggu beberapa detik lalu coba lagi.', 429, 'CHECKOUT_BUSY');
+  }
+
   const requestedInvoice = randomRef();
   let gatewayPayment;
   try {
     gatewayPayment = await paymentService.createPaymentTransaction({ amount: total, invoiceRef: requestedInvoice });
   } catch (error) {
+    await db.releaseClaim(checkoutKey).catch(() => null);
     throw httpError(error.message || 'Payment gateway gagal membuat QRIS.', 502, 'QR_NOT_RECEIVED');
   }
   const invoice = gatewayPayment.order_id || requestedInvoice;
@@ -433,6 +485,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     provider_checkout_url: gatewayPayment.checkout_url
   });
 
+  await db.releaseClaim(checkoutKey).catch(() => null);
+
   const watcher_scheduled = paymentService.schedulePaymentWatcher({
     invoiceRef: invoice,
     telegramId: Number(user.id)
@@ -457,15 +511,38 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     total,
     expires_at: expiresAt,
     qr_data_url,
+    qr_download_token: qrTokenSecret() ? issueQrDownloadToken(invoice, Number(user.id), expiresAt) : '',
     checkout_url: gatewayPayment.checkout_url || '',
     payment_provider: gatewayPayment.provider,
     watcher_scheduled
   };
 }
 
+async function createQrDownloadToken(user, invoice) {
+  if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
+  const ref = String(invoice || '').trim();
+  if (!ref) throw httpError('Invoice wajib diisi.', 400, 'INVOICE_REQUIRED');
+  const order = await db.getPendingOrderByInvoice(ref);
+  if (!order) throw httpError('Invoice QRIS tidak ditemukan atau sudah selesai.', 404, 'QR_NOT_FOUND');
+  if (Number(order.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
+  return issueQrDownloadToken(ref, Number(user.id), order.expires_at);
+}
+
+async function getQrDownloadByToken(token) {
+  const auth = verifyQrDownloadToken(token);
+  if (!auth) throw httpError('Token unduhan QRIS tidak valid atau sudah kedaluwarsa.', 401, 'QR_TOKEN_INVALID');
+  const order = await db.getPendingOrderByInvoice(auth.invoice);
+  if (!order) throw httpError('Invoice QRIS tidak ditemukan atau sudah selesai.', 404, 'QR_NOT_FOUND');
+  if (Number(order.telegram_id) !== Number(auth.telegramId)) throw httpError('Token bukan milik invoice ini.', 403, 'FORBIDDEN');
+  if (!String(order.qr_payload || '').trim()) throw httpError('Data QRIS belum tersedia.', 409, 'QR_PAYLOAD_MISSING');
+  const buffer = await QRCode.toBuffer(String(order.qr_payload), { type: 'png', width: 900, margin: 2, errorCorrectionLevel: 'M' });
+  const displayRef = paymentService.displayPaymentReference(auth.invoice);
+  return { buffer, filename: `QRIS-${displayRef.replace(/[^A-Z0-9_-]/gi, '-')}.png` };
+}
+
 async function getQrDownload(user, invoice) {
   if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
-  const ref = String(invoice || '').trim().toUpperCase();
+  const ref = String(invoice || '').trim();
   if (!ref) throw httpError('Invoice wajib diisi.', 400, 'INVOICE_REQUIRED');
   const order = await db.getPendingOrderByInvoice(ref);
   if (!order) throw httpError('Invoice QRIS tidak ditemukan atau sudah selesai.', 404, 'QR_NOT_FOUND');
@@ -478,7 +555,7 @@ async function getQrDownload(user, invoice) {
 
 async function getOrderStatus(user, invoice) {
   if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
-  const ref = String(invoice || '').trim().toUpperCase();
+  const ref = String(invoice || '').trim();
   if (!ref) throw httpError('Invoice wajib diisi.', 400, 'INVOICE_REQUIRED');
 
   const transaction = await db.getTransactionByOrderRef(ref);
@@ -535,7 +612,7 @@ async function getOrderStatus(user, invoice) {
 
 async function cancelOrder(user, invoice) {
   if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
-  const ref = String(invoice || '').trim().toUpperCase();
+  const ref = String(invoice || '').trim();
   const transaction = ref ? await db.getTransactionByOrderRef(ref) : null;
   if (transaction) throw httpError('Pesanan sudah dibayar dan tidak dapat dibatalkan.', 409, 'ORDER_COMPLETED');
   const order = ref ? await db.getPendingOrderByInvoice(ref) : await db.getPendingOrder(Number(user.id));
@@ -544,7 +621,7 @@ async function cancelOrder(user, invoice) {
   await paymentService.cancelPaymentTransaction(order).catch((error) => {
     console.warn('Gagal membatalkan transaksi di payment gateway:', error.message || error);
   });
-  await db.deletePendingOrder(Number(user.id));
+  await db.deletePendingOrder(Number(user.id), order.invoice_ref);
   return { cancelled: true, invoice: order.invoice_ref || ref, invoice_display: paymentService.displayPaymentReference(order.invoice_ref || ref) };
 }
 
@@ -572,9 +649,13 @@ module.exports = {
   sanitizeProduct,
   getCatalog,
   createPayment,
+  createQrDownloadToken,
+  getQrDownloadByToken,
   getQrDownload,
   getOrderStatus,
   cancelOrder,
   getHistory,
-  httpError
+  httpError,
+  issueQrDownloadToken,
+  verifyQrDownloadToken
 };

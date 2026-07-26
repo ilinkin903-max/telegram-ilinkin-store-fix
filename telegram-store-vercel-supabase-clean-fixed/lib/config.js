@@ -24,6 +24,8 @@ const config = {
   miniAppUrl: required('MINIAPP_URL'),
   storeUrl: required('STORE_URL', ''),
   webhookSecret: required('WEBHOOK_SECRET', ''),
+  cronSecret: required('CRON_SECRET', ''),
+  qrDownloadSecret: required('QR_DOWNLOAD_SECRET', required('WEBHOOK_SECRET', '')),
   licenseManagerUrl: required('LICENSE_MANAGER_URL', required('RENTAL_MANAGER_URL', '')),
   licenseApiSecret: required('LICENSE_API_SECRET', ''),
   licenseBotUsername: required('LICENSE_BOT_USERNAME', required('BOT_USERNAME', '')),

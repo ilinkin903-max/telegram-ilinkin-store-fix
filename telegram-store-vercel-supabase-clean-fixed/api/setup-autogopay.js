@@ -1,7 +1,8 @@
 const axios = require('axios');
 const { config, getPublicBaseUrl } = require('../lib/config');
+const { getAppVersion } = require('../lib/version');
 
-const VERSION = 'v61-clean-reseller-dashboard';
+const VERSION = getAppVersion();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,7 +112,7 @@ module.exports = async function handler(req, res) {
       callback_url: callbackUrl,
       callback_preflight: preflight,
       version: VERSION,
-      hint: 'Pastikan deployment v60 sudah Ready, PAYMENT_PROVIDER=autogopay, lalu buka /api/payment-webhook dan pastikan statusnya 200.'
+      hint: 'Pastikan deployment v62 sudah Ready, PAYMENT_PROVIDER=autogopay, lalu buka /api/payment-webhook dan pastikan statusnya 200.'
     });
   }
 

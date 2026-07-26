@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { config } = require('../lib/config');
 const db = require('../lib/db');
 const paymentService = require('../lib/paymentService');
+const { getAppVersion } = require('../lib/version');
 
 function requestSecret(req) {
   return String(
@@ -250,7 +251,7 @@ async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       message: 'Webhook pembayaran aktif.',
-      version: 'v61-clean-reseller-dashboard',
+      version: getAppVersion(),
       active_provider: config.paymentProvider,
       configuration: {
         autogopayApiKeyConfigured: Boolean(config.autogopayApiKey),

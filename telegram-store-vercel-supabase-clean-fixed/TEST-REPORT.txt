@@ -1,19 +1,27 @@
-v61 — Dashboard Reseller Lebih Bersih
+v62 — Security & Reliability Fix
 
-Hasil: 66/66 pengujian otomatis berhasil.
+Hasil lokal: 76/76 unit/static tests berhasil.
 
 Pemeriksaan mencakup:
 - Sintaks JavaScript seluruh API, library, Marketplace, dashboard, dan script.
-- Callback AutoGoPay dan verifikasi pembayaran tetap berjalan.
-- Prefix AUTOGOPAY tetap disembunyikan dari Invoice/Trx ID tampilan.
-- Modal produk/varian dan koreksi modal per checkout tetap tersedia.
-- Kartu produk tidak menampilkan modal, margin, atau harga grosir.
-- Penjualan dan detail penjualan tidak menampilkan rincian profit/modal.
-- Dialog Atur Modal memakai istilah Profit Bersih.
-- Seluruh alat toko berada langsung di submenu Pengaturan vertikal.
-- Promo Flash Sale, QRIS, Marketplace, dan notifikasi PESANAN SELESAI tetap diuji.
+- RPC fulfillment stok atomik tersedia pada migration v62.
+- Lock pembayaran fail-closed dan tabel job_locks terpisah.
+- Proteksi MINIAPP_DEV_MODE pada Production.
+- timingSafeEqual aman untuk hash dengan panjang berbeda.
+- Statistik agregat tidak bergantung pada batas 1.000 baris.
+- Profit negatif tidak dipaksa menjadi nol.
+- Invoice tidak di-uppercase pada status, pembatalan, dan unduhan QRIS.
+- Payment sweeper dan autentikasi CRON_SECRET.
+- Backup cron tidak bisa dipicu tanpa secret.
+- Token QRIS HMAC berumur pendek dan tidak memakai initData pada query URL.
+- Lock checkout per user.
+- Filter shop_settings dan maintenance job_locks.
+- Data JSON produksi dikosongkan dan masuk .gitignore.
+- Fitur v61: dashboard bersih, AutoGoPay, Marketplace, flash sale, promo, modal checkout, dan notifikasi tetap dipertahankan.
 
-Catatan:
-- Pengujian dependency memakai stub lokal tanpa jaringan; folder node_modules tidak disertakan dalam ZIP.
-- Instalasi produksi tetap memakai package.json dan package-lock.json resmi.
-- Transaksi AutoGoPay, Telegram, dan Supabase nyata perlu diuji setelah deployment dengan kredensial aktif.
+Kondisi pengujian:
+- Container tidak memiliki akses internet untuk mengunduh dependency npm.
+- Unit tests dijalankan memakai stub dependency lokal yang tidak disertakan dalam ZIP.
+- package.json dan package-lock.json produksi tetap disertakan.
+- Migration SQL ditinjau secara statis, tetapi belum dieksekusi pada Supabase nyata.
+- Transaksi AutoGoPay, webhook, Telegram, Supabase, dan deployment Vercel nyata perlu diuji dengan kredensial aktif setelah deploy.

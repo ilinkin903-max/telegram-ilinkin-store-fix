@@ -49,5 +49,5 @@ test('setup AutoGoPay memeriksa callback dan mencoba payload cadangan', () => {
   assert.match(setup, /preflightCallback/);
   assert.match(setup, /callback-only/);
   assert.match(setup, /attempts/);
-  assert.match(setup, /v61-clean-reseller-dashboard/);
+  assert.match(setup, /getAppVersion/);
 });

@@ -1,6 +1,7 @@
 const { getSupabase } = require('./supabase');
 const { splitStock } = require('./utils');
 const { boolValue, normalizeDateTime, discountAmount, targetProducts, promoState, promoEligible } = require('./promoUtils');
+const { getAppVersion } = require('./version');
 
 function sb() {
   return getSupabase();
@@ -12,59 +13,30 @@ function isMissingTableError(error) {
   return code === '42P01' || message.includes('does not exist') || message.includes('schema cache');
 }
 
-async function claimOnce(rawKey, ttlSeconds = 3600, meta = {}) {
+async function claimOnce(rawKey, ttlSeconds = 3600, meta = {}, options = {}) {
   const key = String(rawKey || '').trim().slice(0, 220);
   if (!key) return true;
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + Number(ttlSeconds || 3600) * 1000).toISOString();
-  const payload = {
-    key,
-    value: {
-      status: 'processing',
-      claimed_at: now.toISOString(),
-      expires_at: expiresAt,
-      ...meta
-    },
-    updated_at: now.toISOString()
-  };
-
-  async function tryInsert() {
-    return sb().from('shop_settings').insert(payload).select('key').single();
-  }
-
-  let { error } = await tryInsert();
-  if (!error) return true;
-  if (isMissingTableError(error)) return true;
-
-  const isDuplicate = String(error.code || '') === '23505' || /duplicate key/i.test(String(error.message || ''));
-  if (!isDuplicate) {
+  const failClosed = options?.failClosed === true;
+  try {
+    const { data, error } = await sb().rpc('claim_job_lock_v62', {
+      p_key: key,
+      p_ttl_seconds: Math.max(1, Number(ttlSeconds || 3600)),
+      p_meta: meta && typeof meta === 'object' ? meta : {}
+    });
+    if (error) throw error;
+    return data === true;
+  } catch (error) {
     console.error('claimOnce gagal:', error.message || error);
-    // Jangan matikan fitur utama hanya karena lock gagal.
+    if (failClosed) return false;
+    // Untuk pekerjaan non-kritis seperti broadcast, kegagalan lock tidak mematikan fitur.
     return true;
   }
-
-  const { data: existing, error: readError } = await sb().from('shop_settings').select('value,updated_at').eq('key', key).maybeSingle();
-  if (readError) {
-    if (isMissingTableError(readError)) return true;
-    console.error('claimOnce read gagal:', readError.message || readError);
-    return false;
-  }
-
-  const existingExpires = existing?.value?.expires_at || null;
-  const expired = existingExpires ? new Date(existingExpires).getTime() < Date.now() : (existing?.updated_at ? new Date(existing.updated_at).getTime() < Date.now() - Number(ttlSeconds || 3600) * 1000 : false);
-  if (!expired) return false;
-
-  await sb().from('shop_settings').delete().eq('key', key);
-  ({ error } = await tryInsert());
-  if (!error) return true;
-  if (isMissingTableError(error)) return true;
-  return false;
 }
 
 async function markClaimDone(rawKey, meta = {}) {
   const key = String(rawKey || '').trim().slice(0, 220);
   if (!key) return null;
-  const { data, error } = await sb().from('shop_settings').update({
+  const { data, error } = await sb().from('job_locks').update({
     value: {
       status: 'done',
       done_at: new Date().toISOString(),
@@ -79,7 +51,7 @@ async function markClaimDone(rawKey, meta = {}) {
 async function releaseClaim(rawKey) {
   const key = String(rawKey || '').trim().slice(0, 220);
   if (!key) return;
-  const { error } = await sb().from('shop_settings').delete().eq('key', key);
+  const { error } = await sb().from('job_locks').delete().eq('key', key);
   if (error && !isMissingTableError(error)) console.error('releaseClaim gagal:', error.message || error);
 }
 
@@ -139,7 +111,7 @@ function normalizeVariant(item, index = 0) {
     description: String(item?.description || item?.deskripsi || '').trim(),
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
-    stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '').replace(/,/g, '\n')),
+    stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
   };
 }
@@ -266,11 +238,13 @@ function mergeHistoricalStats(saved = {}, current = {}) {
   const a = normalizeHistoricalStats(saved);
   const b = normalizeHistoricalStats(current);
   return {
+    // Hanya counter historis yang memang harus monoton yang memakai nilai terbesar.
     orders_total: Math.max(a.orders_total, b.orders_total),
     revenue_total: Math.max(a.revenue_total, b.revenue_total),
     quantity_sold: Math.max(a.quantity_sold, b.quantity_sold),
-    cost_total: Math.max(a.cost_total, b.cost_total),
-    profit_total: Math.max(a.profit_total, b.profit_total),
+    // Modal dan profit boleh turun setelah koreksi; selalu gunakan sumber transaksi terbaru.
+    cost_total: b.cost_total,
+    profit_total: b.profit_total,
     updated_at: new Date().toISOString()
   };
 }
@@ -290,13 +264,14 @@ async function readHistoricalStats() {
 }
 
 async function saveHistoricalStats(stats = {}) {
-  const payload = mergeHistoricalStats(stats, {});
+  const payload = { ...normalizeHistoricalStats(stats), updated_at: new Date().toISOString() };
   try {
-    await sb().from('shop_settings').upsert({
+    const { error } = await sb().from('shop_settings').upsert({
       key: HISTORICAL_STATS_KEY,
       value: payload,
       updated_at: new Date().toISOString()
     }, { onConflict: 'key' });
+    if (error) throw error;
   } catch (error) {
     console.error('saveHistoricalStats:', error.message);
   }
@@ -304,17 +279,51 @@ async function saveHistoricalStats(stats = {}) {
 }
 
 async function summarizeAllTransactions() {
-  const { data, count, error } = await sb().from('transactions').select('total_price,quantity,cost_total,profit_amount,payment_fee', { count: 'exact' });
-  if (error) throw error;
-  const rows = data || [];
-  return {
-    orders_total: Number(count || rows.length || 0),
-    revenue_total: rows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-    quantity_sold: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-    cost_total: rows.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
-    profit_total: rows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
-    updated_at: new Date().toISOString()
-  };
+  try {
+    const { data, error } = await sb().rpc('stats_summary_v62');
+    if (error) throw error;
+    const row = data || {};
+    return {
+      orders_total: Number(row.orders_total || 0),
+      revenue_total: Number(row.revenue_total || 0),
+      quantity_sold: Number(row.quantity_sold || 0),
+      cost_total: Number(row.cost_total || 0),
+      profit_total: Number(row.profit_total || 0),
+      revenue_today: Number(row.revenue_today || 0),
+      profit_today: Number(row.profit_today || 0),
+      revenue_month: Number(row.revenue_month || 0),
+      profit_month: Number(row.profit_month || 0),
+      updated_at: new Date().toISOString()
+    };
+  } catch (error) {
+    // Fallback dipaginasi agar tetap benar walau RPC belum termuat di schema cache.
+    const pageSize = 1000;
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error: pageError } = await sb().from('transactions')
+        .select('total_price,quantity,cost_total,profit_amount,created_at')
+        .order('created_at', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (pageError) throw pageError;
+      const page = data || [];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    const todayKey = wibDateKey(new Date());
+    const monthKey = todayKey.slice(0, 7);
+    return {
+      orders_total: rows.length,
+      revenue_total: rows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+      quantity_sold: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+      cost_total: rows.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
+      profit_total: rows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+      revenue_today: rows.filter((item) => wibDateKey(item.created_at) === todayKey).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+      profit_today: rows.filter((item) => wibDateKey(item.created_at) === todayKey).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+      revenue_month: rows.filter((item) => wibDateKey(item.created_at).slice(0, 7) === monthKey).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+      profit_month: rows.filter((item) => wibDateKey(item.created_at).slice(0, 7) === monthKey).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+      updated_at: new Date().toISOString()
+    };
+  }
 }
 
 async function ensureHistoricalStatsFromCurrentTransactions(currentSummary = null) {
@@ -341,36 +350,29 @@ async function incrementHistoricalStats(delta = {}) {
 }
 
 async function getStats() {
-  const [{ count: usersCount }, { data: products }, { data: transactions, count: ordersCount }] = await Promise.all([
+  const [{ count: usersCount }, { data: products }, summary] = await Promise.all([
     sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }),
     sb().from('products').select('stock,sold,price,cost_price,variants'),
-    sb().from('transactions').select('total_price,quantity,cost_total,profit_amount,payment_fee,created_at', { count: 'exact' })
+    summarizeAllTransactions()
   ]);
 
   const stokTersedia = (products || []).reduce((sum, row) => sum + productAvailableStock(normalizeProduct(row)), 0);
   const stokTerjual = (products || []).reduce((sum, item) => sum + Number(item.sold || 0), 0);
-  const liveSummary = {
-    orders_total: Number(ordersCount || 0),
-    revenue_total: (transactions || []).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-    quantity_sold: (transactions || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-    cost_total: (transactions || []).reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
-    profit_total: (transactions || []).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0)
-  };
-  const historical = await ensureHistoricalStatsFromCurrentTransactions(liveSummary).catch(() => liveSummary);
+  const historical = await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
 
   return {
     users: usersCount || 0,
     products: (products || []).length,
-    orders: Math.max(liveSummary.orders_total, Number(historical.orders_total || 0)),
-    liveOrders: liveSummary.orders_total,
+    orders: Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0)),
+    liveOrders: Number(summary.orders_total || 0),
     stokTersedia,
     stokTerjual: Math.max(stokTerjual, Number(historical.quantity_sold || 0)),
-    omzet: Math.max(liveSummary.revenue_total, Number(historical.revenue_total || 0)),
-    liveOmzet: liveSummary.revenue_total,
-    modal: liveSummary.cost_total,
-    profit: liveSummary.profit_total,
-    profitToday: (transactions || []).filter((item) => wibDateKey(item.created_at) === wibDateKey(new Date())).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
-    profitMonth: (transactions || []).filter((item) => wibDateKey(item.created_at).slice(0, 7) === wibDateKey(new Date()).slice(0, 7)).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0)
+    omzet: Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0)),
+    liveOmzet: Number(summary.revenue_total || 0),
+    modal: Number(summary.cost_total || 0),
+    profit: Number(summary.profit_total || 0),
+    profitToday: Number(summary.profit_today || 0),
+    profitMonth: Number(summary.profit_month || 0)
   };
 }
 
@@ -741,8 +743,22 @@ async function getPendingOrderByProviderTransactionId(transactionId) {
   return data;
 }
 
-async function deletePendingOrder(telegramId) {
-  const { error } = await sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
+async function listPendingOrdersAwaitingPayment(limit = 50) {
+  const safeLimit = Math.max(1, Math.min(200, Number(limit || 50)));
+  const { data, error } = await sb().from('pending_orders')
+    .select('*')
+    .in('status', ['awaiting_payment', 'pending', 'ready_to_pay'])
+    .order('updated_at', { ascending: true })
+    .limit(safeLimit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function deletePendingOrder(telegramId, invoiceRef = '') {
+  let query = sb().from('pending_orders').delete().eq('telegram_id', Number(telegramId));
+  const invoice = String(invoiceRef || '').trim();
+  if (invoice) query = query.eq('invoice_ref', invoice);
+  const { error } = await query;
   if (error) throw error;
 }
 
@@ -776,6 +792,7 @@ async function getShopSettings() {
   }
   const out = { ...defaults };
   (data || []).forEach((row) => {
+    if (!Object.prototype.hasOwnProperty.call(defaults, row.key)) return;
     let value = row.value;
     // Supabase jsonb may return strings, objects, or null depending on the client/version.
     if (value && typeof value === 'object' && !Array.isArray(value)) value = value.value ?? value.text ?? value.url ?? value;
@@ -860,7 +877,7 @@ async function listTransactionsInRange(startAt, endAt = null, maxRows = 10000) {
   for (let from = 0; from < cap; from += pageSize) {
     const to = Math.min(cap - 1, from + pageSize - 1);
     let query = sb().from('transactions')
-      .select('product_code,variant_key,variant_name,quantity,created_at')
+      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at')
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: true })
@@ -895,100 +912,52 @@ async function getUserByTelegramId(telegramId) {
 }
 
 async function completeOrder(order, product, totalPrice, buyer = {}) {
-  // Webhook payment gateway dapat dikirim lebih dari sekali. Cek transaksi lebih dulu agar
-  // stok, statistik, dan voucher tidak diproses ulang untuk invoice yang sama.
-  const existingTransaction = await getTransactionByOrderRef(order.invoice_ref);
-  if (existingTransaction) {
-    return {
-      delivered: Array.isArray(existingTransaction.delivered_items)
-        ? existingTransaction.delivered_items
-        : String(existingTransaction.delivered_text || '').split('\n').filter(Boolean),
-      transaction: existingTransaction,
-      already_completed: true
-    };
-  }
-  const quantity = Number(order.quantity || 1);
-  let delivered = [];
-  const updatePayload = { sold: Number(product.terjual || 0) + quantity, updated_at: new Date().toISOString() };
-
-  if (order.variant_key) {
-    const variants = normalizeVariants(product.variants);
-    const { variant, index } = findVariant({ variants }, order.variant_key);
-    if (!variant || index < 0) throw new Error('Varian produk tidak ditemukan.');
-    const currentStock = Array.isArray(variant.stock) ? variant.stock : [];
-    if (currentStock.length < quantity) throw new Error('Stok varian tidak mencukupi.');
-    delivered = currentStock.slice(0, quantity);
-    variants[index] = { ...variant, stock: currentStock.slice(quantity), sold: Number(variant.sold || 0) + quantity };
-    updatePayload.variants = variants;
-  } else {
-    const currentStock = Array.isArray(product.data) ? product.data : [];
-    if (currentStock.length < quantity) throw new Error('Stok produk tidak mencukupi.');
-    delivered = currentStock.slice(0, quantity);
-    updatePayload.stock = currentStock.slice(quantity);
-  }
-
-  const { error: productError } = await sb().from('products').update(updatePayload).eq('code', product.kode);
-  if (productError) throw productError;
-
-  // Simpan angka riwayat sebelum transaksi baru masuk.
-  // Dengan begini, kalau tabel transactions dibersihkan nanti, total transaksi dashboard tidak turun.
-  await ensureHistoricalStatsFromCurrentTransactions().catch(() => null);
-
-  const nowIso = new Date().toISOString();
-  const paymentFee = Math.max(0, Number(order.fee || 0));
-  const costUnit = Math.max(0, Number(order.cost_unit || 0));
-  const costTotal = Math.max(0, Number(order.cost_total || (costUnit * quantity)));
-  const costSource = String(order.cost_source || (costTotal > 0 ? 'snapshot' : 'unset'));
-  const costKnown = costSource !== 'unset';
-  const profitAmount = calculateProfit(totalPrice, paymentFee, costTotal, costKnown);
-  const transaction = {
-    telegram_id: Number(order.telegram_id),
-    username: buyer.username || null,
-    product_name: product.nama,
-    product_code: product.kode,
-    variant_key: order.variant_key || '',
-    variant_name: order.variant_name || '',
+  const invoice = String(order?.invoice_ref || '').trim();
+  if (!invoice) throw new Error('Invoice lokal tidak ditemukan.');
+  const payloadOrder = {
+    telegram_id: Number(order.telegram_id || 0),
+    product_code: String(order.product_code || product?.kode || '').trim(),
+    variant_key: String(order.variant_key || '').trim(),
+    variant_name: String(order.variant_name || '').trim(),
     unit_price: Number(order.unit_price || 0),
-    quantity,
-    total_price: Number(totalPrice),
-    payment_fee: paymentFee,
-    cost_unit: costUnit,
-    cost_total: costTotal,
-    cost_source: costSource,
-    cost_updated_at: costKnown ? nowIso : null,
-    profit_amount: profitAmount,
-    order_ref: order.invoice_ref || null,
-    delivered_items: delivered,
-    delivered_text: delivered.join('\n'),
-    created_at: nowIso
+    quantity: Math.max(1, Number(order.quantity || 1)),
+    voucher_code: String(order.voucher_code || ''),
+    invoice_ref: invoice,
+    fee: Math.max(0, Number(order.fee || 0)),
+    cost_unit: Math.max(0, Number(order.cost_unit || 0)),
+    cost_total: Math.max(0, Number(order.cost_total || 0)),
+    cost_source: String(order.cost_source || 'unset')
   };
 
-  const { error: trxError } = await sb().from('transactions').insert(transaction);
-  const isDuplicateTrx = trxError && String(trxError.message || '').toLowerCase().includes('duplicate');
-  if (trxError && !isDuplicateTrx) throw trxError;
-  if (!trxError) {
-    await incrementHistoricalStats({ orders_total: 1, revenue_total: Number(totalPrice), quantity_sold: quantity, cost_total: costTotal, profit_total: profitAmount }).catch(() => null);
+  const { data, error } = await sb().rpc('fulfill_paid_order_v62', {
+    p_order: payloadOrder,
+    p_product_code: String(product?.kode || order.product_code || '').trim(),
+    p_total_price: Number(totalPrice || 0),
+    p_buyer: {
+      first_name: buyer?.first_name || null,
+      username: buyer?.username || null
+    }
+  });
+  if (error) {
+    const message = String(error.message || error);
+    if (/fulfill_paid_order_v62|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fungsi stok atomik v62 belum tersedia. Jalankan supabase/update-v62-security-reliability.sql terlebih dahulu.');
+    }
+    if (/INSUFFICIENT_STOCK/i.test(message)) throw new Error('Stok produk tidak mencukupi.');
+    if (/VARIANT_NOT_FOUND/i.test(message)) throw new Error('Varian produk tidak ditemukan.');
+    if (/PRODUCT_NOT_FOUND/i.test(message)) throw new Error('Produk untuk invoice ini tidak ditemukan.');
+    throw error;
   }
 
-  const { data: user } = await sb().from('bot_users').select('*').eq('telegram_id', Number(order.telegram_id)).maybeSingle();
-  await sb().from('bot_users').upsert({
-    telegram_id: Number(order.telegram_id),
-    first_name: buyer.first_name || user?.first_name || null,
-    username: buyer.username || user?.username || null,
-    transaction_count: Number(user?.transaction_count || 0) + 1,
-    spending: Number(user?.spending || 0) + Number(totalPrice),
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'telegram_id' });
-
-  if (order.voucher_code) {
-    const promoMatch = String(order.voucher_code || '').match(/^AUTO_PROMO:(.+)$/);
-    if (promoMatch) await applyAutoPromoUsage(promoMatch[1]).catch(() => null);
-    else await applyVoucherUsage(order.voucher_code, order.telegram_id).catch(() => null);
-  }
-  // Pending order baru dihapus oleh paymentService setelah pesan produk berhasil
-  // dikirim. Bila Telegram sedang gangguan, webhook/manual check dapat mencoba
-  // mengirim ulang tanpa memotong stok lagi karena order_ref sudah tercatat.
-  return { delivered, transaction, already_completed: false };
+  const result = data && typeof data === 'object' ? data : {};
+  const delivered = Array.isArray(result.delivered)
+    ? result.delivered.map((item) => String(item))
+    : [];
+  return {
+    delivered,
+    transaction: result.transaction || null,
+    already_completed: result.already_completed === true
+  };
 }
 
 
@@ -1250,7 +1219,8 @@ async function getMaintenanceStats() {
     pollAnswers,
     users,
     usersEmptyOld30,
-    inactiveExpiredVouchers
+    inactiveExpiredVouchers,
+    expiredJobLocks
   ] = await Promise.all([
     countRows('pending_orders'),
     countRows('pending_orders', (q) => q.lt('updated_at', older7)),
@@ -1263,7 +1233,8 @@ async function getMaintenanceStats() {
     countRows('broadcast_poll_answers'),
     countRows('bot_users'),
     countRows('bot_users', (q) => q.eq('transaction_count', 0).lt('updated_at', older30)),
-    countRows('vouchers', (q) => q.or(`active.eq.false,expires_at.lt.${now}`))
+    countRows('vouchers', (q) => q.or(`active.eq.false,expires_at.lt.${now}`)),
+    countRows('job_locks', (q) => q.not('expires_at', 'is', null).lt('expires_at', now))
   ]);
   return {
     pending_orders: pendingOrders,
@@ -1278,6 +1249,7 @@ async function getMaintenanceStats() {
     bot_users: users,
     bot_users_empty_old_30d: usersEmptyOld30,
     vouchers_inactive_or_expired: inactiveExpiredVouchers,
+    job_locks_expired: expiredJobLocks,
     generated_at: new Date().toISOString()
   };
 }
@@ -1355,6 +1327,13 @@ async function cleanupDatabase(input = {}) {
     return { target, affected: before, message: 'Voucher nonaktif atau expired dihapus.' };
   }
 
+  if (target === 'job-locks-expired') {
+    const before = await countRows('job_locks', (q) => q.not('expires_at', 'is', null).lt('expires_at', now));
+    const { error } = await sb().from('job_locks').delete().not('expires_at', 'is', null).lt('expires_at', now);
+    if (error) throw error;
+    return { target, affected: before, message: 'Lock pekerjaan yang kedaluwarsa dihapus.' };
+  }
+
   throw new Error('Target maintenance tidak dikenal.');
 }
 
@@ -1376,7 +1355,7 @@ async function exportBackupData() {
   for (const table of BACKUP_TABLES) tables[table] = await safeSelectAll(table);
   return {
     app: 'telegram-store-vercel-supabase',
-    version: 'v26-backup-promo-stats',
+    version: getAppVersion(),
     generated_at: new Date().toISOString(),
     tables
   };
@@ -1587,36 +1566,30 @@ async function applyAutoPromoUsage(code) {
 }
 
 async function getDeepStats() {
-  const [products, users, transactions, pendingOrders, promos] = await Promise.all([
-    listProducts(), listUsers(1000), listTransactions(1000), safeSelectAll('pending_orders'), listAutoPromos(100)
-  ]);
   const now = new Date();
   const todayKey = wibDateKey(now);
   const monthKey = todayKey.slice(0, 7);
-  const liveRevenue = transactions.reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const todayRevenue = transactions.filter((x) => wibDateKey(x.created_at) === todayKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const monthRevenue = transactions.filter((x) => wibDateKey(x.created_at).slice(0, 7) === monthKey).reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const liveQtySold = transactions.reduce((s, x) => s + Number(x.quantity || 0), 0);
-  const liveCost = transactions.reduce((s, x) => s + Number(x.cost_total || 0), 0);
-  const liveProfit = transactions.reduce((s, x) => s + Number(x.profit_amount || 0), 0);
-  const todayProfit = transactions.filter((x) => wibDateKey(x.created_at) === todayKey).reduce((s, x) => s + Number(x.profit_amount || 0), 0);
-  const monthProfit = transactions.filter((x) => wibDateKey(x.created_at).slice(0, 7) === monthKey).reduce((s, x) => s + Number(x.profit_amount || 0), 0);
-  const historical = await ensureHistoricalStatsFromCurrentTransactions({
-    orders_total: transactions.length,
-    revenue_total: liveRevenue,
-    quantity_sold: liveQtySold,
-    cost_total: liveCost,
-    profit_total: liveProfit
-  }).catch(() => ({ orders_total: transactions.length, revenue_total: liveRevenue, quantity_sold: liveQtySold, cost_total: liveCost, profit_total: liveProfit }));
-  const revenue = Math.max(liveRevenue, Number(historical.revenue_total || 0));
-  const qtySold = Math.max(liveQtySold, Number(historical.quantity_sold || 0));
-  const costTotal = liveCost;
-  const profitTotal = liveProfit;
-  const ordersTotal = Math.max(transactions.length, Number(historical.orders_total || 0));
-  const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active })).filter((p) => p.active !== false && p.stock <= 5).sort((a, b) => a.stock - b.stock).slice(0, 20);
+  const monthStart = wibKeyStartUtc(`${monthKey}-01`).toISOString();
+  const [products, users, recentTransactions, pendingOrders, promos, summary] = await Promise.all([
+    listProducts(),
+    listUsers(1000),
+    listTransactionsInRange(monthStart, now.toISOString(), 50000),
+    safeSelectAll('pending_orders'),
+    listAutoPromos(100),
+    summarizeAllTransactions()
+  ]);
+
+  const historical = await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
+  const revenue = Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0));
+  const qtySold = Math.max(Number(summary.quantity_sold || 0), Number(historical.quantity_sold || 0));
+  const ordersTotal = Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0));
+  const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active }))
+    .filter((p) => p.active !== false && p.stock <= 5)
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 20);
   const topUsers = users.slice().sort((a, b) => Number(b.spending || 0) - Number(a.spending || 0)).slice(0, 10);
   const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: 0 }));
-  transactions.forEach((trx) => {
+  recentTransactions.forEach((trx) => {
     const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }).format(new Date(trx.created_at || Date.now())));
     if (byHour[h]) { byHour[h].orders += 1; byHour[h].revenue += Number(trx.total_price || 0); }
   });
@@ -1624,14 +1597,14 @@ async function getDeepStats() {
   return {
     generated_at: new Date().toISOString(),
     revenue_total: revenue,
-    revenue_today: todayRevenue,
-    revenue_month: monthRevenue,
-    cost_total: costTotal,
-    profit_total: profitTotal,
-    profit_today: todayProfit,
-    profit_month: monthProfit,
+    revenue_today: Number(summary.revenue_today || 0),
+    revenue_month: Number(summary.revenue_month || 0),
+    cost_total: Number(summary.cost_total || 0),
+    profit_total: Number(summary.profit_total || 0),
+    profit_today: Number(summary.profit_today || 0),
+    profit_month: Number(summary.profit_month || 0),
     orders_total: ordersTotal,
-    live_orders_total: transactions.length,
+    live_orders_total: Number(summary.orders_total || 0),
     quantity_sold: qtySold,
     average_order_value: ordersTotal ? Math.round(revenue / ordersTotal) : 0,
     users_total: users.length,
@@ -1644,6 +1617,7 @@ async function getDeepStats() {
     pending_orders: pendingOrders.length
   };
 }
+
 
 module.exports = {
   claimOnce,
@@ -1673,6 +1647,7 @@ module.exports = {
   getPendingOrder,
   getPendingOrderByInvoice,
   getPendingOrderByProviderTransactionId,
+  listPendingOrdersAwaitingPayment,
   deletePendingOrder,
   getVoucher,
   voucherIsValid,

@@ -95,12 +95,9 @@ function escapeHtml(value) {
 }
 
 function escapeMarkdownText(value) {
-  return String(value == null ? '' : value)
-    .replace(/\\/g, '\\\\')
-    .replace(/_/g, '\\_')
-    .replace(/\*/g, '\\*')
-    .replace(/`/g, '\\`')
-    .replace(/\[/g, '\\[');
+  // Telegram Markdown legacy menerima escape untuk karakter ASCII. Meloloskan
+  // seluruh karakter pemformatan mencegah nama produk/user merusak pesan.
+  return String(value == null ? '' : value).replace(/([\\_*\[\]()`~>#+\-=|{}.!])/g, '\\$1');
 }
 
 function formatProductInfoText(value, maxLength = 900) {
@@ -112,7 +109,7 @@ function formatProductInfoText(value, maxLength = 900) {
 
 async function sendProductUpdated(chatId, product, label) {
   if (!product) return tg.sendMessage(chatId, '⚠️ Produk tidak ditemukan. Cek kembali kode produk.' );
-  return tg.sendMessage(chatId, `✅ ${label} berhasil.\n\nProduk: *${product.nama}*\nKode: \`${product.kode}\`\nHarga: *${formatRupiah(product.harga)}*\nStok: *${product.data.length}*`, { parse_mode: 'Markdown' });
+  return tg.sendMessage(chatId, `✅ ${label} berhasil.\n\nProduk: *${escapeMarkdownText(product.nama)}*\nKode: \`${escapeMarkdownText(product.kode)}\`\nHarga: *${formatRupiah(product.harga)}*\nStok: *${product.data.length}*`, { parse_mode: 'Markdown' });
 }
 
 async function broadcastToUsers(payload = {}) {
@@ -368,10 +365,10 @@ async function editMessage(query, text, options = {}) {
 
 async function buildHomeText(from) {
   const stats = await db.getStats();
-  return `Halo, *${from.first_name || 'Kak'}* 👋
+  return `Halo, *${escapeMarkdownText(from.first_name || 'Kak')}* 👋
 
 ` +
-    `Selamat datang di *${config.botName}*
+    `Selamat datang di *${escapeMarkdownText(config.botName)}*
 ` +
     `- 👥 Total User: *${stats.users} User*
 ` +
@@ -391,7 +388,7 @@ async function editHome(query, req) {
   try { text = await buildHomeText(query.from); }
   catch (e) {
     console.error('build home gagal:', e.message);
-    text = `Halo, *${query.from.first_name || 'Kak'}* 👋\n\nSelamat datang di *${config.botName}*\n\nSilahkan pilih tombol dibawah ini!`;
+    text = `Halo, *${escapeMarkdownText(query.from.first_name || 'Kak')}* 👋\n\nSelamat datang di *${escapeMarkdownText(config.botName)}*\n\nSilahkan pilih tombol dibawah ini!`;
   }
   const settings = await db.getShopSettings().catch(() => ({}));
   return editMessage(query, text, {
@@ -405,10 +402,10 @@ async function sendHome(chatId, from, req) {
   let stats = { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 };
   try { stats = await db.getStats(); }
   catch (e) { console.error('getStats gagal:', e.message); }
-  const text = `Halo, *${from.first_name || 'Kak'}* 👋
+  const text = `Halo, *${escapeMarkdownText(from.first_name || 'Kak')}* 👋
 
 ` +
-    `Selamat datang di *${config.botName}*
+    `Selamat datang di *${escapeMarkdownText(config.botName)}*
 ` +
     `- 👥 Total User: *${stats.users || 0} User*
 ` +
@@ -575,8 +572,8 @@ async function sendStock(chatId, query = null) {
     return tg.sendMessage(chatId, empty);
   }
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
-    const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => `   - ${v.name}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
-    return `${i + 1}. *${p.nama}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
+    const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => `   - ${escapeMarkdownText(v.name)}: *${stockOfVariant(v).length}* stok | ${formatRupiah(variantPrice(p, v))}`).join('\n');
+    return `${i + 1}. *${escapeMarkdownText(p.nama)}*\n   Total Stok: *${productStockTotal(p)}* | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
   if (query?.message?.message_id) return editMessage(query, text, options);
@@ -591,8 +588,8 @@ async function sendHistory(chatId, userId, query = null) {
     return tg.sendMessage(chatId, empty);
   }
   const text = '*RIWAYAT TRANSAKSI*\n=======================\n' + rows.map((item, idx) => (
-    `${idx + 1}. *${item.product_name}*${item.variant_name ? ' - ' + item.variant_name : ''}\n` +
-    `   Kode: \`${item.product_code}\`\n` +
+    `${idx + 1}. *${escapeMarkdownText(item.product_name)}*${item.variant_name ? ' - ' + escapeMarkdownText(item.variant_name) : ''}\n` +
+    `   Kode: \`${escapeMarkdownText(item.product_code)}\`\n` +
     `   Jumlah: *${item.quantity}*\n` +
     `   Harga: *${formatRupiah(item.total_price)}*\n` +
     `   Tanggal: *${formatWIB(item.created_at)}*`
@@ -857,19 +854,6 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     return sendPollingList(chatId);
   }
   if (lower.startsWith('/produk') || lower.startsWith('/listproduk')) return sendProductList(chatId);
-  if (lower.startsWith('/ownermenu')) {
-    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
-    return sendOwnerMenu(chatId);
-  }
-  if (lower.startsWith('/reseller')) {
-    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
-    const miniAppUrl = getMiniAppUrl(req);
-    if (!miniAppUrl) return tg.sendMessage(chatId, '⚠️ MINIAPP_URL / PUBLIC_URL belum diatur di Vercel.');
-    return tg.sendMessage(chatId, `Reseller Panel Mini App\n\nBuka panel untuk mengelola dashboard, produk, stok, voucher, users, broadcast, gambar toko, dan grafik.`, {
-      reply_markup: { inline_keyboard: [[{ text: 'Buka Reseller Panel', web_app: { url: miniAppUrl } }], [{ text: 'Buka Link Panel', url: miniAppUrl }]] }
-    });
-  }
-
   if (lower.startsWith('/addproduk')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const raw = text.replace(/^\/addproduk\s*/i, '');
@@ -879,7 +863,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     }
     if (Number.isNaN(Number(harga)) || Number(harga) < 0) return tg.sendMessage(chatId, '⚠️ Harga harus berupa angka dan diatas 0!');
     await db.addProduct({ nama, kode, harga: Number(harga), deskripsi, snk, data: [] });
-    return tg.sendMessage(chatId, `✅ Produk *${nama}* berhasil ditambahkan.`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Produk *${escapeMarkdownText(nama)}* berhasil ditambahkan.`, { parse_mode: 'Markdown' });
   }
 
   if (lower.startsWith('/delproduk')) {
@@ -887,7 +871,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const code = text.replace(/^\/delproduk\s*/i, '').trim();
     if (!code) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/delproduk Kode');
     await db.deleteProduct(code);
-    return tg.sendMessage(chatId, `✅ Produk dengan kode *${code}* berhasil dihapus.`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Produk dengan kode *${escapeMarkdownText(code)}* berhasil dihapus.`, { parse_mode: 'Markdown' });
   }
 
   if (lower.startsWith('/addstok')) {
@@ -899,8 +883,8 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
       return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/addstok Kode|DataProduk\n\nContoh:\n/addstok GPT24J|email1:pw1\nemail2:pw2');
     }
     const result = await db.appendStock(kode.trim(), stockText);
-    if (!result) return tg.sendMessage(chatId, `⚠️ Kode produk *${kode.trim()}* tidak ditemukan!`, { parse_mode: 'Markdown' });
-    return tg.sendMessage(chatId, `✅ Berhasil menambah *${result.added}* stok ke *${result.product.nama}*.`, { parse_mode: 'Markdown' });
+    if (!result) return tg.sendMessage(chatId, `⚠️ Kode produk *${escapeMarkdownText(kode.trim())}* tidak ditemukan!`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Berhasil menambah *${result.added}* stok ke *${escapeMarkdownText(result.product.nama)}*.`, { parse_mode: 'Markdown' });
   }
 
 
@@ -953,7 +937,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const users = await db.listUsers(50);
     if (!users.length) return tg.sendMessage(chatId, '📭 Belum ada user.');
-    const textUsers = users.map((u, i) => `${i + 1}. ${u.username ? '@' + u.username : (u.first_name || '-') }\n   ID: \`${u.telegram_id}\` | Trx: *${u.transaction_count || 0}* | Spend: *${formatRupiah(u.spending || 0)}*`).join('\n\n');
+    const textUsers = users.map((u, i) => `${i + 1}. ${escapeMarkdownText(u.username ? '@' + u.username : (u.first_name || '-'))}\n   ID: \`${u.telegram_id}\` | Trx: *${u.transaction_count || 0}* | Spend: *${formatRupiah(u.spending || 0)}*`).join('\n\n');
     return tg.sendMessage(chatId, `👥 *LIST USER*\n=======================\n${textUsers}`, { parse_mode: 'Markdown' });
   }
 
@@ -970,7 +954,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const [kode, produk, potongan, limit] = parseCommandBody(text, 'addvoucher').split('|').map((x) => x?.trim());
     if (!kode || !potongan || !limit) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/addvoucher KODE|semua|POTONGAN|LIMIT');
     const voucher = await db.addVoucher({ kode, produk: produk || 'semua', potongan: parseNumber(potongan), limit: parseNumber(limit) });
-    return tg.sendMessage(chatId, `✅ Voucher *${voucher.code}* berhasil disimpan.`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Voucher *${escapeMarkdownText(voucher.code)}* berhasil disimpan.`, { parse_mode: 'Markdown' });
   }
 
   if (lower.startsWith('/editvoucher')) {
@@ -979,7 +963,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     if (!oldCode || !newCode || !potongan || !limit) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/editvoucher KODE_LAMA|KODE_BARU|semua|POTONGAN|LIMIT');
     const voucher = await db.updateVoucher(oldCode, { kode: newCode, produk: produk || 'semua', potongan: parseNumber(potongan), limit: parseNumber(limit), active: true });
     if (!voucher) return tg.sendMessage(chatId, '⚠️ Voucher tidak ditemukan.');
-    return tg.sendMessage(chatId, `✅ Voucher *${voucher.code}* berhasil diedit.`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Voucher *${escapeMarkdownText(voucher.code)}* berhasil diedit.`, { parse_mode: 'Markdown' });
   }
 
   if (lower.startsWith('/delvoucher')) {
@@ -987,7 +971,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     const code = parseCommandBody(text, 'delvoucher').trim().toUpperCase();
     if (!code) return tg.sendMessage(chatId, '⚠️ Cara Penggunaan:\n/delvoucher KODE');
     await db.deleteVoucher(code);
-    return tg.sendMessage(chatId, `✅ Voucher *${code}* berhasil dihapus.`, { parse_mode: 'Markdown' });
+    return tg.sendMessage(chatId, `✅ Voucher *${escapeMarkdownText(code)}* berhasil dihapus.`, { parse_mode: 'Markdown' });
   }
 
   if (lower.startsWith('/bcpoll')) {
@@ -1067,7 +1051,7 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const [month, year] = parseCommandBody(text, 'rekap').split(/\s+/).filter(Boolean);
     const r = await db.getMonthlyRekap(month, year);
-    const top = (r.by_product || []).slice(0, 8).map((p, i) => `${i + 1}. *${p.name}* \`${p.code}\`\n   Qty: *${p.quantity}* | Total: *${formatRupiah(p.total_price)}*`).join('\n\n') || '-';
+    const top = (r.by_product || []).slice(0, 8).map((p, i) => `${i + 1}. *${escapeMarkdownText(p.name)}* \`${escapeMarkdownText(p.code)}\`\n   Qty: *${p.quantity}* | Total: *${formatRupiah(p.total_price)}*`).join('\n\n') || '-';
     return tg.sendMessage(chatId, `📊 *REKAP PENJUALAN ${String(r.month).padStart(2, '0')}/${r.year}*\n=======================\nTotal Order: *${r.orders}*\nTotal Produk Terjual: *${r.quantity}*\nTotal Omzet: *${formatRupiah(r.total_price)}*\n\n*Top Produk:*\n${top}`, { parse_mode: 'Markdown' });
   }
 
@@ -1084,7 +1068,7 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
     }
     const discount = db.voucherDiscountAmount(voucher, subtotal);
     await db.upsertPendingOrder({ ...pending, voucher_code: voucher.code, status: 'ready_to_pay' });
-    return tg.sendMessage(chatId, `✅ Voucher *${voucher.code}* berhasil dipasang. Potongan: *${formatRupiah(discount)}*`, {
+    return tg.sendMessage(chatId, `✅ Voucher *${escapeMarkdownText(voucher.code)}* berhasil dipasang. Potongan: *${formatRupiah(discount)}*`, {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: [[{ text: '💸 Lanjut Bayar', callback_data: 'bayar' }], [{ text: '❌ Batal', callback_data: 'batalbeli' }]] }
     });
@@ -1311,7 +1295,7 @@ async function checkPayment(query, invoiceFromButton) {
     return tg.answerCallbackQuery(query.id, { text: 'Invoice tidak cocok.', show_alert: true });
   }
   if (order.expires_at && Date.now() > new Date(order.expires_at).getTime()) {
-    await db.deletePendingOrder(userId);
+    await db.deletePendingOrder(userId, order.invoice_ref);
     await tg.deleteMessage(query.message.chat.id, query.message.message_id);
     return tg.sendMessage(userId, 'Pesananmu telah expired, harap pesan kembali!');
   }
