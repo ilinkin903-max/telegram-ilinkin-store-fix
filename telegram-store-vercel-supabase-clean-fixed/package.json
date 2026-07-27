@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "private": true,
-  "description": "Telegram auto-order marketplace for Vercel and Supabase with atomic stock fulfillment, reliable payment recovery, AutoGoPay, flash-sale promos, and reseller dashboard.",
+  "description": "Telegram auto-order marketplace with atomic stock fulfillment, AutoGoPay, polished mobile storefront, flash-sale promos, and compact reseller dashboard.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

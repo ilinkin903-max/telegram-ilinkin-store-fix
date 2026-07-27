@@ -88,7 +88,7 @@ test('v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otom
 });
 
 test('v53 menempatkan blok benefit setelah katalog', () => {
-  assert.ok(html.indexOf('id="catalogSection"') < html.indexOf('class="benefits"'));
+  assert.ok(html.indexOf('id="catalogSection"') < html.indexOf('footer-benefits'));
 });
 
 test('v53 meminta konfirmasi sebelum membuat pembayaran', () => {
@@ -101,7 +101,7 @@ test('v53 meminta konfirmasi sebelum membuat pembayaran', () => {
 
 test('Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale', () => {
   const namePos = js.indexOf('<h3 class="flash-name">');
-  const variantPos = js.indexOf('<div class="flash-variant">');
+  const variantPos = js.indexOf('<div class="flash-variant');
   const pricePos = js.indexOf('<div class="flash-price">');
   assert.ok(namePos >= 0 && variantPos > namePos && pricePos > variantPos);
   assert.match(js, /promo\.sold/);
@@ -116,18 +116,20 @@ test('v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia', () => {
 });
 
 
-test('v61 menyatukan seluruh alat toko ke submenu Pengaturan vertikal', () => {
+test('v63 seluruh submenu Pengaturan membuka halaman terpisah', () => {
   const reseller = fs.readFileSync(path.join(__dirname, '..', 'api', 'reseller.js'), 'utf8');
-  assert.match(reseller, /data-settings-sub="store"/);
-  assert.match(reseller, /data-settings-sub="banner"/);
-  assert.match(reseller, /data-settings-sub="start"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="storeSettings"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="bannerSettings"/);
+  assert.match(reseller, /class="settingsSubBtn" data-tab="startSettings"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="license"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="deepStats"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="backup"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="maintenance"/);
+  assert.match(reseller, /<section id="storeSettings" class="section">/);
+  assert.match(reseller, /<section id="bannerSettings" class="section">/);
+  assert.match(reseller, /<section id="startSettings" class="section">/);
   assert.match(reseller, /\.settingsSubNav\{display:grid;grid-template-columns:1fr/);
-  assert.doesNotMatch(reseller, /storeToolsInline/);
-  assert.doesNotMatch(reseller, /class="storeSubBtn"/);
+  assert.doesNotMatch(reseller, /data-settings-sub=/);
   assert.match(reseller, /data-promo-sub="flash"/);
 });
 
@@ -179,7 +181,7 @@ test('v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih', () => 
   const detailBlock = reseller.slice(detailStart, detailEnd);
   assert.doesNotMatch(detailBlock, /Omzet Bersih|Modal Supplier<|Profit Kotor/i);
   assert.match(detailBlock, /Fee Pembayaran/);
-  assert.match(detailBlock, /Status<\/b><br>COMPLETED/);
+  assert.match(detailBlock, /orderStatusLabel\(o\)/);
 
   const costStart = reseller.indexOf('function openOrderCost(');
   const costEnd = reseller.indexOf('function openOrderProducts(', costStart);
@@ -187,4 +189,39 @@ test('v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih', () => 
   assert.match(costBlock, /Profit bersih/);
   assert.match(costBlock, /Simpan Modal & Hitung Profit Bersih/);
   assert.doesNotMatch(costBlock, /Profit kotor/);
+});
+
+
+test('v63 merapikan Flash Sale, katalog mobile, footer, dan grup Telegram', () => {
+  const css = fs.readFileSync(path.join(root, 'public', 'store.css'), 'utf8');
+  assert.match(css, /grid-template-rows:\s*36px 15px auto 13px/);
+  assert.match(js, /flash-variant' \+ \(promo\.variant \? '' : ' is-empty'\)/);
+  assert.doesNotMatch(html, />Urutkan</);
+  assert.match(css, /sort-control select \{ width:132px/);
+  assert.ok(html.indexOf('footer-intro') < html.indexOf('footer-benefits'));
+  assert.match(html, /telegram-community-card/);
+  assert.match(html, /Telegram<\/strong>/);
+});
+
+test('v63 dashboard mendukung status CANCELED dan kartu user ringkas', () => {
+  const dataApi = fs.readFileSync(path.join(root, 'api', 'reseller-data.js'), 'utf8');
+  const db = fs.readFileSync(path.join(root, 'lib', 'db.js'), 'utf8');
+  const sql = fs.readFileSync(path.join(root, 'supabase', 'update-v63-ui-order-status.sql'), 'utf8');
+  assert.match(reseller, /orderStatusButton/);
+  assert.match(reseller, /CANCELED/);
+  assert.match(reseller, /Tidak Jadi/);
+  assert.match(reseller, /userCardGrid/);
+  assert.match(dataApi, /action === 'update-order-status'/);
+  assert.match(db, /async function updateTransactionStatus/);
+  assert.match(sql, /status text not null default 'completed'/);
+});
+
+test('pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslash', () => {
+  const bot = fs.readFileSync(path.join(root, 'lib', 'botHandlers.js'), 'utf8');
+  const homeStart = bot.indexOf('async function buildHomeText');
+  const homeEnd = bot.indexOf('function variantKey', homeStart);
+  const home = bot.slice(homeStart, homeEnd);
+  assert.match(home, /escapeHtml\(config\.botName\)/);
+  assert.match(home, /parse_mode: 'HTML'/);
+  assert.doesNotMatch(home, /escapeMarkdownText\(config\.botName\)/);
 });

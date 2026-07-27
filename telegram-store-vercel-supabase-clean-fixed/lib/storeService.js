@@ -636,7 +636,7 @@ async function getHistory(user, limit = 20) {
     quantity: Number(row.quantity || 1),
     total: Number(row.total_price || 0),
     created_at: row.created_at,
-    status: 'completed'
+    status: String(row.status || 'completed').toLowerCase() === 'canceled' ? 'canceled' : 'completed'
   }));
 }
 

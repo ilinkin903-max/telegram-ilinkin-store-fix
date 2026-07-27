@@ -449,6 +449,16 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data: transaction });
     }
 
+    if (action === 'update-order-status') {
+      const orderRef = String(body.order_ref || body.invoice || '').trim();
+      const status = String(body.status || '').trim().toLowerCase();
+      if (!orderRef) return json(res, 400, { ok: false, error: 'Invoice transaksi wajib diisi.' });
+      if (!['completed', 'canceled'].includes(status)) return json(res, 400, { ok: false, error: 'Status transaksi tidak valid.' });
+      const transaction = await db.updateTransactionStatus(orderRef, status);
+      if (!transaction) return json(res, 404, { ok: false, error: 'Transaksi tidak ditemukan.' });
+      return json(res, 200, { ok: true, data: transaction });
+    }
+
     if (action === 'broadcast') {
       const result = await broadcast(body);
       return json(res, 200, { ok: true, data: result });

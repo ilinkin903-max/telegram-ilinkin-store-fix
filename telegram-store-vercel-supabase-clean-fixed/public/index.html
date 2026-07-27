@@ -80,9 +80,8 @@
             <p class="eyebrow">KATALOG TOKO</p>
             <p id="productSummary">Memuat produk...</p>
           </div>
-          <label class="sort-control">
-            <span>Urutkan</span>
-            <select id="sortSelect">
+          <label class="sort-control" aria-label="Urutkan produk">
+            <select id="sortSelect" aria-label="Urutkan produk">
               <option value="recommended">Rekomendasi</option>
               <option value="price-low">Harga Terendah</option>
               <option value="price-high">Harga Tertinggi</option>
@@ -102,23 +101,26 @@
         </div>
       </section>
 
-      <section class="benefits" aria-label="Keunggulan toko">
+    </main>
+
+    <footer class="footer">
+      <div class="footer-intro">
+        <strong id="footerStoreName">iLink.in Store</strong>
+        <p>Marketplace produk digital dengan sistem auto order.</p>
+      </div>
+      <section class="benefits footer-benefits" aria-label="Keunggulan toko">
         <article><span>🛡️</span><div><strong>Transaksi Aman</strong><small>Invoice unik dan verifikasi pembayaran</small></div></article>
         <article><span>⚡</span><div><strong>Proses Otomatis</strong><small>Produk dikirim tanpa menunggu admin</small></div></article>
         <article><span>💬</span><div><strong>Dukungan Telegram</strong><small>Riwayat dan produk tersimpan di chat</small></div></article>
         <article><span>🏷️</span><div><strong>Promo & Voucher</strong><small>Diskon otomatis sesuai produk atau varian</small></div></article>
       </section>
-
-    </main>
-
-    <footer class="footer">
-      <div>
-        <strong id="footerStoreName">iLink.in Store</strong>
-        <p>Marketplace produk digital dengan sistem auto order.</p>
-      </div>
-      <nav>
-        <a id="groupFooter" class="hidden" target="_blank" rel="noopener">Grup / Channel</a>
-      </nav>
+      <a id="groupFooter" class="telegram-community-card hidden" target="_blank" rel="noopener">
+        <span class="telegram-community-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img" aria-label="Telegram"><path fill="currentColor" d="M21.7 3.3a1.4 1.4 0 0 0-1.45-.2L2.9 9.78c-1.18.46-1.16 1.12-.2 1.42l4.45 1.39 1.72 5.28c.22.62.11.87.75.87.5 0 .72-.23 1-.5l2.16-2.1 4.5 3.33c.83.46 1.43.22 1.64-.77l2.8-13.2c.29-1.28-.49-1.86-1.02-2.2ZM8.2 12.27l9.75-6.15c.48-.29.92-.13.56.19l-8.05 7.27-.31 3.34-1.95-4.65Z"/></svg>
+        </span>
+        <span><strong>Grup atau Channel Telegram</strong><small>Dapatkan informasi stok, promo, dan pembaruan toko.</small></span>
+        <b aria-hidden="true">›</b>
+      </a>
     </footer>
 
     <nav class="mobile-nav" aria-label="Navigasi mobile">

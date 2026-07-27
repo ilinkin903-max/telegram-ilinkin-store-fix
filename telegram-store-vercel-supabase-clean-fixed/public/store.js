@@ -286,7 +286,7 @@
       return '<article class="flash-card" data-flash-product="' + escapeHtml(product.code) + '">' +
         '<div class="flash-image-wrap">' + image + (pct ? '<span class="flash-discount">⚡-' + pct + '%</span>' : '') + '</div>' +
         '<div class="flash-body"><h3 class="flash-name">' + escapeHtml(product.name) + '</h3>' +
-        (promo.variant ? '<div class="flash-variant">' + escapeHtml(promo.variant) + '</div>' : '') +
+        '<div class="flash-variant' + (promo.variant ? '' : ' is-empty') + '">' + escapeHtml(promo.variant || 'Tanpa varian') + '</div>' +
         '<div class="flash-price">' + price + '</div>' +
         '<div class="flash-stock-track"><div class="flash-stock-fill" style="width:' + fill + '%"></div><div class="flash-stock-label">' + sold + ' TERJUAL</div></div></div></article>';
     }).join('');
@@ -722,7 +722,8 @@
         els.historyList.innerHTML = '<div class="empty-state"><span>🧾</span><h3>Belum ada pesanan</h3><p>Pesanan selesai akan tampil di sini.</p></div>';
       } else {
         els.historyList.innerHTML = history.map(function (row) {
-          return '<article class="history-card"><div><h3>' + escapeHtml(row.product + (row.variant ? ' - ' + row.variant : '')) + '</h3><p>' + escapeHtml(row.invoice_display || row.invoice || '-') + ' · ' + escapeHtml(formatDate(row.created_at)) + ' · ' + row.quantity + ' item</p></div><strong>' + rupiah(row.total) + '</strong><span></span><span class="history-status">SELESAI</span></article>';
+          var isCancelled = String(row.status || 'completed').toLowerCase() === 'canceled';
+          return '<article class="history-card' + (isCancelled ? ' canceled' : '') + '"><div><h3>' + escapeHtml(row.product + (row.variant ? ' - ' + row.variant : '')) + '</h3><p>' + escapeHtml(row.invoice_display || row.invoice || '-') + ' · ' + escapeHtml(formatDate(row.created_at)) + ' · ' + row.quantity + ' item</p></div><strong>' + rupiah(row.total) + '</strong><span></span><span class="history-status' + (isCancelled ? ' canceled' : '') + '">' + (isCancelled ? 'DIBATALKAN' : 'SELESAI') + '</span></article>';
         }).join('');
       }
     } catch (error) {

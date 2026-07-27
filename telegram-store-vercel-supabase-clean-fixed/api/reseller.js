@@ -37,6 +37,12 @@ module.exports = async function handler(req, res) {
     .linkFieldBox{background:#eef5ff;border:var(--line);border-radius:var(--radius);padding:10px;box-shadow:var(--soft);display:grid;gap:8px}.linkFieldTitle{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#334155}.linkRows{display:grid;gap:9px}.linkRow{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(0,1.6fr) auto;gap:8px;align-items:center}.linkRow .input{margin:0}.linkRemove{width:42px;min-width:42px;height:42px;padding:0}.formDivider.withAction{display:flex;justify-content:space-between;align-items:center;gap:12px}.scopeBadge{display:inline-flex;align-items:center;border:2px solid #050505;border-radius:999px;padding:3px 7px;font-size:9px;background:#dbeafe;color:#0f172a}.scopeBadge.market{background:#bfdbfe}.linkHint{font-size:11px;color:var(--muted);line-height:1.45}
     .flashProductRow{grid-template-columns:minmax(0,1fr) auto}.flashProductRow .select{margin:0}.flashSaleHint{border:2px solid #050505;border-radius:var(--radius);background:#fff7d6;padding:10px 12px;font-size:11px;line-height:1.45}
     @media(max-width:720px){.linkRow{grid-template-columns:1fr auto}.linkRow .bannerName{grid-column:1/-1}.linkRow .bannerUrl{grid-column:1}.linkRow .linkRemove{grid-column:2;grid-row:2}.flashProductRow{grid-template-columns:1fr auto}.flashProductRow .select{grid-column:1}.flashProductRow .linkRemove{grid-column:2;grid-row:1}}
+
+    /* v63: penjualan, users, dan halaman pengaturan lebih ringkas */
+    .hidden{display:none!important}.orderCard{position:relative;padding-top:46px}.orderRef{padding-right:92px}.orderStatusButton{position:absolute;right:12px;top:12px;border:var(--line);box-shadow:var(--soft);border-radius:8px;padding:7px 10px;font-size:10px;font-weight:1000;cursor:pointer}.orderStatusButton.completed{background:var(--lime);color:#000}.orderStatusButton.canceled{background:var(--red);color:#fff}.orderCanceled{background:#fff1f1}.orderCanceled .orderTitle,.orderCanceled .orderMeta{opacity:.78}.statusConfirm{text-align:center;max-width:580px;margin:auto}.statusConfirmIcon{width:58px;height:58px;border:var(--line);border-radius:18px;background:var(--yellow);display:grid;place-items:center;font-size:30px;margin:0 auto 10px}.statusConfirm h3{font-size:22px;margin:6px 0}.statusConfirm p{color:#555;line-height:1.55}.statusConfirm .detailItem{text-align:left;margin:12px 0}.userCardGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.userCard{display:grid;grid-template-columns:46px minmax(0,1fr) auto auto auto;align-items:center;gap:10px;border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:10px}.userAvatar{width:46px;height:46px;border:2px solid #000;border-radius:14px;background:#dbeafe;display:grid;place-items:center;font-size:20px;font-weight:1000}.userMain{min-width:0;display:flex;flex-direction:column}.userMain b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.userMain small{color:#666;font-size:10px;margin-top:3px}.userMetric{display:flex;flex-direction:column;align-items:flex-end;min-width:74px}.userMetric span{font-size:9px;text-transform:uppercase;color:#666}.userMetric b{font-size:12px;margin-top:3px;white-space:nowrap}.userDelete{margin:0}.compactToolbar{margin-bottom:10px}.settingsSubBtn.active{background:#fff}.settingsSubPanel{display:none!important}
+    @media(max-width:900px){.userCardGrid{grid-template-columns:1fr}.userCard{grid-template-columns:44px minmax(0,1fr) auto auto}.userDelete{grid-column:1/-1;width:100%}}
+    @media(max-width:620px){.orderCard{padding:45px 11px 11px}.orderStatusButton{right:10px;top:10px}.orderRef{padding-right:88px}.userCard{grid-template-columns:40px minmax(0,1fr) auto;gap:8px;padding:9px}.userAvatar{width:40px;height:40px;border-radius:12px;font-size:18px}.userMetric:nth-of-type(2){grid-column:2}.userMetric{align-items:flex-start;min-width:0}.userDelete{grid-column:3;grid-row:1/3;width:auto;align-self:stretch}.settingsSubNav{gap:8px}}
+
 </style>
 </head>
 <body>
@@ -50,7 +56,7 @@ module.exports = async function handler(req, res) {
   </header>
 
   <input id="search" class="search" placeholder="Cari produk, penjualan, user, promo, voucher..." />
-  <div id="productCounter" class="count">Pencarian berlaku untuk Produk, Penjualan, Users, Promo & Voucher.</div>
+  <div id="productCounter" class="count hidden"></div>
 
   <nav class="navTiles" id="navTiles" aria-label="Menu utama">
     <button class="tile active" data-tab="dashboard"><span class="ico">📊</span>Dashboard</button>
@@ -130,7 +136,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   </section>
 
   <section id="orders" class="section"><div class="panel"><h2 class="sectionTitle">Penjualan</h2><div id="orderList" class="orderGrid"></div></div></section>
-  <section id="users" class="section"><div class="panel tableWrap"><h2 class="sectionTitle">Users</h2><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><table class="table userTable"><thead><tr><th>ID</th><th>User</th><th>Transaksi</th><th>Spending</th><th>Aksi</th></tr></thead><tbody id="userList"></tbody></table></div></section>
+  <section id="users" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Users</h2><p class="help">Ringkasan pelanggan dan aktivitas transaksi.</p></div></div><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><div id="userList" class="userCardGrid"></div></div></section>
   <section id="broadcast" class="section">
     <div class="forms broadcastGrid">
       <div class="panel broadcastPanel">
@@ -163,7 +169,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   </section>
 
   <section id="promos" class="section">
-    <div class="panel yellow"><h2 class="sectionTitle">Promo & Voucher</h2><p class="help">Pilih submenu untuk melihat daftar, membuat promo/voucher, atau mengatur Flash Sale.</p><div class="promoSubGrid"><button class="promoSubBtn active" type="button" data-promo-sub="list"><span class="ico">📋</span><b>Daftar</b><small>Lihat, edit, dan hapus promo maupun voucher.</small></button><button class="promoSubBtn" type="button" data-promo-sub="create"><span class="ico">➕</span><b>Buat Promo & Voucher</b><small>Tambah promo otomatis atau kode voucher.</small></button><button class="promoSubBtn" type="button" data-promo-sub="flash"><span class="ico">⚡</span><b>Flash Sale</b><small>Atur jadwal dan status Flash Sale Marketplace.</small></button></div></div>
+    <div class="panel yellow"><h2 class="sectionTitle">Promo & Voucher</h2><div class="promoSubGrid"><button class="promoSubBtn active" type="button" data-promo-sub="list"><span class="ico">📋</span><b>Daftar</b><small>Lihat, edit, dan hapus promo maupun voucher.</small></button><button class="promoSubBtn" type="button" data-promo-sub="create"><span class="ico">➕</span><b>Buat Promo & Voucher</b><small>Tambah promo otomatis atau kode voucher.</small></button><button class="promoSubBtn" type="button" data-promo-sub="flash"><span class="ico">⚡</span><b>Flash Sale</b><small>Atur jadwal dan status Flash Sale Marketplace.</small></button></div></div>
     <div class="panel flashSaleAdminPanel hidden" id="promoFlashPanel">
       <h2 class="sectionTitle">⚡ Flash Sale Marketplace</h2>
       <p class="help">Produk masuk Flash Sale melalui pilihan pada <b>Promo Otomatis</b>. Promo yang dipilih hanya memotong harga ketika Flash Sale ON dan jadwalnya sedang berlangsung. Jumlah terjual dihitung hanya dari transaksi selama periode Flash Sale.</p>
@@ -227,7 +233,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         <div class="actions"><button class="btn yellow" type="submit">Simpan Promo / Voucher</button><button class="btn lime" type="button" id="resetPromoUnified">Buat Baru</button></div>
       </form>
     </div>
-    <div class="panel voucherListPanel" id="promoListPanel"><h2 class="sectionTitle">Daftar Promo & Voucher</h2><p class="help">Daftar voucher manual dan promo otomatis digabung. Lihat label warna untuk membedakan tipe. Semua bisa diedit atau dihapus kapan saja.</p><div id="promoUnifiedList"></div></div>
+    <div class="panel voucherListPanel" id="promoListPanel"><h2 class="sectionTitle">Daftar Promo & Voucher</h2><div id="promoUnifiedList"></div></div>
   </section>
   <section id="deepStats" class="section">
     <button class="btn yellow" data-tab="settings" type="button" style="margin-bottom:12px">← Kembali ke Pengaturan</button>
@@ -238,27 +244,36 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
   <section id="settings" class="section">
     <div class="panel settingsPanel settingsMenuPanel">
-      <h2 class="sectionTitle">Pengaturan</h2><p class="help">Semua pengaturan disusun dalam satu daftar agar lebih mudah ditemukan. Pilih menu yang ingin dikelola.</p>
+      <h2 class="sectionTitle">Pengaturan</h2><p class="help">Pilih bagian yang ingin dikelola.</p>
       <div class="settingsSubNav">
-        <button class="settingsSubBtn active" type="button" data-settings-sub="store"><span class="ico">🏪</span><b>Pengaturan Toko</b><small>Nama toko, logo, customer service, dan grup.</small></button>
-        <button class="settingsSubBtn" type="button" data-settings-sub="banner"><span class="ico">🖼️</span><b>Banner Promosi</b><small>Kelola gambar promosi dan kecepatan pergantian.</small></button>
-        <button class="settingsSubBtn" type="button" data-settings-sub="start"><span class="ico">▶️</span><b>Media /start</b><small>Atur gambar, stiker, dan caption pembuka bot.</small></button>
-        <button class="settingsSubBtn" data-tab="license" data-scroll-target="license" type="button"><span class="ico">🔐</span><b>Lisensi</b><small>Lihat masa aktif bot dan sisa hari penggunaan.</small></button>
-        <button class="settingsSubBtn" data-tab="deepStats" data-scroll-target="deepStats" type="button"><span class="ico">📈</span><b>Statistik Lengkap</b><small>Lihat omzet, profit bersih, stok, dan pengguna.</small></button>
-        <button class="settingsSubBtn" data-tab="backup" data-scroll-target="backup" type="button"><span class="ico">💾</span><b>Backup</b><small>Unduh, kirim, atau pulihkan data toko.</small></button>
-        <button class="settingsSubBtn" data-tab="maintenance" data-scroll-target="maintenance" type="button"><span class="ico">🧹</span><b>Maintenance</b><small>Bersihkan data lama agar database tetap ringan.</small></button>
+        <button class="settingsSubBtn" data-tab="storeSettings" type="button"><span class="ico">🏪</span><b>Pengaturan Toko</b><small>Nama toko, logo, customer service, dan grup.</small></button>
+        <button class="settingsSubBtn" data-tab="bannerSettings" type="button"><span class="ico">🖼️</span><b>Banner Promosi</b><small>Kelola gambar promosi dan kecepatan pergantian.</small></button>
+        <button class="settingsSubBtn" data-tab="startSettings" type="button"><span class="ico">▶️</span><b>Media /start</b><small>Atur gambar, stiker, dan caption pembuka bot.</small></button>
+        <button class="settingsSubBtn" data-tab="license" type="button"><span class="ico">🔐</span><b>Lisensi</b><small>Lihat masa aktif bot dan sisa hari penggunaan.</small></button>
+        <button class="settingsSubBtn" data-tab="deepStats" type="button"><span class="ico">📈</span><b>Statistik Lengkap</b><small>Lihat omzet, profit bersih, stok, dan pengguna.</small></button>
+        <button class="settingsSubBtn" data-tab="backup" type="button"><span class="ico">💾</span><b>Backup</b><small>Unduh, kirim, atau pulihkan data toko.</small></button>
+        <button class="settingsSubBtn" data-tab="maintenance" type="button"><span class="ico">🧹</span><b>Maintenance</b><small>Bersihkan data lama agar database tetap ringan.</small></button>
       </div>
     </div>
-    <div class="panel settingsPanel settingsSubPanel" id="settingsStorePanel" data-settings-panel="store">
+  </section>
+
+  <section id="storeSettings" class="section">
+    <button class="btn yellow backButton" data-tab="settings" type="button">← Kembali ke Pengaturan</button>
+    <div class="panel settingsPanel">
       <h2 class="sectionTitle">Pengaturan Toko</h2>
       <form id="storeSettingsForm" class="form">
         <div class="field"><label class="label">Nama Toko</label><input class="input" name="store_name" placeholder="Contoh: iLink.in Store"></div>
-        <div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup</label><input class="input" name="group_link" placeholder="https://t.me/grupkamu atau @grupkamu"></div></div>
+        <div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup / Channel</label><input class="input" name="group_link" placeholder="https://t.me/grupkamu atau @grupkamu"></div></div>
         <div class="field"><label class="label">Link Logo Marketplace</label><div class="linkFieldBox"><div class="linkFieldTitle">Logo Toko</div><input class="input" name="logo_url" placeholder="https://domain.com/logo.png atau link Google Drive"></div><p class="help">Logo tampil pada bagian kiri atas Marketplace.</p></div>
         <button class="btn lime" type="submit">Simpan Pengaturan Toko</button>
       </form>
     </div>
-    <div class="panel settingsPanel settingsSubPanel hidden" id="settingsBannerPanel" data-settings-panel="banner">
+  </section>
+
+  <section id="bannerSettings" class="section">
+    <button class="btn yellow backButton" data-tab="settings" type="button">← Kembali ke Pengaturan</button>
+    <div class="panel settingsPanel">
+      <h2 class="sectionTitle">Banner Promosi</h2>
       <form id="bannerSettingsForm" class="form">
         <div class="formDivider withAction"><b>Banner Promosi Marketplace</b><button class="btn lime small" id="addBannerRow" type="button">+ Tambah</button></div>
         <div id="bannerRows" class="linkRows"></div>
@@ -268,11 +283,15 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         <button class="btn lime" type="submit">Simpan Banner Promosi</button>
       </form>
     </div>
-    <div class="panel settingsPanel settingsSubPanel hidden" id="settingsStartPanel" data-settings-panel="start">
+  </section>
+
+  <section id="startSettings" class="section">
+    <button class="btn yellow backButton" data-tab="settings" type="button">← Kembali ke Pengaturan</button>
+    <div class="panel settingsPanel">
       <h2 class="sectionTitle">Media saat user membuka /start</h2>
       <form id="startMediaForm" class="form">
         <div class="row"><div class="field"><label class="label">Jenis Media</label><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="sticker">Stiker Telegram</option></select></div><div class="field"><label class="label">URL / File ID</label><input class="input" name="start_media_value" placeholder="URL HTTPS gambar atau file_id stiker"></div></div>
-        <div class="field"><label class="label">Caption /start</label><textarea class="textarea" name="start_media_caption" placeholder="Kosongkan untuk menghapus caption."></textarea></div>
+        <div class="field"><label class="label">Caption /start</label><textarea class="textarea" name="start_media_caption" placeholder="Kosongkan untuk menggunakan pesan bawaan bot."></textarea></div>
         <p class="help">Gambar memakai URL HTTPS publik atau file_id Telegram. Stiker memakai file_id stiker Telegram.</p>
         <button class="btn lime" type="submit">Simpan Media /start</button>
       </form>
@@ -326,11 +345,10 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function setPromoTargets(value){ state.promoTargets=parsePromoTargets(value); var all=document.getElementById('promoAllProducts'); var builder=document.getElementById('promoTargetBuilder'); if(all) all.checked=state.promoTargets.length===0; if(builder) builder.classList.toggle('hidden',state.promoTargets.length===0); syncPromoTargetValue(); refreshPromoTargetProducts(); renderPromoTargetList(); }
   function togglePromoTargetMode(){ var all=document.getElementById('promoAllProducts'); var builder=document.getElementById('promoTargetBuilder'); if(!all||!builder) return; if(all.checked){ state.promoTargets=[]; builder.classList.add('hidden'); } else { builder.classList.remove('hidden'); refreshPromoTargetProducts(); } syncPromoTargetValue(); renderPromoTargetList(); }
   function addSelectedPromoTarget(){ var productSelect=document.getElementById('promoTargetProduct'); var variantSelect=document.getElementById('promoTargetVariant'); var productCode=normalizePromoTargetPart(productSelect&&productSelect.value); if(!productCode) return toast('Pilih produk target terlebih dahulu',true); var variantKey=normalizePromoTargetPart(variantSelect&&variantSelect.value); var token=productCode+(variantKey?'::'+variantKey:''); var rows=state.promoTargets||[]; if(!variantKey){ rows=rows.filter(function(x){return promoTargetParts(x).productCode!==productCode;}); } else if(rows.indexOf(productCode)>=0){ return toast('Produk ini sudah dipilih untuk semua varian',true); } if(rows.indexOf(token)<0) rows.push(token); state.promoTargets=rows; var all=document.getElementById('promoAllProducts'); if(all) all.checked=false; syncPromoTargetValue(); renderPromoTargetList(); }
-  function updateSearchCounter(){ var q=searchQuery(); var el=document.getElementById('productCounter'); if(!el) return; if(!q){ el.textContent='Pencarian berlaku untuk Produk, Penjualan, Users, Promo & Voucher.'; return; } var pc=state.products.filter(function(p){return productMatches(p,q);}).length; var oc=state.orders.filter(function(o){return orderMatches(o,q);}).length; var uc=state.users.filter(function(u){return userMatches(u,q);}).length; var vc=getUnifiedPromoRows().filter(function(x){return promoMatches(x,q);}).length; el.textContent='Hasil: '+pc+' produk · '+oc+' penjualan · '+uc+' user · '+vc+' promo/voucher'; }
+  function updateSearchCounter(){ var q=searchQuery(); var el=document.getElementById('productCounter'); if(!el) return; if(!q){ el.textContent=''; el.classList.add('hidden'); return; } var pc=state.products.filter(function(p){return productMatches(p,q);}).length; var oc=state.orders.filter(function(o){return orderMatches(o,q);}).length; var uc=state.users.filter(function(u){return userMatches(u,q);}).length; var vc=getUnifiedPromoRows().filter(function(x){return promoMatches(x,q);}).length; el.textContent='Hasil: '+pc+' produk · '+oc+' penjualan · '+uc+' user · '+vc+' promo/voucher'; el.classList.remove('hidden'); }
   function rupiahShort(n){ n=Number(n||0); if(Math.abs(n)>=1000000000) return 'Rp'+(n/1000000000).toFixed(n%1000000000?1:0).replace('.0','')+'M'; if(Math.abs(n)>=1000000) return 'Rp'+(n/1000000).toFixed(n%1000000?1:0).replace('.0','')+'jt'; if(Math.abs(n)>=1000) return 'Rp'+Math.round(n/1000)+'rb'; return 'Rp'+n; }
   function setPromoSub(mode){ mode=mode||'list'; var list=document.getElementById('promoListPanel'); var create=document.getElementById('promoCreatePanel'); var flash=document.getElementById('promoFlashPanel'); if(list) list.classList.toggle('hidden', mode!=='list'); if(create) create.classList.toggle('hidden', mode!=='create'); if(flash) flash.classList.toggle('hidden', mode!=='flash'); document.querySelectorAll('[data-promo-sub]').forEach(function(btn){ btn.classList.toggle('active', btn.dataset.promoSub===mode); }); var target=mode==='create'?create:(mode==='flash'?flash:list); if(target) setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },20); }
-  function setSettingsSub(mode){ mode=mode||'store'; document.querySelectorAll('[data-settings-panel]').forEach(function(panel){ panel.classList.toggle('hidden',panel.dataset.settingsPanel!==mode); }); document.querySelectorAll('.settingsSubBtn').forEach(function(btn){ btn.classList.remove('active'); }); document.querySelectorAll('[data-settings-sub="'+mode+'"]').forEach(function(btn){ btn.classList.add('active'); }); }
-  function switchTab(id, opts){ opts=opts||{}; var settingsToolTabs={license:1,maintenance:1,backup:1,deepStats:1}; document.querySelectorAll('.tile[data-tab]').forEach(function(x){x.classList.remove('active'); x.setAttribute('aria-selected','false');}); document.querySelectorAll('.section').forEach(function(x){x.classList.remove('active');}); document.querySelectorAll('.tile[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn').forEach(function(x){x.classList.remove('active');}); if(settingsToolTabs[id]){ document.querySelectorAll('.navTiles .tile[data-tab="settings"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active');}); } var section=document.getElementById(id); if(section) section.classList.add('active'); if(id==='settings') setSettingsSub('store'); try{ localStorage.setItem('admin_active_tab', id); }catch(e){} var target=document.getElementById(opts.scrollTarget||id)||section; if(opts.smooth && target){ setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },25); } else { window.scrollTo(0,0); } }
+  function switchTab(id, opts){ opts=opts||{}; var settingsToolTabs={storeSettings:1,bannerSettings:1,startSettings:1,license:1,maintenance:1,backup:1,deepStats:1}; document.querySelectorAll('.tile[data-tab]').forEach(function(x){x.classList.remove('active'); x.setAttribute('aria-selected','false');}); document.querySelectorAll('.section').forEach(function(x){x.classList.remove('active');}); document.querySelectorAll('.tile[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn').forEach(function(x){x.classList.remove('active');}); if(settingsToolTabs[id]){ document.querySelectorAll('.navTiles .tile[data-tab="settings"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active');}); } var section=document.getElementById(id); if(section) section.classList.add('active'); try{ localStorage.setItem('admin_active_tab', id); }catch(e){} var target=document.getElementById(opts.scrollTarget||id)||section; if(opts.smooth && target){ setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },25); } else { window.scrollTo(0,0); } }
   function openModal(title, html){ document.getElementById('modalTitle').textContent=title; document.getElementById('modalBody').innerHTML=html; document.getElementById('modal').classList.add('show'); }
   function closeModal(){ document.getElementById('modal').classList.remove('show'); document.getElementById('modalBody').innerHTML=''; }
   document.getElementById('modalClose').onclick=closeModal;
@@ -667,15 +685,28 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     if(input){ input.oninput=updatePreview; updatePreview(); }
     if(f) f.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(f); await post('update-order-cost',{order_ref:o.order_ref,cost_total:d.cost_total}); closeModal(); };
   }
+  function orderStatusValue(o){ return String((o&&o.status)||'completed').toLowerCase()==='canceled'?'canceled':'completed'; }
+  function orderStatusLabel(o){ return orderStatusValue(o)==='canceled'?'CANCELED':'COMPLETED'; }
+  function openOrderStatusConfirm(ref){
+    var o=state.orders.find(function(x){return String(x.order_ref||'')===String(ref||'');});
+    if(!o) return;
+    var current=orderStatusValue(o);
+    var next=current==='canceled'?'completed':'canceled';
+    var isCancel=next==='canceled';
+    var body='<div class="statusConfirm"><div class="statusConfirmIcon">'+(isCancel?'✕':'✓')+'</div><h3>'+(isCancel?'Batalkan penjualan ini?':'Kembalikan menjadi selesai?')+'</h3><p>'+(isCancel?'Status akan menjadi <b>CANCELED</b>. Produk atau stok yang sudah terkirim tidak dikembalikan otomatis.':'Status akan dikembalikan menjadi <b>COMPLETED</b>.')+'</p><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(o.order_ref||'-'))+'<br><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="actions"><button class="btn '+(isCancel?'red':'lime')+'" id="confirmOrderStatus" type="button">'+(isCancel?'Ya, Ubah ke Canceled':'Ya, Ubah ke Completed')+'</button><button class="btn" id="cancelOrderStatus" type="button">Tidak Jadi</button></div></div>';
+    openModal('Konfirmasi Status Penjualan',body);
+    document.getElementById('cancelOrderStatus').onclick=closeModal;
+    document.getElementById('confirmOrderStatus').onclick=async function(){ await post('update-order-status',{order_ref:o.order_ref,status:next}); closeModal(); };
+  }
   function openOrderProducts(ref){
     var o=state.orders.find(function(x){return String(x.order_ref||'')===String(ref||'');});
     if(!o) return;
     var user=o.username?'@'+esc(o.username):esc(o.telegram_id);
     var text=orderProductText(o);
-    openModal('Detail Penjualan', '<div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(o.order_ref||'-'))+'</div><div class="detailItem"><b>User</b><br>'+user+'</div><div class="detailItem"><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(o.quantity||1)+' item</div><div class="detailItem"><b>Total Dibayar</b><br>'+rupiah(o.total_price)+'</div><div class="detailItem"><b>Fee Pembayaran</b><br>'+rupiah(o.payment_fee||0)+'</div><div class="detailItem"><b>Status</b><br>COMPLETED</div><div class="detailItem"><b>Tanggal</b><br>'+new Date(o.created_at).toLocaleString('id-ID')+'</div></div><div class="field" style="margin-top:12px"><label class="label">Produk yang diterima pembeli</label><textarea class="textarea tall" readonly>'+esc(text)+'</textarea></div><button class="btn yellow" type="button" id="editOrderCostFromDetail">Atur / Koreksi Modal Checkout</button>');
+    openModal('Detail Penjualan', '<div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(o.order_ref||'-'))+'</div><div class="detailItem"><b>User</b><br>'+user+'</div><div class="detailItem"><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(o.quantity||1)+' item</div><div class="detailItem"><b>Total Dibayar</b><br>'+rupiah(o.total_price)+'</div><div class="detailItem"><b>Fee Pembayaran</b><br>'+rupiah(o.payment_fee||0)+'</div><div class="detailItem"><b>Status</b><br>'+esc(orderStatusLabel(o))+'</div><div class="detailItem"><b>Tanggal</b><br>'+new Date(o.created_at).toLocaleString('id-ID')+'</div></div><div class="field" style="margin-top:12px"><label class="label">Produk yang diterima pembeli</label><textarea class="textarea tall" readonly>'+esc(text)+'</textarea></div><button class="btn yellow" type="button" id="editOrderCostFromDetail">Atur / Koreksi Modal Checkout</button>');
     var edit=document.getElementById('editOrderCostFromDetail'); if(edit) edit.onclick=function(){ openOrderCost(o.order_ref); };
   }
-  function orderMatches(o,q){ return textMatch([o.order_ref,o.product_name,o.variant_name,o.username,o.telegram_id,o.total_price,o.quantity,o.created_at,o.cost_total,o.profit_amount,orderProductText(o)],q); }
+  function orderMatches(o,q){ return textMatch([o.order_ref,o.product_name,o.variant_name,o.username,o.telegram_id,o.total_price,o.quantity,o.created_at,o.cost_total,o.profit_amount,o.status,orderProductText(o)],q); }
   function renderOrders(){
     var q=searchQuery(); var rows=state.orders.filter(function(o){return orderMatches(o,q);}); updateSearchCounter();
     document.getElementById('orderList').innerHTML=rows.map(function(o){
@@ -683,13 +714,29 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var rawRef=String(o.order_ref||('INV-'+String(o.created_at||'').replace(/[^0-9]/g,'').slice(-10)));
       var ref=esc(displayRef(rawRef));
       var name=esc(o.product_name)+(o.variant_name?' <span class="chip yellow">'+esc(o.variant_name)+'</span>':'');
-      return '<article class="orderCard"><div class="orderRef">'+ref+'</div><b class="orderTitle">'+name+'</b><span class="statusDone">COMPLETED</span><div class="orderMeta">×'+esc(o.quantity||1)+' · Total <b>'+rupiah(o.total_price)+'</b><br>Fee pembayaran: '+rupiah(o.payment_fee||0)+'<br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div><div class="actions"><button class="btn small purple" type="button" data-order-products="'+esc(rawRef)+'">Detail</button><button class="btn small yellow" type="button" data-order-cost="'+esc(rawRef)+'">Atur Modal</button></div></article>';
+      var canceled=orderStatusValue(o)==='canceled';
+      return '<article class="orderCard'+(canceled?' orderCanceled':'')+'"><button class="orderStatusButton '+(canceled?'canceled':'completed')+'" type="button" data-order-status="'+esc(rawRef)+'">'+orderStatusLabel(o)+'</button><div class="orderRef">'+ref+'</div><b class="orderTitle">'+name+'</b><div class="orderMeta">×'+esc(o.quantity||1)+' · Total <b>'+rupiah(o.total_price)+'</b><br>Fee pembayaran: '+rupiah(o.payment_fee||0)+'<br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div><div class="actions"><button class="btn small purple" type="button" data-order-products="'+esc(rawRef)+'">Detail</button><button class="btn small yellow" type="button" data-order-cost="'+esc(rawRef)+'">Atur Modal</button></div></article>';
     }).join('')||'<div class="empty">Belum ada order.</div>';
     document.querySelectorAll('[data-order-products]').forEach(function(btn){btn.onclick=function(){openOrderProducts(btn.dataset.orderProducts);};});
     document.querySelectorAll('[data-order-cost]').forEach(function(btn){btn.onclick=function(){openOrderCost(btn.dataset.orderCost);};});
+    document.querySelectorAll('[data-order-status]').forEach(function(btn){btn.onclick=function(){openOrderStatusConfirm(btn.dataset.orderStatus);};});
   }
   function userMatches(u,q){ return textMatch([u.telegram_id,u.username,u.first_name,u.transaction_count,u.spending],q); }
-  function renderUsers(sortMode){ if(sortMode) state.userSort=sortMode; var q=searchQuery(); var rows=state.users.filter(function(u){return userMatches(u,q);}); updateSearchCounter(); if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);}); else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);}); document.getElementById('userList').innerHTML=rows.map(function(u){return '<tr><td data-label="ID">'+esc(u.telegram_id)+'</td><td data-label="User">'+(u.username?'@'+esc(u.username):esc(u.first_name||'-'))+'</td><td data-label="Transaksi">'+esc(u.transaction_count||0)+'</td><td data-label="Spending">'+rupiah(u.spending||0)+'</td><td data-label="Aksi"><button class="btn small red" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></td></tr>';}).join('')||'<tr class="userEmptyRow"><td colspan="5">Belum ada user.</td></tr>'; document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};}); document.querySelectorAll('[data-user-sort]').forEach(function(btn){btn.onclick=function(){ renderUsers(btn.dataset.userSort); };}); }
+  function renderUsers(sortMode){
+    if(sortMode) state.userSort=sortMode;
+    var q=searchQuery();
+    var rows=state.users.filter(function(u){return userMatches(u,q);});
+    updateSearchCounter();
+    if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);});
+    else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);});
+    document.getElementById('userList').innerHTML=rows.map(function(u){
+      var display=u.username?'@'+esc(u.username):esc(u.first_name||'Tanpa username');
+      var initial=String(u.first_name||u.username||'U').slice(0,1).toUpperCase();
+      return '<article class="userCard"><div class="userAvatar">'+esc(initial)+'</div><div class="userMain"><b>'+display+'</b><small>ID '+esc(u.telegram_id)+'</small></div><div class="userMetric"><span>Transaksi</span><b>'+esc(u.transaction_count||0)+'</b></div><div class="userMetric"><span>Spending</span><b>'+rupiah(u.spending||0)+'</b></div><button class="btn small red userDelete" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></article>';
+    }).join('')||'<div class="empty">Belum ada user.</div>';
+    document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};});
+    document.querySelectorAll('[data-user-sort]').forEach(function(btn){btn.onclick=function(){ renderUsers(btn.dataset.userSort); };});
+  }
   function updatePromoFlashSaleControl(){ var f=document.getElementById('promoUnifiedForm'); var box=document.getElementById('promoFlashSaleBox'); var check=document.getElementById('promoFlashSale'); if(!f||!box||!check)return; var isAuto=f.promo_kind.value==='auto'; box.classList.toggle('hidden',!isAuto); if(!isAuto) check.checked=false; }
   function promoUnifiedReset(){
     var f=document.getElementById('promoUnifiedForm'); if(!f) return;
@@ -832,7 +879,6 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var refreshLicense=document.getElementById('refreshLicense'); if(refreshLicense) refreshLicense.onclick=async function(){ state.license=await apiSafe('license-status',{}); renderLicense(); toast('Status lisensi diperbarui'); }; try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)) switchTab(lastTab); }catch(e){}
   document.getElementById('search').oninput=function(){ renderProducts(); renderOrders(); renderUsers(); renderUnifiedPromos(); };
   document.querySelectorAll('[data-promo-sub]').forEach(function(btn){btn.onclick=function(){ if(btn.dataset.promoSub==='create') promoUnifiedReset(); else setPromoSub(btn.dataset.promoSub||'list'); };});
-  document.querySelectorAll('[data-settings-sub]').forEach(function(btn){btn.onclick=function(){ setSettingsSub(btn.dataset.settingsSub||'store'); };});
   document.getElementById('addForm').onsubmit=async function(e){
     e.preventDefault();
     var variants=compileAddVariants();
@@ -882,7 +928,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var importBackupForm=document.getElementById('importBackupForm'); if(importBackupForm) importBackupForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); if(!String(d.backup||'').trim()) return toast('Paste isi backup JSON dulu', true); if(confirm('Import backup sekarang? Data dengan kode/ID sama akan ditimpa.')){ await post('backup-import',{backup:d.backup,include_transactions:!!d.include_transactions}); e.target.reset(); }};
   var promoUnifiedForm=document.getElementById('promoUnifiedForm'); if(promoUnifiedForm) promoUnifiedForm.onsubmit=async function(e){ e.preventDefault(); var all=document.getElementById('promoAllProducts'); if(all&&!all.checked&&!(state.promoTargets||[]).length) return toast('Tambahkan minimal satu produk atau varian target',true); syncPromoTargetValue(); var d=formDataRaw(e.target); var isAuto=d.promo_kind==='auto'; var flashCheck=document.getElementById('promoFlashSale'); var payload={ code:d.code, kode:d.code, current_code:d.current_code, name:d.name||d.code, discount_type:d.discount_type, discount_value:d.discount_value, potongan:d.discount_value, produk:d.products, products:d.products, min_qty:d.min_qty||1, min_spend:d.min_spend||0, usage_limit:d.usage_limit, limit:d.usage_limit, description:d.description, active:d.active, start_at:d.start_at||null, end_at:d.end_at||null, expires_at:d.end_at||null, flash_sale:isAuto&&flashCheck&&flashCheck.checked }; if(isAuto){ await post('promo-save',payload); } else { await post(d.current_code?'edit-voucher':'add-voucher',payload); } promoUnifiedReset(); setPromoSub('list'); };
   var resetPromoUnified=document.getElementById('resetPromoUnified'); if(resetPromoUnified) resetPromoUnified.onclick=promoUnifiedReset;
-  var promoKind=document.querySelector('#promoUnifiedForm [name="promo_kind"]'); if(promoKind) promoKind.onchange=updatePromoFlashSaleControl; updatePromoFlashSaleControl(); setPromoSub('list'); setSettingsSub('store');
+  var promoKind=document.querySelector('#promoUnifiedForm [name="promo_kind"]'); if(promoKind) promoKind.onchange=updatePromoFlashSaleControl; updatePromoFlashSaleControl(); setPromoSub('list');
   var promoAllProducts=document.getElementById('promoAllProducts'); if(promoAllProducts) promoAllProducts.onchange=togglePromoTargetMode;
   var promoTargetProduct=document.getElementById('promoTargetProduct'); if(promoTargetProduct) promoTargetProduct.onchange=refreshPromoTargetVariants;
   var addPromoTarget=document.getElementById('addPromoTarget'); if(addPromoTarget) addPromoTarget.onclick=addSelectedPromoTarget;

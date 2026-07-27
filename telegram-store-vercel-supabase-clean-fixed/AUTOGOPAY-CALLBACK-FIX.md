@@ -12,7 +12,7 @@ Urutan pemasangan:
 
 1. Jalankan SQL v62.
 2. Deploy v62 dan tunggu Ready.
-3. Pastikan `/api/payment-webhook` menampilkan `v62-security-reliability-fix`.
+3. Pastikan `/api/payment-webhook` menampilkan `v63-marketplace-dashboard-polish`.
 4. Jalankan `/api/setup-autogopay?secret=...`.
 5. Aktifkan `/api/payment-cron` melalui scheduler dengan header Bearer `CRON_SECRET`.
 6. Buat invoice baru untuk test.

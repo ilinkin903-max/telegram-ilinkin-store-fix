@@ -48,12 +48,23 @@ create table if not exists public.transactions (
   cost_source text not null default 'unset',
   cost_updated_at timestamptz,
   profit_amount integer not null default 0,
+  status text not null default 'completed',
+  canceled_at timestamptz,
+  status_updated_at timestamptz not null default now(),
   order_ref text unique,
   created_at timestamptz not null default now()
 );
 
 create index if not exists transactions_telegram_id_idx on public.transactions (telegram_id);
 create index if not exists transactions_created_at_idx on public.transactions (created_at desc);
+create index if not exists transactions_status_created_at_idx on public.transactions (status, created_at desc);
+
+alter table public.transactions
+  drop constraint if exists transactions_status_check;
+
+alter table public.transactions
+  add constraint transactions_status_check
+  check (status in ('completed', 'canceled'));
 
 create table if not exists public.pending_orders (
   id uuid primary key default gen_random_uuid(),
@@ -102,6 +113,9 @@ alter table public.transactions add column if not exists cost_total integer not 
 alter table public.transactions add column if not exists cost_source text not null default 'unset';
 alter table public.transactions add column if not exists cost_updated_at timestamptz;
 alter table public.transactions add column if not exists profit_amount integer not null default 0;
+alter table public.transactions add column if not exists status text not null default 'completed';
+alter table public.transactions add column if not exists canceled_at timestamptz;
+alter table public.transactions add column if not exists status_updated_at timestamptz not null default now();
 alter table public.pending_orders add column if not exists cost_unit integer not null default 0;
 alter table public.pending_orders add column if not exists cost_total integer not null default 0;
 alter table public.pending_orders add column if not exists cost_source text not null default 'unset';

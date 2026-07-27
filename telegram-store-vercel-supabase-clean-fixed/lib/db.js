@@ -995,6 +995,29 @@ async function updateTransactionCost(orderRef, costTotalInput) {
 }
 
 
+async function updateTransactionStatus(orderRef, statusInput) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) throw new Error('Invoice transaksi wajib diisi.');
+  const status = String(statusInput || '').trim().toLowerCase();
+  if (!['completed', 'canceled'].includes(status)) throw new Error('Status transaksi tidak valid.');
+  const nowIso = new Date().toISOString();
+  const payload = {
+    status,
+    status_updated_at: nowIso,
+    canceled_at: status === 'canceled' ? nowIso : null
+  };
+  const { data, error } = await sb().from('transactions').update(payload).eq('order_ref', ref).select('*').maybeSingle();
+  if (error) {
+    const message = String(error.message || error);
+    if (/status_updated_at|canceled_at|column.*status/i.test(message)) {
+      throw new Error('Kolom status transaksi v63 belum tersedia. Jalankan supabase/update-v63-ui-order-status.sql terlebih dahulu.');
+    }
+    throw error;
+  }
+  return data;
+}
+
+
 function normalizePollOptions(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => {
@@ -1658,6 +1681,7 @@ module.exports = {
   listTransactionsByUser,
   getTransactionByOrderRef,
   updateTransactionCost,
+  updateTransactionStatus,
   getUserByTelegramId,
   completeOrder,
   normalizeBulkPrices,

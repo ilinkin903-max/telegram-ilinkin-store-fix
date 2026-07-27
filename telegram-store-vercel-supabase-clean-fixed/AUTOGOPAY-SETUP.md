@@ -4,7 +4,7 @@
 2. Tambahkan `PAYMENT_PROVIDER=autogopay`, `AUTOGOPAY_API_KEY`, `WEBHOOK_SECRET`, `CRON_SECRET`, dan URL publik pada Vercel Production.
 3. Pastikan `MINIAPP_DEV_MODE=false` atau hapus dari Production.
 4. Deploy v62 dan buka `/api/payment-webhook`.
-5. Pastikan versi `v62-security-reliability-fix` dan provider `autogopay`.
+5. Pastikan versi `v63-marketplace-dashboard-polish` dan provider `autogopay`.
 6. Daftarkan callback melalui:
 
 ```text

@@ -365,21 +365,21 @@ async function editMessage(query, text, options = {}) {
 
 async function buildHomeText(from) {
   const stats = await db.getStats();
-  return `Halo, *${escapeMarkdownText(from.first_name || 'Kak')}* 👋
+  return `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
 ` +
-    `Selamat datang di *${escapeMarkdownText(config.botName)}*
+    `Selamat datang di <b>${escapeHtml(config.botName)}</b>
 ` +
-    `- 👥 Total User: *${stats.users} User*
+    `- 👥 Total User: <b>${stats.users} User</b>
 ` +
-    `- 🛍️ Total Transaksi: *${stats.orders} Transaksi*
+    `- 🛍️ Total Transaksi: <b>${stats.orders} Transaksi</b>
 ` +
-    `- 📦 Stok Tersedia: *${stats.stokTersedia}*
+    `- 📦 Stok Tersedia: <b>${stats.stokTersedia}</b>
 ` +
-    `- 📦 Stok Terjual: *${stats.stokTerjual}*
+    `- 📦 Stok Terjual: <b>${stats.stokTerjual}</b>
 
 ` +
-    `Silahkan pilih tombol dibawah ini!`;
+    `Silakan pilih tombol di bawah ini!`;
 }
 
 async function editHome(query, req) {
@@ -388,11 +388,11 @@ async function editHome(query, req) {
   try { text = await buildHomeText(query.from); }
   catch (e) {
     console.error('build home gagal:', e.message);
-    text = `Halo, *${escapeMarkdownText(query.from.first_name || 'Kak')}* 👋\n\nSelamat datang di *${escapeMarkdownText(config.botName)}*\n\nSilahkan pilih tombol dibawah ini!`;
+    text = `Halo, <b>${escapeHtml(query.from.first_name || 'Kak')}</b> 👋\n\nSelamat datang di <b>${escapeHtml(config.botName)}</b>\n\nSilakan pilih tombol di bawah ini!`;
   }
   const settings = await db.getShopSettings().catch(() => ({}));
   return editMessage(query, text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: homeKeyboard(req, query.from.id, settings)
   });
 }
@@ -402,21 +402,21 @@ async function sendHome(chatId, from, req) {
   let stats = { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 };
   try { stats = await db.getStats(); }
   catch (e) { console.error('getStats gagal:', e.message); }
-  const text = `Halo, *${escapeMarkdownText(from.first_name || 'Kak')}* 👋
+  const text = `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
 ` +
-    `Selamat datang di *${escapeMarkdownText(config.botName)}*
+    `Selamat datang di <b>${escapeHtml(config.botName)}</b>
 ` +
-    `- 👥 Total User: *${stats.users || 0} User*
+    `- 👥 Total User: <b>${stats.users || 0} User</b>
 ` +
-    `- 🛍️ Total Transaksi: *${stats.orders || 0} Transaksi*
+    `- 🛍️ Total Transaksi: <b>${stats.orders || 0} Transaksi</b>
 ` +
-    `- 📦 Stok Tersedia: *${stats.stokTersedia || 0}*
+    `- 📦 Stok Tersedia: <b>${stats.stokTersedia || 0}</b>
 ` +
-    `- 📦 Stok Terjual: *${stats.stokTerjual || 0}*
+    `- 📦 Stok Terjual: <b>${stats.stokTerjual || 0}</b>
 
 ` +
-    `Silahkan pilih tombol dibawah ini!`;
+    `Silakan pilih tombol di bawah ini!`;
 
   const settings = await db.getShopSettings().catch(() => ({}));
   const reply_markup = homeKeyboard(req, from.id, settings);
@@ -428,7 +428,7 @@ async function sendHome(chatId, from, req) {
     try {
       return await tg.sendPhotoRef(chatId, mediaValue, {
         caption: mediaCaption || text,
-        parse_mode: mediaCaption ? undefined : 'Markdown',
+        parse_mode: mediaCaption ? undefined : 'HTML',
         reply_markup
       });
     } catch (error) {
@@ -445,7 +445,7 @@ async function sendHome(chatId, from, req) {
   }
 
   return tg.sendMessage(chatId, text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup
   });
 }
@@ -592,6 +592,7 @@ async function sendHistory(chatId, userId, query = null) {
     `   Kode: \`${escapeMarkdownText(item.product_code)}\`\n` +
     `   Jumlah: *${item.quantity}*\n` +
     `   Harga: *${formatRupiah(item.total_price)}*\n` +
+    `   Status: *${String(item.status || 'completed').toLowerCase() === 'canceled' ? 'CANCELED' : 'COMPLETED'}*\n` +
     `   Tanggal: *${formatWIB(item.created_at)}*`
   )).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
@@ -656,6 +657,7 @@ async function sendCheckOrder(chatId, userId, query = null) {
       `   Invoice: \`${escapeMarkdownText(paymentService.displayPaymentReference(item.order_ref || '-'))}\`\n` +
       `   Jumlah: *${Number(item.quantity || 0)}*\n` +
       `   Total: *${formatRupiah(item.total_price || 0)}*\n` +
+      `   Status: *${String(item.status || 'completed').toLowerCase() === 'canceled' ? 'CANCELED' : 'COMPLETED'}*\n` +
       `   Tanggal: *${formatWIB(item.created_at)}*`
     )).join('\n\n');
   }
