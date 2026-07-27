@@ -1,23 +1,21 @@
-v63 — Marketplace & Dashboard Polish
+iLink.in Store v64 — TEST REPORT
+================================
+Version: v64-ui-promo-bot-menu-broadcast
 
-Hasil lokal: 79/79 unit/static tests berhasil.
+Checks completed:
+- JavaScript syntax checks: PASS
+- Node tests: 84/84 PASS
+- Percentage discount aliases and calculation: PASS
+- Promo/voucher percentage validation: PASS
+- Compact promo UI markers: PASS
+- Sales status inline layout markers: PASS
+- Responsive Users layout markers: PASS
+- Bot menu mode settings: PASS
+- Broadcast Order Sekarang markup: PASS
+- Existing v62/v63 reliability tests: PASS
 
-Pemeriksaan mencakup:
-- Sintaks seluruh API, library, Marketplace, dashboard, dan script.
-- Perlindungan v62: stok atomik, lock fail-closed, payment recovery, QRIS token, keamanan Mini App, dan statistik database.
-- Keselarasan nama, varian, harga, serta jumlah terjual pada kartu Flash Sale.
-- Dropdown pengurutan mobile yang lebih pendek tanpa label “Urutkan”.
-- Footer baru berisi keunggulan toko dan blok biru Telegram.
-- Teks bantuan dashboard yang diminta sudah dihapus.
-- Status transaksi COMPLETED/CANCELED, endpoint API, confirmation modal, dan migration SQL v63.
-- Tampilan Users ringkas.
-- Pengaturan Toko, Banner Promosi, dan Media /start sebagai halaman submenu terpisah.
-- Pesan /start menggunakan HTML sehingga titik pada iLink.in Store tidak didahului backslash.
-- Marketplace dan dashboard tidak memiliki ID HTML statis yang duplikat.
-
-Kondisi pengujian:
-- Container tidak mempunyai akses internet untuk mengunduh dependency npm.
-- Unit tests dijalankan menggunakan stub dependency lokal di luar folder proyek dan tidak disertakan dalam ZIP.
-- package.json dan package-lock.json produksi tetap memakai dependency resmi.
-- Migration SQL belum dijalankan pada Supabase produksi.
-- AutoGoPay, webhook, Telegram, dan Vercel nyata perlu diuji setelah deployment.
+Notes:
+- Tests were run with temporary local dependency stubs because the execution environment had no package download access.
+- Temporary node_modules stubs are removed from the final ZIP.
+- SQL migration was reviewed statically and was not executed against the user's production Supabase project.
+- Real Telegram, AutoGoPay, Supabase, and Vercel integration must be tested after deployment.

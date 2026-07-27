@@ -1,57 +1,56 @@
-# iLink.in Store v63 — Marketplace & Dashboard Polish
+# iLink.in Store v64 — Promo Persen, Menu Bot & Broadcast Order
 
-v63 merupakan pembaruan dari v62. Perbaikan keamanan, stok atomik, recovery pembayaran, AutoGoPay, promo Flash Sale, QRIS, dan dashboard reseller tetap dipertahankan.
+v64 merupakan pembaruan dari v63. Seluruh perbaikan keamanan v62, stok atomik, payment recovery, AutoGoPay, Flash Sale, QRIS, dan status penjualan v63 tetap dipertahankan.
 
 ## Ringkasan perubahan
 
-- Posisi harga dan jumlah terjual pada seluruh kartu Flash Sale dibuat sejajar.
-- Dropdown pengurutan lebih pendek di HP dan label “Urutkan” dihapus.
-- Keunggulan toko dipindahkan ke footer setelah deskripsi Marketplace.
-- Grup/channel Telegram tampil sebagai blok biru dengan logo Telegram.
-- Dashboard reseller dibersihkan dari teks bantuan yang berulang.
-- Status transaksi tampil di kanan atas kartu Penjualan.
-- Transaksi `COMPLETED` dapat diubah menjadi `CANCELED` melalui konfirmasi.
-- Tampilan Users lebih ringkas.
-- Pengaturan Toko, Banner Promosi, dan Media `/start` menjadi halaman submenu terpisah.
-- Nama toko pada `/start` tidak lagi menampilkan backslash sebelum titik.
+- Badge `COMPLETED`/`CANCELED` pada Penjualan dibuat segaris dengan nama produk atau varian.
+- Kalimat konfirmasi perubahan status dibuat lebih jelas dan tombolnya dirapikan.
+- Kartu Users dibuat lebih padat; transaksi dan spending tidak menumpuk pada HP maupun tablet.
+- Tombol Hapus Users diperkecil pada layar kecil.
+- Tampilan ukuran sedang mengikuti tata letak ringkas seperti HP.
+- Daftar promo dan voucher dibuat lebih ringkas dan mudah dipindai.
+- Submenu Promo disederhanakan menjadi **Daftar**, **Buat**, dan **Flash Sale**.
+- Diskon nominal dan diskon persen sekarang dinormalisasi serta dihitung dengan benar untuk promo otomatis maupun voucher.
+- Pengaturan Toko memiliki opsi tombol bot: Marketplace, Daftar Produk, atau keduanya.
+- Broadcast dapat diberi tombol opsional **🛒 Order Sekarang** menuju Marketplace atau daftar produk bot.
 
-## 1. Jalankan SQL v62 bila belum pernah
+## 1. Urutan SQL
 
-Apabila database belum pernah diperbarui ke v62, jalankan terlebih dahulu:
-
-```text
-supabase/update-v62-security-reliability.sql
-```
-
-SQL tersebut diperlukan untuk stok atomik, lock, statistik, dan payment recovery.
-
-## 2. Jalankan SQL v63 — wajib untuk upgrade dari v62
-
-Buka:
+Untuk database yang sudah memakai v63:
 
 ```text
 Supabase → SQL Editor → New query
 ```
 
-Jalankan seluruh isi file:
+Jalankan seluruh isi:
 
 ```text
+supabase/update-v64-percentage-discount.sql
+```
+
+SQL v64:
+
+- menormalisasi tipe `percent`, `percentage`, `persen`, dan `%` menjadi `percent`;
+- memperbaiki data voucher lama yang masih memakai kolom `discount`;
+- membatasi diskon persen maksimal 100%;
+- menambahkan validasi database agar nilai diskon berikutnya tetap konsisten.
+
+SQL tersebut aman dijalankan berulang kali.
+
+Jika belum pernah memakai v62/v63, jalankan berurutan:
+
+```text
+supabase/update-v62-security-reliability.sql
 supabase/update-v63-ui-order-status.sql
+supabase/update-v64-percentage-discount.sql
 ```
 
-Pastikan editor SQL hanya berisi perintah dari file. Jangan ikut menempelkan waktu chat, judul pesan, atau pembungkus Markdown seperti `````sql``.
+Untuk instalasi baru dari nol, jalankan `supabase/schema.sql`, kemudian jalankan SQL v64 agar data diskon dan constraint menggunakan format terbaru.
 
-SQL v63 menambahkan status administratif transaksi. Tanpa migration ini, tombol perubahan `COMPLETED` / `CANCELED` tidak dapat digunakan.
+## 2. Environment Variables
 
-Untuk instalasi baru dari nol, cukup jalankan:
-
-```text
-supabase/schema.sql
-```
-
-## 3. Environment Variables
-
-Gunakan variabel Production yang sudah dipakai pada v62, termasuk:
+Tidak ada Environment Variable wajib baru pada v64. Pertahankan seluruh variabel Production yang sudah digunakan, misalnya:
 
 ```env
 PAYMENT_PROVIDER=autogopay
@@ -69,18 +68,18 @@ QR_DOWNLOAD_SECRET=RAHASIA_UNDUH_QRIS_ANDA
 MINIAPP_DEV_MODE=false
 ```
 
-Gunakan nilai secret yang berbeda dan jangan menyimpannya di GitHub.
+Jangan menyimpan API key atau secret di GitHub.
 
-## 4. Upload dan deployment
+## 3. Upload dan deployment
 
-1. Ekstrak ZIP v63.
+1. Ekstrak ZIP v64.
 2. Unggah seluruh isi folder proyek ke root repository GitHub.
 3. Ganti file lama dan commit.
 4. Buka **Vercel → Deployments → Redeploy**.
-5. Redeploy tanpa build cache.
-6. Tunggu deployment berstatus **Ready**.
+5. Pilih redeploy tanpa build cache.
+6. Tunggu status deployment menjadi **Ready**.
 
-## 5. Pastikan versi aktif
+## 4. Pastikan versi aktif
 
 Buka:
 
@@ -93,78 +92,127 @@ Respons harus memuat:
 ```json
 {
   "ok": true,
-  "version": "v63-marketplace-dashboard-polish",
+  "version": "v64-ui-promo-bot-menu-broadcast",
   "active_provider": "autogopay"
 }
 ```
 
-## 6. Daftarkan ulang callback bila deployment/provider berubah
+Jika masih menampilkan v63, periksa Production deployment dan redeploy tanpa cache.
 
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/setup-autogopay?secret=WEBHOOK_SECRET_ANDA
-```
-
-Webhook Telegram dapat dipasang ulang melalui:
-
-```text
-https://telegram-ilinkin-store-fix.vercel.app/api/set-webhook?secret=WEBHOOK_SECRET_ANDA
-```
-
-## 7. Cara menggunakan status CANCELED
+## 5. Mengatur tombol menu bot
 
 Buka:
 
 ```text
-Dashboard Reseller → Penjualan
+Dashboard Reseller → Pengaturan → Pengaturan Toko
 ```
 
-Tekan badge `COMPLETED` di kanan atas kartu, lalu konfirmasi perubahan ke `CANCELED`.
+Pada **Tombol Utama di Bot**, pilih salah satu:
 
-Penting:
+- **Marketplace + Daftar Produk**
+- **Marketplace saja**
+- **Daftar Produk saja**
 
-- Status ini untuk pencatatan administratif.
-- Produk, akun, voucher, atau stok yang sudah dikirim tidak dikembalikan otomatis.
-- Saldo/refund gateway juga tidak dilakukan otomatis.
-- Jika pembatalan memerlukan refund atau pengembalian stok, lakukan proses tersebut secara manual dan pastikan data produk masih aman digunakan kembali.
+Simpan pengaturan. Pilihan diterapkan pada menu `/start`. Perintah `/produk` tetap dapat dipakai meskipun tombol Daftar Produk disembunyikan.
 
-Status dapat dikembalikan ke `COMPLETED` dengan menekan badge merah `CANCELED`.
+## 6. Menggunakan diskon persen
 
-## 8. Pengujian setelah deployment
+Buka:
 
-1. Buka Marketplace pada HP dan desktop.
-2. Pastikan Flash Sale sejajar walaupun sebagian promo tidak mempunyai nama varian.
-3. Pastikan dropdown pengurutan sejajar dengan judul katalog di HP.
-4. Periksa footer, blok Telegram, dan link grup/channel.
-5. Buka dashboard reseller dan periksa seluruh submenu Pengaturan.
-6. Ubah satu transaksi uji dari `COMPLETED` ke `CANCELED`, kemudian kembalikan lagi.
-7. Buka bot dan kirim `/start`; nama harus tampil `iLink.in Store` tanpa backslash.
-8. Lakukan satu transaksi uji lengkap untuk memastikan fitur pembayaran v62 tetap berjalan.
+```text
+Dashboard Reseller → Promo → Buat
+```
+
+Pilih:
+
+```text
+Tipe Diskon: Persen
+```
+
+Lalu isi nilai antara `1` sampai `100`. Contoh:
+
+```text
+10
+```
+
+berarti potongan 10% dari subtotal yang memenuhi target, jumlah minimum, jadwal, dan syarat belanja.
+
+Contoh subtotal Rp50.000 dengan diskon 10%:
+
+```text
+Potongan: Rp5.000
+Total setelah diskon: Rp45.000
+```
+
+Aturan ini berlaku untuk promo otomatis dan voucher manual.
+
+## 7. Menambahkan tombol Order Sekarang pada broadcast
+
+Buka:
+
+```text
+Dashboard Reseller → Broadcast
+```
+
+Aktifkan:
+
+```text
+Tambahkan tombol “Order Sekarang”
+```
+
+Kemudian pilih tujuan:
+
+- **Buka Marketplace** — tombol membuka website Marketplace.
+- **Buka Daftar Produk Bot** — tombol menjalankan daftar produk di Telegram.
+
+Tombol dapat dipakai bersama broadcast teks, foto, atau stiker. Jika tidak dibutuhkan, biarkan opsi tersebut nonaktif.
+
+## 8. Perubahan status Penjualan
+
+Pada kartu Penjualan, badge status berada segaris dengan nama produk/varian. Tekan badge untuk membuka konfirmasi:
+
+- `COMPLETED` dapat ditandai menjadi `CANCELED`.
+- `CANCELED` dapat dikembalikan menjadi `COMPLETED`.
+
+Perubahan ini hanya untuk pencatatan administratif. Sistem tidak otomatis melakukan refund atau mengembalikan produk yang sudah terkirim.
+
+## 9. Pengujian setelah deployment
+
+1. Buat promo otomatis nominal dan pastikan potongan benar.
+2. Buat promo otomatis persen, misalnya 10%, lalu cek harga checkout.
+3. Buat voucher persen dan uji pada checkout baru.
+4. Uji ketiga pilihan tombol bot melalui `/start`.
+5. Kirim broadcast tanpa tombol, kemudian broadcast dengan tombol Marketplace.
+6. Kirim broadcast dengan tombol Daftar Produk Bot.
+7. Periksa kartu Penjualan dan Users pada HP, tablet, serta desktop.
+8. Uji satu pembayaran asli sampai produk terkirim.
 
 ## Troubleshooting
 
-### Tombol status mengembalikan error kolom tidak ditemukan
+### Diskon persen masih dianggap nominal
 
-Jalankan:
+Pastikan SQL berikut sudah dijalankan:
 
 ```text
-supabase/update-v63-ui-order-status.sql
+supabase/update-v64-percentage-discount.sql
 ```
 
-Tunggu beberapa saat sampai schema cache Supabase diperbarui, lalu muat ulang dashboard.
+Kemudian edit dan simpan ulang promo/voucher tersebut agar data lama dinormalisasi.
 
-### Versi API masih v62
+### Tombol Order Sekarang tidak muncul
 
-Pastikan commit terbaru menjadi Production deployment dan lakukan Redeploy tanpa cache.
+Pastikan checkbox di form Broadcast aktif dan broadcast dikirim dari deployment v64. Untuk tujuan Marketplace, pastikan `STORE_URL` atau `PUBLIC_URL` berisi URL HTTPS yang benar.
 
-### Nama toko masih menampilkan backslash
+### Tombol bot belum berubah
 
-Pastikan bot menggunakan deployment v63 dan webhook Telegram mengarah ke deployment/domain yang benar.
+Simpan ulang **Pengaturan Toko**, lalu kirim `/start` kembali. Pesan lama tidak ikut berubah; menu baru muncul pada respons `/start` berikutnya.
 
 ## Status pengujian
 
 - Pemeriksaan sintaks JavaScript: berhasil.
-- Unit/static tests: **79/79 berhasil**.
-- Pemeriksaan ID HTML duplikat: tidak ditemukan pada Marketplace dan dashboard reseller.
-- Pengujian lokal memakai stub dependency di luar paket karena container tidak mempunyai akses internet.
+- Unit/static tests: **84/84 berhasil**.
+- Pemeriksaan struktur HTML dan fitur v64: berhasil.
+- Pengujian lokal menggunakan stub dependency sementara karena lingkungan pengujian tidak mengunduh paket eksternal.
+- Stub pengujian tidak disertakan dalam ZIP final.
 - SQL ditinjau secara statis, tetapi belum dijalankan pada Supabase produksi.
-- Transaksi AutoGoPay, Telegram, Supabase, dan deployment Vercel nyata tetap perlu diuji dengan kredensial aktif.
+- Integrasi nyata Telegram, AutoGoPay, Supabase, dan Vercel tetap perlu diuji menggunakan kredensial aktif Anda.

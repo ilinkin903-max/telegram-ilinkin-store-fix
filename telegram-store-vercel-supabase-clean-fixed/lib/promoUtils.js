@@ -49,10 +49,15 @@ function isExpired(endAt, now = Date.now()) {
   return end !== null && end <= Number(now);
 }
 
+function normalizeDiscountType(value) {
+  const raw = String(value || 'amount').trim().toLowerCase();
+  return ['percent', 'percentage', 'persen', '%'].includes(raw) ? 'percent' : 'amount';
+}
+
 function discountAmount(item, subtotal) {
   const base = Math.max(0, Number(subtotal || 0));
   const value = Math.max(0, Number(item?.discount_value ?? item?.discount ?? 0));
-  if (String(item?.discount_type || 'amount').toLowerCase() === 'percent') {
+  if (normalizeDiscountType(item?.discount_type) === 'percent') {
     return Math.min(base, Math.floor(base * Math.min(value, 100) / 100));
   }
   return Math.min(base, value);
@@ -155,6 +160,7 @@ module.exports = {
   timestamp,
   hasStarted,
   isExpired,
+  normalizeDiscountType,
   discountAmount,
   normalizeTargetPart,
   normalizeTargetToken,

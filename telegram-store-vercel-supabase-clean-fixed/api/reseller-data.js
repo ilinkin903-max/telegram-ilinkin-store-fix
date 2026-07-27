@@ -4,6 +4,7 @@ const tg = require('../lib/telegram');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
+const { config, getStorefrontUrl } = require('../lib/config');
 
 function json(res, status, payload) {
   res.status(status).json(payload);
@@ -23,6 +24,35 @@ function boolOf(value) {
   const raw = String(value ?? '').toLowerCase();
   if (['false', '0', 'off', 'nonaktif', 'inactive', 'mati'].includes(raw)) return false;
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'aktif' || raw === 'active' || raw === '';
+}
+
+
+function discountTypeOf(value) {
+  const raw = String(value || 'amount').trim().toLowerCase();
+  return ['percent', 'percentage', 'persen', '%'].includes(raw) ? 'percent' : 'amount';
+}
+
+function discountValueOf(value, type = 'amount') {
+  const normalized = String(value ?? '').trim().replace(',', '.').replace(/[^0-9.]/g, '');
+  const parsed = Number(normalized || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.round(parsed));
+}
+
+function enabledOf(value) {
+  if (value === true || value === 1) return true;
+  return ['true', '1', 'on', 'yes', 'aktif'].includes(String(value ?? '').trim().toLowerCase());
+}
+
+function broadcastOrderMarkup(payload = {}, req = null) {
+  if (!enabledOf(payload.order_button_enabled)) return undefined;
+  const target = String(payload.order_button_target || 'marketplace').trim().toLowerCase();
+  if (target === 'products') {
+    return { inline_keyboard: [[{ text: '🛒 Order Sekarang', callback_data: 'daftarproduk' }]] };
+  }
+  const url = getStorefrontUrl(req) || config.storeUrl || config.publicUrl;
+  if (url) return { inline_keyboard: [[{ text: '🛒 Order Sekarang', web_app: { url } }]] };
+  return { inline_keyboard: [[{ text: '🛒 Order Sekarang', callback_data: 'daftarproduk' }]] };
 }
 
 function parseCodeList(value, limit = 100) {
@@ -149,7 +179,7 @@ function shortHash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
 }
 
-async function broadcast(payload = {}) {
+async function broadcast(payload = {}, req = null) {
   const typeForLock = String(payload.type || 'text').toLowerCase();
   const requestId = String(payload.request_id || payload.requestId || '').trim();
   const lockSource = requestId || JSON.stringify({
@@ -175,6 +205,7 @@ async function broadcast(payload = {}) {
   const caption = String(payload.caption || '').trim();
   const photo = String(payload.photo || payload.image_url || '').trim();
   const sticker = String(payload.sticker || payload.sticker_file_id || '').trim();
+  const orderMarkup = broadcastOrderMarkup(payload, req);
   let sent = 0;
   let failed = 0;
   const errors = [];
@@ -182,16 +213,20 @@ async function broadcast(payload = {}) {
   async function sendOne(id) {
     if (type === 'photo') {
       if (!photo) throw new Error('URL/file_id gambar wajib diisi.');
-      return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined });
+      return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined, ...(orderMarkup ? { reply_markup: orderMarkup } : {}) });
     }
     if (type === 'sticker') {
       if (!sticker) throw new Error('File ID stiker wajib diisi.');
-      await tg.sendSticker(id, sticker);
-      if (message) await tg.sendMessage(id, message);
+      if (message) {
+        await tg.sendSticker(id, sticker);
+        await tg.sendMessage(id, message, orderMarkup ? { reply_markup: orderMarkup } : {});
+      } else {
+        await tg.sendSticker(id, sticker, orderMarkup ? { reply_markup: orderMarkup } : {});
+      }
       return true;
     }
     if (!message) throw new Error('Pesan broadcast wajib diisi.');
-    return tg.sendMessage(id, message);
+    return tg.sendMessage(id, message, orderMarkup ? { reply_markup: orderMarkup } : {});
   }
 
   for (let i = 0; i < targets.length; i += 10) {
@@ -264,11 +299,15 @@ module.exports = async function handler(req, res) {
     if (action === 'promo-save') {
       const code = String(body.code || body.kode || '').trim().toUpperCase();
       const currentCode = String(body.current_code || '').trim().toUpperCase();
-      const discountValue = numberOf(body.discount_value || body.discount || body.potongan);
+      const discountType = discountTypeOf(body.discount_type);
+      const discountValue = discountValueOf(body.discount_value ?? body.discount ?? body.potongan, discountType);
       if (!code || discountValue <= 0) {
         return json(res, 400, { ok: false, error: 'Kode dan nilai diskon promo otomatis wajib diisi lebih dari 0.' });
       }
-      const promo = await db.saveAutoPromo({ ...body, code, discount_value: discountValue });
+      if (discountType === 'percent' && discountValue > 100) {
+        return json(res, 400, { ok: false, error: 'Diskon persen maksimal 100%.' });
+      }
+      const promo = await db.saveAutoPromo({ ...body, code, discount_type: discountType, discount_value: discountValue });
       const flashCodes = await updateFlashPromoMembership({
         currentCode,
         code: promo.code || code,
@@ -303,7 +342,8 @@ module.exports = async function handler(req, res) {
         start_media_value: body.start_media_value,
         start_media_caption: body.start_media_caption,
         customer_service_link: body.customer_service_link,
-        group_link: body.group_link
+        group_link: body.group_link,
+        bot_menu_mode: body.bot_menu_mode
       });
       return json(res, 200, { ok: true, data });
     }
@@ -392,13 +432,15 @@ module.exports = async function handler(req, res) {
     if (action === 'add-voucher') {
       const code = String(body.kode || body.code || '').trim().toUpperCase();
       const produk = String(body.produk || body.products || 'semua').trim();
-      const discountValue = numberOf(body.discount_value || body.potongan || body.discount);
+      const discountType = discountTypeOf(body.discount_type);
+      const discountValue = discountValueOf(body.discount_value ?? body.potongan ?? body.discount, discountType);
       const limit = numberOf(body.limit || body.usage_limit);
       if (!code || !discountValue || !limit) return json(res, 400, { ok: false, error: 'Kode, nilai diskon, dan limit voucher wajib diisi.' });
+      if (discountType === 'percent' && discountValue > 100) return json(res, 400, { ok: false, error: 'Diskon persen maksimal 100%.' });
       const voucher = await db.addVoucher({
         kode: code,
         produk,
-        discount_type: body.discount_type || 'amount',
+        discount_type: discountType,
         discount_value: discountValue,
         potongan: discountValue,
         min_qty: body.min_qty || 1,
@@ -415,12 +457,16 @@ module.exports = async function handler(req, res) {
     if (action === 'edit-voucher') {
       const code = String(body.current_code || body.kode_lama || body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode voucher wajib diisi.' });
+      const discountType = discountTypeOf(body.discount_type);
+      const discountValue = discountValueOf(body.discount_value ?? body.potongan ?? body.discount, discountType);
+      if (discountValue <= 0) return json(res, 400, { ok: false, error: 'Nilai diskon voucher wajib lebih dari 0.' });
+      if (discountType === 'percent' && discountValue > 100) return json(res, 400, { ok: false, error: 'Diskon persen maksimal 100%.' });
       const voucher = await db.updateVoucher(code, {
         kode: body.kode_baru || body.new_code || body.kode,
         produk: body.produk || body.products,
-        discount_type: body.discount_type || 'amount',
-        discount_value: body.discount_value || body.potongan || body.discount,
-        potongan: body.discount_value || body.potongan || body.discount,
+        discount_type: discountType,
+        discount_value: discountValue,
+        potongan: discountValue,
         min_qty: body.min_qty || 1,
         min_spend: body.min_spend || 0,
         limit: body.limit || body.usage_limit,
@@ -460,7 +506,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'broadcast') {
-      const result = await broadcast(body);
+      const result = await broadcast(body, req);
       return json(res, 200, { ok: true, data: result });
     }
 

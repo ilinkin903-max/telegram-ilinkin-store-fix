@@ -324,17 +324,22 @@ function normalizeUrl(url) {
 }
 
 function homeKeyboard(req, userId, settings = {}) {
-  const rows = [
-    [{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }],
-    [
-      { text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' },
-      { text: '‹❓› Cara Order', callback_data: 'caraorder' }
-    ],
-    [{ text: '‹📊› Stok', callback_data: 'stok' }]
-  ];
-
+  const menuModeRaw = String(settings.bot_menu_mode || 'both').trim().toLowerCase();
+  const menuMode = ['marketplace', 'products', 'both'].includes(menuModeRaw) ? menuModeRaw : 'both';
+  const rows = [];
   const storeUrl = getStorefrontUrl(req);
-  if (storeUrl) rows.unshift([{ text: '‹🛍️› Buka Marketplace', web_app: { url: storeUrl } }]);
+
+  if (menuMode !== 'products' && storeUrl) {
+    rows.push([{ text: '‹🛍️› Buka Marketplace', web_app: { url: storeUrl } }]);
+  }
+  if (menuMode !== 'marketplace') {
+    rows.push([{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }]);
+  }
+  rows.push([
+    { text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' },
+    { text: '‹❓› Cara Order', callback_data: 'caraorder' }
+  ]);
+  rows.push([{ text: '‹📊› Stok', callback_data: 'stok' }]);
   const miniAppUrl = getMiniAppUrl(req);
   if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Reseller Dashboard', web_app: { url: miniAppUrl } }]);
   const csUrl = normalizeUrl(settings.customer_service_link || config.customerService);

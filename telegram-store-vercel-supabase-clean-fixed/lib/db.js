@@ -1,6 +1,6 @@
 const { getSupabase } = require('./supabase');
 const { splitStock } = require('./utils');
-const { boolValue, normalizeDateTime, discountAmount, targetProducts, promoState, promoEligible } = require('./promoUtils');
+const { boolValue, normalizeDateTime, normalizeDiscountType, discountAmount, targetProducts, promoState, promoEligible } = require('./promoUtils');
 const { getAppVersion } = require('./version');
 
 function sb() {
@@ -497,7 +497,7 @@ function normalizeVoucher(row) {
     products: parseVoucherProducts(row.products),
     used_by: usedBy,
     active: boolValue(row.active, true),
-    discount_type: String(row.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
+    discount_type: normalizeDiscountType(row.discount_type),
     discount_value: Number(row.discount_value ?? row.discount ?? 0),
     min_qty: Math.max(1, Number(row.min_qty || 1)),
     min_spend: Math.max(0, Number(row.min_spend || 0)),
@@ -518,7 +518,7 @@ async function getVoucher(code) {
 async function addVoucher(input) {
   const code = String(input.kode || input.code || '').trim().toUpperCase();
   const existing = code ? await getVoucher(code).catch(() => null) : null;
-  const discountType = String(input.discount_type || input.tipe_diskon || existing?.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount';
+  const discountType = normalizeDiscountType(input.discount_type || input.tipe_diskon || existing?.discount_type || 'amount');
   let discountValue = Number(input.discount_value ?? input.potongan ?? input.discount ?? existing?.discount_value ?? existing?.discount ?? 0);
   if (discountType === 'percent') discountValue = Math.min(100, Math.max(0, discountValue));
   const payload = {
@@ -548,7 +548,7 @@ async function updateVoucher(code, updates = {}) {
   const current = await getVoucher(currentCode);
   if (!current) return null;
   const nextCode = String(updates.kode || updates.code || currentCode).trim().toUpperCase();
-  const discountType = updates.discount_type !== undefined || updates.tipe_diskon !== undefined ? (String(updates.discount_type || updates.tipe_diskon).toLowerCase() === 'percent' ? 'percent' : 'amount') : (current.discount_type || 'amount');
+  const discountType = updates.discount_type !== undefined || updates.tipe_diskon !== undefined ? normalizeDiscountType(updates.discount_type || updates.tipe_diskon) : normalizeDiscountType(current.discount_type || 'amount');
   let discountValue = updates.discount_value !== undefined || updates.potongan !== undefined || updates.discount !== undefined ? Number(updates.discount_value ?? updates.potongan ?? updates.discount) : Number(current.discount_value ?? current.discount ?? 0);
   if (discountType === 'percent') discountValue = Math.min(100, Math.max(0, discountValue));
   const payload = {
@@ -782,7 +782,8 @@ async function getShopSettings() {
     start_media_value: '',
     start_media_caption: '',
     customer_service_link: '',
-    group_link: ''
+    group_link: '',
+    bot_menu_mode: 'both'
   };
   const { data, error } = await sb().from('shop_settings').select('key,value');
   if (error) {
@@ -820,7 +821,8 @@ async function saveShopSettings(input = {}) {
     'start_media_value',
     'start_media_caption',
     'customer_service_link',
-    'group_link'
+    'group_link',
+    'bot_menu_mode'
   ];
   const rows = allowed
     .filter((key) => input[key] !== undefined)
@@ -1460,7 +1462,7 @@ function normalizePromo(row) {
     ...row,
     products: parsePromoProducts(row.products),
     active: boolValue(row.active, true),
-    discount_type: String(row.discount_type || 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount',
+    discount_type: normalizeDiscountType(row.discount_type),
     min_qty: Math.max(1, Number(row.min_qty || 1)),
     min_spend: Math.max(0, Number(row.min_spend || 0)),
     discount_value: Math.max(0, Number(row.discount_value || 0)),
@@ -1490,7 +1492,7 @@ async function saveAutoPromo(input = {}) {
     ? (await listAutoPromos(200)).find((x) => String(x.code).toUpperCase() === currentCode)
     : (await listAutoPromos(200)).find((x) => String(x.code).toUpperCase() === code);
   const rawDiscount = input.discount_value ?? input.discount ?? input.potongan ?? current?.discount_value ?? 0;
-  const discountType = String(input.discount_type ?? input.tipe ?? current?.discount_type ?? 'amount').toLowerCase() === 'percent' ? 'percent' : 'amount';
+  const discountType = normalizeDiscountType(input.discount_type ?? input.tipe ?? current?.discount_type ?? 'amount');
   const payload = {
     code,
     name: String(input.name ?? input.nama ?? current?.name ?? code).trim(),

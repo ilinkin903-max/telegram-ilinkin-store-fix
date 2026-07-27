@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   normalizeDateTime,
+  normalizeDiscountType,
   discountAmount,
   promoState,
   promoEligible
@@ -152,4 +153,13 @@ test('promo biasa tetap diizinkan walaupun Flash Sale tidak aktif', () => {
     flash_sale_end_at: '2026-07-24T12:00:00.000Z'
   };
   assert.equal(db.promoAllowedByFlashSale({ code: 'PROMOBIASA' }, settings, Date.parse('2026-07-24T11:00:00.000Z')), true);
+});
+
+
+test('tipe persen menerima format percent, persen, percentage, dan simbol persen', () => {
+  assert.equal(normalizeDiscountType('percent'), 'percent');
+  assert.equal(normalizeDiscountType('persen'), 'percent');
+  assert.equal(normalizeDiscountType('percentage'), 'percent');
+  assert.equal(normalizeDiscountType('%'), 'percent');
+  assert.equal(discountAmount({ discount_type: 'persen', discount_value: 15 }, 20000), 3000);
 });

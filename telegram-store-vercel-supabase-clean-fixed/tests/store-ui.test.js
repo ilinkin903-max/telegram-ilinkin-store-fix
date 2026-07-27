@@ -209,7 +209,7 @@ test('v63 dashboard mendukung status CANCELED dan kartu user ringkas', () => {
   const sql = fs.readFileSync(path.join(root, 'supabase', 'update-v63-ui-order-status.sql'), 'utf8');
   assert.match(reseller, /orderStatusButton/);
   assert.match(reseller, /CANCELED/);
-  assert.match(reseller, /Tidak Jadi/);
+  assert.match(reseller, /Kembali/);
   assert.match(reseller, /userCardGrid/);
   assert.match(dataApi, /action === 'update-order-status'/);
   assert.match(db, /async function updateTransactionStatus/);
@@ -224,4 +224,36 @@ test('pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslas
   assert.match(home, /escapeHtml\(config\.botName\)/);
   assert.match(home, /parse_mode: 'HTML'/);
   assert.doesNotMatch(home, /escapeMarkdownText\(config\.botName\)/);
+});
+
+
+test('v64 menempatkan status penjualan segaris dengan nama produk', () => {
+  assert.match(reseller, /orderTitleRow/);
+  assert.match(reseller, /Tandai penjualan sebagai dibatalkan/);
+  assert.match(reseller, /Ya, Tandai Dibatalkan/);
+});
+
+test('v64 merapikan kartu users pada layar sedang dan tombol hapus diperkecil', () => {
+  assert.match(reseller, /userIdentity/);
+  assert.match(reseller, /@media\(max-width:1024px\)/);
+  assert.match(reseller, /\.userDelete\{[^}]*min-height:32px/);
+});
+
+test('v64 promo dan voucher memiliki kartu serta submenu ringkas', () => {
+  assert.match(reseller, /promoCompactCard/);
+  assert.match(reseller, /promoCompactBody/);
+  assert.match(reseller, /promoSubGrid\{display:grid;grid-template-columns:repeat\(3/);
+  assert.match(reseller, /id="discountValueHelp"/);
+});
+
+test('v64 menyediakan pengaturan tombol bot dan tombol Order Sekarang pada broadcast', () => {
+  const bot = fs.readFileSync(path.join(root, 'lib', 'botHandlers.js'), 'utf8');
+  const db = fs.readFileSync(path.join(root, 'lib', 'db.js'), 'utf8');
+  const dataApi = fs.readFileSync(path.join(root, 'api', 'reseller-data.js'), 'utf8');
+  assert.match(reseller, /name="bot_menu_mode"/);
+  assert.match(bot, /settings\.bot_menu_mode/);
+  assert.match(db, /bot_menu_mode: 'both'/);
+  assert.match(reseller, /name="order_button_enabled"/);
+  assert.match(dataApi, /broadcastOrderMarkup/);
+  assert.match(dataApi, /Order Sekarang/);
 });
