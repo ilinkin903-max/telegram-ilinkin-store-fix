@@ -335,6 +335,7 @@ function homeKeyboard(req, userId, settings = {}) {
   if (menuMode !== 'marketplace') {
     rows.push([{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }]);
   }
+  rows.push([{ text: '‹💰› Saldo, Top Up & Referral', callback_data: 'wallet' }]);
   rows.push([
     { text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' },
     { text: '‹❓› Cara Order', callback_data: 'caraorder' }
@@ -369,7 +370,10 @@ async function editMessage(query, text, options = {}) {
 }
 
 async function buildHomeText(from) {
-  const stats = await db.getStats();
+  const [stats, wallet] = await Promise.all([
+    db.getStats(),
+    db.getWalletSummary(from.id, 1).catch(() => null)
+  ]);
   return `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
 ` +
@@ -382,6 +386,8 @@ async function buildHomeText(from) {
     `- 📦 Stok Tersedia: <b>${stats.stokTersedia}</b>
 ` +
     `- 📦 Stok Terjual: <b>${stats.stokTerjual}</b>
+` +
+    `- 💰 Saldo: <b>${escapeHtml(formatRupiah(wallet?.balance_total || 0))}</b>
 
 ` +
     `Silakan pilih tombol di bawah ini!`;
@@ -405,7 +411,8 @@ async function editHome(query, req) {
 async function sendHome(chatId, from, req) {
   await db.upsertUser(from).catch((e) => console.error('upsert user gagal:', e.message));
   let stats = { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 };
-  try { stats = await db.getStats(); }
+  let wallet = null;
+  try { [stats, wallet] = await Promise.all([db.getStats(), db.getWalletSummary(from.id, 1).catch(() => null)]); }
   catch (e) { console.error('getStats gagal:', e.message); }
   const text = `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
@@ -419,6 +426,8 @@ async function sendHome(chatId, from, req) {
     `- 📦 Stok Tersedia: <b>${stats.stokTersedia || 0}</b>
 ` +
     `- 📦 Stok Terjual: <b>${stats.stokTerjual || 0}</b>
+` +
+    `- 💰 Saldo: <b>${escapeHtml(formatRupiah(wallet?.balance_total || 0))}</b>
 
 ` +
     `Silakan pilih tombol di bawah ini!`;
@@ -453,6 +462,200 @@ async function sendHome(chatId, from, req) {
     parse_mode: 'HTML',
     reply_markup
   });
+}
+
+
+function settingEnabled(value, fallback = true) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return !['false', '0', 'off', 'no'].includes(String(value).trim().toLowerCase());
+}
+
+function startReferralCode(text) {
+  const body = String(text || '').trim().split(/\s+/).slice(1).join(' ').trim();
+  const match = body.match(/^ref[_-]([a-z0-9]+)$/i);
+  return match ? String(match[1]).toUpperCase() : '';
+}
+
+function referralUrl(code) {
+  const username = String(config.botUsername || '').trim().replace(/^@/, '');
+  if (!username || !code) return '';
+  return `https://t.me/${username}?start=ref_${encodeURIComponent(code)}`;
+}
+
+async function sendWalletPage(chatId, from, query = null) {
+  const [wallet, settings] = await Promise.all([
+    db.getWalletSummary(from.id, 8),
+    db.getShopSettings()
+  ]);
+  if (!wallet) return tg.sendMessage(chatId, '⚠️ Data saldo belum tersedia. Jalankan SQL v65 lalu buka /start kembali.');
+  const link = referralUrl(wallet.referral_code);
+  const reward = Math.max(0, Number(settings.referral_reward_amount || 0));
+  const mode = String(settings.referral_reward_mode || 'signup') === 'first_purchase'
+    ? 'setelah teman melakukan pembelian pertama'
+    : 'langsung saat teman pertama kali membuka bot';
+  const referralActive = settingEnabled(settings.referral_enabled, true);
+  const topupActive = settingEnabled(settings.topup_enabled, true);
+  const walletActive = settingEnabled(settings.wallet_payment_enabled, true);
+  const history = (wallet.ledger || []).slice(0, 5).map((item) => {
+    const sign = item.direction === 'credit' ? '+' : '-';
+    const label = item.wallet_type === 'referral' ? 'Referral' : 'Utama';
+    return `${sign}${formatRupiah(item.amount || 0)} · ${label} · ${String(item.reason || '-').slice(0, 46)}`;
+  }).join('\n') || 'Belum ada mutasi saldo.';
+  const text = `💰 <b>SALDO & REFERRAL</b>
+` +
+    `=======================
+` +
+    `Saldo Utama: <b>${escapeHtml(formatRupiah(wallet.balance_main || 0))}</b>
+` +
+    `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet.balance_referral || 0))}</b>
+` +
+    `Total Saldo: <b>${escapeHtml(formatRupiah(wallet.balance_total || 0))}</b>
+
+` +
+    `👥 <b>REFERRAL</b>
+` +
+    `Berhasil mengundang: <b>${wallet.invited_total || 0}</b>
+` +
+    `Bonus sudah masuk: <b>${wallet.rewarded_total || 0}</b>
+` +
+    (referralActive
+      ? `Hadiah per undangan: <b>${escapeHtml(formatRupiah(reward))}</b> (${escapeHtml(mode)})
+` +
+        `Link referral kamu:
+<code>${escapeHtml(link || 'BOT_USERNAME belum diatur')}</code>
+`
+      : `Program referral sedang dinonaktifkan.
+`) +
+    `
+📒 <b>MUTASI TERAKHIR</b>
+<pre>${escapeHtml(history)}</pre>`;
+  const rows = [];
+  if (topupActive) rows.push([{ text: '➕ Top Up Saldo', callback_data: 'topup' }]);
+  if (referralActive && link) rows.push([{ text: '🔗 Bagikan Link Referral', url: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Daftar melalui link saya dan belanja produk digital secara otomatis.')}` }]);
+  if (walletActive) rows.push([{ text: '🛍️ Belanja dengan Saldo', callback_data: 'daftarproduk' }]);
+  rows.push([{ text: '🔄 Perbarui', callback_data: 'wallet' }, { text: '🔙 Menu Utama', callback_data: 'kembaliawal' }]);
+  const options = { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } };
+  if (query?.message?.message_id) return editMessage(query, text, options);
+  return tg.sendMessage(chatId, text, options);
+}
+
+async function beginTopup(query) {
+  const settings = await db.getShopSettings();
+  if (!settingEnabled(settings.topup_enabled, true)) {
+    return tg.answerCallbackQuery(query.id, { text: 'Fitur top up sedang dinonaktifkan.', show_alert: true });
+  }
+  if (!paymentService.paymentConfigured()) {
+    return tg.sendMessage(query.from.id, `⚠️ Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap.`);
+  }
+  const current = await db.getPendingTopupByUser(query.from.id).catch(() => null);
+  if (current?.status === 'awaiting_payment') {
+    return tg.answerCallbackQuery(query.id, { text: 'Kamu masih memiliki top up yang menunggu pembayaran. Gunakan tombol cek pada invoice top up.', show_alert: true });
+  }
+  const ref = current?.status === 'waiting_amount' && current?.topup_ref
+    ? String(current.topup_ref)
+    : `TOPUP-${randomRef()}`;
+  if (!current || current.status !== 'waiting_amount') {
+    await db.upsertPendingTopup({ telegram_id: query.from.id, topup_ref: ref, status: 'waiting_amount' });
+  }
+  const min = Math.max(1000, Number(settings.topup_min_amount || 10000));
+  const max = Math.max(min, Number(settings.topup_max_amount || 1000000));
+  return editMessage(query,
+    `➕ <b>TOP UP SALDO</b>
+=======================
+Kirim nominal top up dalam bentuk angka.
+
+Minimum: <b>${escapeHtml(formatRupiah(min))}</b>
+Maksimum: <b>${escapeHtml(formatRupiah(max))}</b>
+
+Contoh: <code>50000</code>`,
+    { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '❌ Batalkan Top Up', callback_data: `bataltopup:${ref}` }], [{ text: '🔙 Kembali', callback_data: 'wallet' }]] } }
+  );
+}
+
+async function createTopupPayment(chatId, from, topup, amount, settings) {
+  const min = Math.max(1000, Number(settings.topup_min_amount || 10000));
+  const max = Math.max(min, Number(settings.topup_max_amount || 1000000));
+  if (amount < min || amount > max) {
+    return tg.sendMessage(chatId, `⚠️ Nominal top up harus antara ${formatRupiah(min)} sampai ${formatRupiah(max)}.`);
+  }
+  const fee = randomFee();
+  const total = amount + fee;
+  const gateway = await paymentService.createPaymentTransaction({ amount: total, invoiceRef: topup.topup_ref });
+  const ref = String(gateway.order_id || topup.topup_ref).trim();
+  if (ref !== String(topup.topup_ref)) {
+    await db.cancelPendingTopup(from.id, topup.topup_ref).catch(() => null);
+  }
+  await db.upsertPendingTopup({
+    ...topup,
+    topup_ref: ref,
+    amount,
+    fee,
+    total_amount: total,
+    payment_provider: gateway.provider,
+    provider_transaction_id: gateway.transaction_id,
+    provider_checkout_url: gateway.checkout_url,
+    qr_payload: gateway.qr_string,
+    expires_at: gateway.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    status: 'awaiting_payment'
+  });
+  const buffer = await QRCode.toBuffer(gateway.qr_string, { type: 'png' });
+  const caption = `➕ <b>TOP UP SALDO</b>
+` +
+    `=======================
+` +
+    `Referensi: <b>${escapeHtml(paymentService.displayPaymentReference(ref))}</b>
+` +
+    `Saldo Masuk: <b>${escapeHtml(formatRupiah(amount))}</b>
+` +
+    `Fee: <b>${escapeHtml(formatRupiah(fee))}</b>
+` +
+    `Total Bayar: <b>${escapeHtml(formatRupiah(total))}</b>
+` +
+    `=======================
+` +
+    `Bayar sesuai nominal. Saldo Utama masuk otomatis setelah pembayaran terdeteksi.`;
+  const sent = await tg.sendPhoto(from.id, buffer, {
+    caption,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      ...(gateway.checkout_url ? [[{ text: '🌐 Buka Halaman Pembayaran', url: gateway.checkout_url }]] : []),
+      [{ text: '🔄 Cek Top Up', callback_data: `cektopup:${ref}` }],
+      [{ text: '❌ Batalkan Top Up', callback_data: `bataltopup:${ref}` }]
+    ] }
+  });
+  paymentService.scheduleTopupWatcher({ topupRef: ref, telegramId: from.id });
+  return sent;
+}
+
+async function checkTopup(query, ref) {
+  const topup = await db.getPendingTopupByRef(ref);
+  if (!topup || Number(topup.telegram_id) !== Number(query.from.id)) {
+    return tg.answerCallbackQuery(query.id, { text: 'Top up tidak ditemukan.', show_alert: true });
+  }
+  if (topup.status === 'completed') {
+    return tg.answerCallbackQuery(query.id, { text: 'Top up sudah berhasil dan saldo telah masuk.', show_alert: true });
+  }
+  if (topup.status !== 'awaiting_payment') {
+    return tg.answerCallbackQuery(query.id, { text: `Status top up: ${topup.status}.`, show_alert: true });
+  }
+  const incoming = await paymentService.verifyTopupTransaction(topup);
+  if (incoming.status !== 'completed') {
+    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran top up belum masuk.', show_alert: true });
+  }
+  const result = await paymentService.completeTopupPayment({ topup, incoming, source: 'manual-topup-check' });
+  if (result.state === 'completed' || result.state === 'already_completed') {
+    await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
+    return sendWalletPage(query.from.id, query.from);
+  }
+}
+
+async function cancelTopup(query, ref) {
+  const topup = await db.getPendingTopupByRef(ref).catch(() => null);
+  if (topup && Number(topup.telegram_id) === Number(query.from.id) && topup.status === 'awaiting_payment') {
+    await paymentService.cancelTopupTransaction(topup).catch(() => null);
+  }
+  await db.cancelPendingTopup(query.from.id, ref).catch(() => null);
+  return sendWalletPage(query.message.chat.id, query.from, query);
 }
 
 function variantKey(variant, index = 0) {
@@ -849,6 +1052,31 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
 
   if (lower.startsWith('/start') || lower.startsWith('/menu')) {
     if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
+    const settings = await db.getShopSettings().catch(() => ({}));
+    const refCode = lower.startsWith('/start') ? startReferralCode(text) : '';
+    try {
+      const registration = await db.registerUserWithReferral(from, refCode, settings);
+      const reward = registration?.referral_reward;
+      if (reward?.telegram_id && Number(reward.amount || 0) > 0) {
+        const wallet = await db.getWalletSummary(reward.telegram_id, 1).catch(() => null);
+        await tg.sendMessage(reward.telegram_id,
+          `🎁 <b>BONUS REFERRAL MASUK</b>
+` +
+          `=======================
+` +
+          `Seseorang baru bergabung melalui link referral kamu.
+
+` +
+          `Bonus: <b>${escapeHtml(formatRupiah(reward.amount))}</b>
+` +
+          `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
+          { parse_mode: 'HTML' }
+        ).catch(() => null);
+      }
+    } catch (error) {
+      console.error('Registrasi referral gagal:', error.message || error);
+      await db.upsertUser(from).catch(() => null);
+    }
     return sendHome(chatId, from, req);
   }
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
@@ -861,6 +1089,13 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     return sendPollingList(chatId);
   }
   if (lower.startsWith('/produk') || lower.startsWith('/listproduk')) return sendProductList(chatId);
+  if (lower.startsWith('/saldo') || lower.startsWith('/wallet') || lower.startsWith('/referral')) return sendWalletPage(chatId, from);
+  if (lower.startsWith('/topup')) {
+    return tg.sendMessage(chatId, `➕ <b>TOP UP SALDO</b>\nKlik tombol di bawah untuk memasukkan nominal top up.`, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '➕ Mulai Top Up', callback_data: 'topup' }], [{ text: '💰 Lihat Saldo', callback_data: 'wallet' }]] }
+    });
+  }
   if (lower.startsWith('/addproduk')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const raw = text.replace(/^\/addproduk\s*/i, '');
@@ -1062,6 +1297,18 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
     return tg.sendMessage(chatId, `📊 *REKAP PENJUALAN ${String(r.month).padStart(2, '0')}/${r.year}*\n=======================\nTotal Order: *${r.orders}*\nTotal Produk Terjual: *${r.quantity}*\nTotal Omzet: *${formatRupiah(r.total_price)}*\n\n*Top Produk:*\n${top}`, { parse_mode: 'Markdown' });
   }
 
+  const pendingTopup = await db.getPendingTopupByUser(from.id).catch(() => null);
+  if (pendingTopup?.status === 'waiting_amount') {
+    const settings = await db.getShopSettings();
+    const amount = parseNumber(text);
+    if (!amount) return tg.sendMessage(chatId, '⚠️ Kirim nominal top up dalam bentuk angka. Contoh: 50000');
+    try {
+      return await createTopupPayment(chatId, from, pendingTopup, amount, settings);
+    } catch (error) {
+      return tg.sendMessage(chatId, `⚠️ Gagal membuat pembayaran top up: ${error.message || error}`);
+    }
+  }
+
   const pending = await db.getPendingOrder(from.id);
   if (pending?.status === 'waiting_voucher') {
     const voucherCode = text.toUpperCase().trim();
@@ -1172,6 +1419,107 @@ async function changeQuantity(query, delta, reset = false) {
   return showConfirmation(query, true);
 }
 
+
+async function calculateCheckoutPricing(userId, order, product) {
+  const unit = orderUnitPrice(product, order);
+  const quantity = Math.max(1, Number(order.quantity || 1));
+  const costUnit = db.orderUnitCost(product, order);
+  const costTotal = costUnit * quantity;
+  const subtotal = quantity * unit;
+  let promoApplied = null;
+  let voucherApplied = null;
+  let appliedDiscount = 0;
+  const manualVoucherCode = String(order.voucher_code || '').startsWith('AUTO_PROMO:')
+    ? ''
+    : String(order.voucher_code || '').trim();
+  const voucher = manualVoucherCode ? await db.getVoucher(manualVoucherCode) : null;
+  if (db.voucherIsValid(voucher, product.kode, userId, quantity, subtotal, order.variant_key)) {
+    voucherApplied = voucher;
+    appliedDiscount = db.voucherDiscountAmount(voucher, subtotal);
+  } else {
+    promoApplied = await db.getBestAutoPromo(product.kode, userId, quantity, subtotal, order.variant_key).catch(() => null);
+    appliedDiscount = promoApplied ? Number(promoApplied.discount_amount || 0) : 0;
+  }
+  appliedDiscount = Math.min(subtotal, Math.max(0, Number(appliedDiscount || 0)));
+  const finalPrice = Math.max(0, subtotal - appliedDiscount);
+  const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
+  return { unit, quantity, costUnit, costTotal, subtotal, promoApplied, voucherApplied, appliedDiscount, finalPrice, appliedCode };
+}
+
+async function showPaymentMethods(query) {
+  const userId = query.from.id;
+  const [order, settings, wallet] = await Promise.all([
+    db.getPendingOrder(userId),
+    db.getShopSettings(),
+    db.getWalletSummary(userId, 1)
+  ]);
+  if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
+  const product = await db.getProductByCode(order.product_code);
+  if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
+  const price = await calculateCheckoutPricing(userId, order, product);
+  const walletEnabled = settingEnabled(settings.wallet_payment_enabled, true);
+  const topupEnabled = settingEnabled(settings.topup_enabled, true);
+  const totalBalance = Number(wallet?.balance_total || 0);
+  const shortage = Math.max(0, price.finalPrice - totalBalance);
+  const text = `💳 <b>PILIH METODE PEMBAYARAN</b>\n` +
+    `=======================\n` +
+    `Produk: <b>${escapeHtml(product.nama)}${order.variant_name ? ' - ' + escapeHtml(order.variant_name) : ''}</b>\n` +
+    `Total Produk: <b>${escapeHtml(formatRupiah(price.finalPrice))}</b>\n\n` +
+    `Saldo Utama: <b>${escapeHtml(formatRupiah(wallet?.balance_main || 0))}</b>\n` +
+    `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>\n` +
+    `Total Saldo: <b>${escapeHtml(formatRupiah(totalBalance))}</b>\n` +
+    (shortage > 0 ? `Kekurangan Saldo: <b>${escapeHtml(formatRupiah(shortage))}</b>\n` : '') +
+    `\nSaldo Utama dipakai lebih dahulu, kemudian Saldo Referral.`;
+  const rows = [];
+  if (walletEnabled && totalBalance >= price.finalPrice) rows.push([{ text: '💰 Bayar dengan Saldo', callback_data: 'bayarsaldo' }]);
+  if (paymentService.paymentConfigured()) rows.push([{ text: '📱 Bayar dengan QRIS', callback_data: 'bayarqris' }]);
+  if (topupEnabled) rows.push([{ text: shortage > 0 ? `➕ Top Up (kurang ${formatRupiah(shortage)})` : '➕ Top Up Saldo', callback_data: 'topup' }]);
+  rows.push([{ text: '🔙 Kembali', callback_data: 'konfirmasi' }, { text: '❌ Batalkan', callback_data: 'batalbeli' }]);
+  return editMessage(query, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } });
+}
+
+async function createWalletPayment(query) {
+  const userId = query.from.id;
+  const [order, settings, wallet] = await Promise.all([
+    db.getPendingOrder(userId),
+    db.getShopSettings(),
+    db.getWalletSummary(userId, 1)
+  ]);
+  if (!settingEnabled(settings.wallet_payment_enabled, true)) {
+    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran dengan saldo sedang dinonaktifkan.', show_alert: true });
+  }
+  if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
+  const product = await db.getProductByCode(order.product_code);
+  if (!product || product.active === false) return tg.sendMessage(userId, '⚠️ Produk tidak tersedia.');
+  if (availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
+  const price = await calculateCheckoutPricing(userId, order, product);
+  if (Number(wallet?.balance_total || 0) < price.finalPrice) {
+    return tg.answerCallbackQuery(query.id, { text: `Saldo kurang ${formatRupiah(price.finalPrice - Number(wallet?.balance_total || 0))}.`, show_alert: true });
+  }
+  const invoiceRef = `WALLET-${randomRef()}`;
+  const savedOrder = await db.upsertPendingOrder({
+    ...order,
+    quantity: price.quantity,
+    cost_unit: price.costUnit,
+    cost_total: price.costTotal,
+    cost_source: price.costUnit > 0 ? 'snapshot' : 'unset',
+    voucher_code: price.appliedCode,
+    invoice_ref: invoiceRef,
+    amount: price.finalPrice,
+    fee: 0,
+    status: 'processing',
+    payment_method: 'wallet',
+    payment_provider: 'wallet'
+  });
+  await editMessage(query, '⏳ <b>Memproses pembayaran saldo...</b>\nStok dan saldo sedang dikunci agar transaksi aman.', { parse_mode: 'HTML' });
+  try {
+    return await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: query.from, source: 'wallet-bot' });
+  } catch (error) {
+    await db.deletePendingOrder(userId, invoiceRef).catch(() => null);
+    return tg.sendMessage(userId, `⚠️ Pembayaran saldo gagal: ${error.message || error}`);
+  }
+}
+
 async function createPayment(query) {
   if (!paymentService.paymentConfigured()) {
     return tg.sendMessage(query.from.id, `⚠️ Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap di Vercel.`);
@@ -1185,33 +1533,8 @@ async function createPayment(query) {
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
-  const unit = orderUnitPrice(product, order);
-  const quantity = Math.max(1, Number(order.quantity || 1));
-  const costUnit = db.orderUnitCost(product, order);
-  const costTotal = costUnit * quantity;
-  const subtotal = quantity * unit;
-  let harga = subtotal;
-  let promoApplied = null;
-  let voucherApplied = null;
-  let appliedDiscount = 0;
-
-  // Kode AUTO_PROMO hanya penanda transaksi sebelumnya, bukan voucher manual.
-  // Saat tombol bayar ditekan ulang, promo dihitung kembali agar status/jadwal/limit terbaru tetap berlaku.
-  const manualVoucherCode = String(order.voucher_code || '').startsWith('AUTO_PROMO:')
-    ? ''
-    : String(order.voucher_code || '').trim();
-  const voucher = manualVoucherCode ? await db.getVoucher(manualVoucherCode) : null;
-
-  if (db.voucherIsValid(voucher, product.kode, userId, quantity, subtotal, order.variant_key)) {
-    voucherApplied = voucher;
-    appliedDiscount = db.voucherDiscountAmount(voucher, subtotal);
-  } else {
-    promoApplied = await db.getBestAutoPromo(product.kode, userId, quantity, subtotal, order.variant_key).catch(() => null);
-    appliedDiscount = promoApplied ? Number(promoApplied.discount_amount || 0) : 0;
-  }
-
-  appliedDiscount = Math.min(subtotal, Math.max(0, Number(appliedDiscount || 0)));
-  harga = Math.max(0, subtotal - appliedDiscount);
+  const price = await calculateCheckoutPricing(userId, order, product);
+  const { unit, quantity, costUnit, costTotal, subtotal, promoApplied, voucherApplied, appliedDiscount, finalPrice: harga, appliedCode } = price;
 
   const fee = randomFee();
   const requestedInvoice = randomRef();
@@ -1220,7 +1543,6 @@ async function createPayment(query) {
   const invoiceRef = gatewayPayment.order_id || requestedInvoice;
   const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const qrText = gatewayPayment.qr_string;
-  const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
   await db.upsertPendingOrder({
     ...order,
     quantity,
@@ -1236,7 +1558,8 @@ async function createPayment(query) {
     qr_payload: qrText,
     payment_provider: gatewayPayment.provider,
     provider_transaction_id: gatewayPayment.transaction_id,
-    provider_checkout_url: gatewayPayment.checkout_url
+    provider_checkout_url: gatewayPayment.checkout_url,
+    payment_method: 'gateway'
   });
 
   const buffer = await QRCode.toBuffer(qrText, { type: 'png' });
@@ -1371,6 +1694,10 @@ async function handleCallbackQuery(query, req) {
 
   if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
 
+  if (cmd === 'wallet') return sendWalletPage(query.message.chat.id, query.from, query);
+  if (cmd === 'topup') return beginTopup(query);
+  if (cmd.startsWith('cektopup:')) return checkTopup(query, cmd.slice('cektopup:'.length));
+  if (cmd.startsWith('bataltopup:')) return cancelTopup(query, cmd.slice('bataltopup:'.length));
   if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id, query);
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
@@ -1402,7 +1729,9 @@ async function handleCallbackQuery(query, req) {
     await db.upsertPendingOrder({ ...order, status: 'waiting_voucher' });
     return editMessage(query, 'Silahkan kirim kode voucher kamu.');
   }
-  if (cmd === 'bayar') return createPayment(query);
+  if (cmd === 'bayar') return showPaymentMethods(query);
+  if (cmd === 'bayarqris') return createPayment(query);
+  if (cmd === 'bayarsaldo') return createWalletPayment(query);
   if (cmd.startsWith('cekbayar:')) return checkPayment(query, cmd.split(':')[1]);
   if (cmd === 'batalbeli') {
     const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);

@@ -309,6 +309,9 @@ function receiptContext(order, product, transaction, delivered) {
     total,
     fee,
     subtotal,
+    paymentMethod: String(transaction?.payment_method || order?.payment_method || 'gateway').toLowerCase(),
+    walletMainUsed: Number(transaction?.wallet_main_used || 0),
+    walletReferralUsed: Number(transaction?.wallet_referral_used || 0),
     delivered: Array.isArray(delivered) ? delivered : deliveredFromTransaction(transaction)
   };
 }
@@ -329,6 +332,9 @@ async function sendOrderReceipt(userId, order, product, transaction, delivered) 
     `Produk: <b>${escapeHtml(title)}</b>\n` +
     `Harga: <b>${escapeHtml(formatRupiah(ctx.subtotal))}</b>\n` +
     `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
+    `Metode: <b>${ctx.paymentMethod === 'wallet' ? 'Saldo Bot' : escapeHtml(paymentProviderLabel(order))}</b>\n` +
+    (ctx.walletMainUsed > 0 ? `Saldo Utama: <b>-${escapeHtml(formatRupiah(ctx.walletMainUsed))}</b>\n` : '') +
+    (ctx.walletReferralUsed > 0 ? `Saldo Referral: <b>-${escapeHtml(formatRupiah(ctx.walletReferralUsed))}</b>\n` : '') +
     (ctx.fee > 0 ? `Fee: <b>${escapeHtml(formatRupiah(ctx.fee))}</b>\n` : '') +
     `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
     `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>\n` +
@@ -368,6 +374,35 @@ async function sendOwnerLog(order, product, transaction, buyer = {}) {
   }
 }
 
+
+async function notifyFirstPurchaseReferral(inviteeId) {
+  const info = await db.getReferralRewardForInvitee(inviteeId).catch(() => null);
+  if (!info || info.mode !== 'first_purchase' || !info.telegram_id || info.amount <= 0) return;
+  const key = `referral_notice:first_purchase:${Number(inviteeId)}`;
+  const claimed = await db.claimOnce(key, 365 * 24 * 60 * 60, { invitee_id: Number(inviteeId) }, { failClosed: true }).catch(() => false);
+  if (!claimed) return;
+  try {
+    const wallet = await db.getWalletSummary(info.telegram_id, 1).catch(() => null);
+    await tg.sendMessage(info.telegram_id,
+      `🎁 <b>BONUS REFERRAL MASUK</b>
+` +
+      `=======================
+` +
+      `Pengguna yang kamu undang (${escapeHtml(info.invitee_name || String(inviteeId))}) telah menyelesaikan pembelian pertamanya.
+
+` +
+      `Bonus: <b>${escapeHtml(formatRupiah(info.amount))}</b>
+` +
+      `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
+      { parse_mode: 'HTML' }
+    );
+    await db.markClaimDone(key, { invitee_id: Number(inviteeId), notified: true }).catch(() => null);
+  } catch (error) {
+    await db.releaseClaim(key).catch(() => null);
+    console.error('Gagal mengirim notifikasi referral:', error.message || error);
+  }
+}
+
 async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
   if (!order?.invoice_ref) throw new Error('Invoice lokal tidak ditemukan.');
   const invoice = String(order.invoice_ref);
@@ -401,6 +436,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
     await db.deletePendingOrder(order.telegram_id, order.invoice_ref);
     await sendOwnerLog(order, product, result.transaction, currentBuyer);
+    await notifyFirstPurchaseReferral(order.telegram_id);
     await db.markClaimDone(processKey, { invoice, source, state: 'completed' });
 
     return {
@@ -412,6 +448,109 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
   } catch (error) {
     await db.releaseClaim(processKey).catch(() => null);
     throw error;
+  }
+}
+
+
+function topupAsPaymentOrder(topup = {}) {
+  return {
+    invoice_ref: String(topup.topup_ref || ''),
+    amount: Number(topup.total_amount || 0),
+    payment_provider: String(topup.payment_provider || ''),
+    provider_transaction_id: String(topup.provider_transaction_id || '')
+  };
+}
+
+async function verifyTopupTransaction(topup) {
+  return verifyPaymentTransaction(topupAsPaymentOrder(topup));
+}
+
+async function cancelTopupTransaction(topup) {
+  return cancelPaymentTransaction(topupAsPaymentOrder(topup));
+}
+
+async function completeTopupPayment({ topup, incoming = {}, source = 'webhook' }) {
+  if (!topup?.topup_ref) throw new Error('Referensi top up tidak ditemukan.');
+  const ref = String(topup.topup_ref);
+  const claimKey = `topup_process:${ref}`;
+  const claimed = await db.claimOnce(claimKey, 10 * 60, { ref, source }, { failClosed: true });
+  if (!claimed) return { ok: true, state: 'processing' };
+  try {
+    const result = await db.completeTopup(topup, incoming);
+    const row = result.topup || topup;
+    const user = result.user || await db.getUserByTelegramId(row.telegram_id);
+    if (!result.already_completed) {
+      await tg.sendMessage(row.telegram_id,
+        `✅ <b>TOP UP BERHASIL</b>
+` +
+        `=======================
+` +
+        `Referensi: <b>${escapeHtml(displayPaymentReference(row.topup_ref))}</b>
+` +
+        `Saldo Masuk: <b>${escapeHtml(formatRupiah(row.amount || 0))}</b>
+` +
+        (Number(row.fee || 0) > 0 ? `Fee Pembayaran: <b>${escapeHtml(formatRupiah(row.fee))}</b>
+` : '') +
+        `Saldo Utama Sekarang: <b>${escapeHtml(formatRupiah(user?.balance_main || 0))}</b>
+` +
+        `Saldo Referral: <b>${escapeHtml(formatRupiah(user?.balance_referral || 0))}</b>`,
+        { parse_mode: 'HTML' }
+      );
+    }
+    await db.markClaimDone(claimKey, { ref, source, state: 'completed' });
+    return { ok: true, state: result.already_completed ? 'already_completed' : 'completed', ...result };
+  } catch (error) {
+    await db.releaseClaim(claimKey).catch(() => null);
+    throw error;
+  }
+}
+
+async function watchPendingTopup({ topupRef, telegramId, maxWaitMs = 235000, intervalMs = 10000 } = {}) {
+  const ref = normalizedText(topupRef);
+  if (!ref) return { ok: false, state: 'invalid_topup_ref' };
+  const watchKey = `topup_watch:${ref}`;
+  const ttlSeconds = Math.ceil(Number(maxWaitMs || 235000) / 1000) + 60;
+  const claimed = await db.claimOnce(watchKey, ttlSeconds, { ref, telegramId, source: 'background-topup-watcher' });
+  if (!claimed) return { ok: true, state: 'watcher_exists' };
+  const deadline = Date.now() + Math.max(10000, Number(maxWaitMs || 235000));
+  let lastError = null;
+  await sleep(4000);
+  while (Date.now() < deadline) {
+    const topup = await db.getPendingTopupByRef(ref).catch((error) => { lastError = error; return null; });
+    if (!topup || topup.status === 'completed') {
+      await db.markClaimDone(watchKey, { ref, state: topup?.status || 'topup_missing' }).catch(() => null);
+      return { ok: true, state: topup?.status || 'topup_missing' };
+    }
+    if (telegramId && Number(topup.telegram_id) !== Number(telegramId)) return { ok: false, state: 'buyer_mismatch' };
+    try {
+      const transaction = await verifyTopupTransaction(topup);
+      if (transaction.status === 'completed') {
+        const result = await completeTopupPayment({ topup, incoming: transaction, source: 'background-topup-watcher' });
+        await db.markClaimDone(watchKey, { ref, state: result.state }).catch(() => null);
+        return result;
+      }
+      if (['cancelled', 'expired', 'failed'].includes(transaction.status)) {
+        await db.cancelPendingTopup(topup.telegram_id, topup.topup_ref).catch(() => null);
+        await db.markClaimDone(watchKey, { ref, state: transaction.status }).catch(() => null);
+        return { ok: true, state: transaction.status };
+      }
+    } catch (error) { lastError = error; }
+    await sleep(Math.max(5000, Number(intervalMs || 10000)));
+  }
+  if (lastError) console.warn(`Watcher top up ${ref} berakhir:`, lastError.message || lastError);
+  await db.markClaimDone(watchKey, { ref, state: 'watch_timeout' }).catch(() => null);
+  return { ok: true, state: 'watch_timeout' };
+}
+
+function scheduleTopupWatcher(options = {}) {
+  try {
+    const waitUntil = getVercelWaitUntil();
+    if (!waitUntil) return false;
+    waitUntil(watchPendingTopup(options).catch((error) => console.error('Background top up watcher error:', error.message || error)));
+    return true;
+  } catch (error) {
+    console.warn('Top up watcher tidak dapat dijadwalkan:', error.message || error);
+    return false;
   }
 }
 
@@ -502,6 +641,11 @@ module.exports = {
   verifyAutoGopayTransaction,
   verifyPaymentTransaction,
   cancelPaymentTransaction,
+  verifyTopupTransaction,
+  cancelTopupTransaction,
+  completeTopupPayment,
+  watchPendingTopup,
+  scheduleTopupWatcher,
   fulfillPaidOrder,
   sendOrderReceipt,
   sendOwnerLog,

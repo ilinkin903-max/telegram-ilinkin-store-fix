@@ -1,56 +1,68 @@
-# iLink.in Store v64 — Promo Persen, Menu Bot & Broadcast Order
+# iLink.in Store v65 — Referral, Saldo & Top Up
 
-v64 merupakan pembaruan dari v63. Seluruh perbaikan keamanan v62, stok atomik, payment recovery, AutoGoPay, Flash Sale, QRIS, dan status penjualan v63 tetap dipertahankan.
+v65 merupakan pembaruan dari v64. Seluruh fitur marketplace, AutoGoPay, stok atomik, promo per varian, Flash Sale, QRIS, broadcast, dan dashboard reseller tetap dipertahankan.
 
-## Ringkasan perubahan
+## Fitur baru
 
-- Badge `COMPLETED`/`CANCELED` pada Penjualan dibuat segaris dengan nama produk atau varian.
-- Kalimat konfirmasi perubahan status dibuat lebih jelas dan tombolnya dirapikan.
-- Kartu Users dibuat lebih padat; transaksi dan spending tidak menumpuk pada HP maupun tablet.
-- Tombol Hapus Users diperkecil pada layar kecil.
-- Tampilan ukuran sedang mengikuti tata letak ringkas seperti HP.
-- Daftar promo dan voucher dibuat lebih ringkas dan mudah dipindai.
-- Submenu Promo disederhanakan menjadi **Daftar**, **Buat**, dan **Flash Sale**.
-- Diskon nominal dan diskon persen sekarang dinormalisasi serta dihitung dengan benar untuk promo otomatis maupun voucher.
-- Pengaturan Toko memiliki opsi tombol bot: Marketplace, Daftar Produk, atau keduanya.
-- Broadcast dapat diberi tombol opsional **🛒 Order Sekarang** menuju Marketplace atau daftar produk bot.
+- Setiap user mendapat **Saldo Utama** dan **Saldo Referral** dalam rupiah.
+- Link referral otomatis berbentuk `https://t.me/BOT_USERNAME?start=ref_KODE`.
+- Hadiah referral dapat dipilih:
+  - langsung ketika user baru pertama kali membuka bot; atau
+  - setelah user baru menyelesaikan pembelian pertama.
+- User dapat top up Saldo Utama melalui QRIS provider pembayaran aktif.
+- Checkout dapat dibayar dengan gabungan saldo: **Saldo Utama lebih dahulu**, kemudian **Saldo Referral**.
+- Owner dapat mengubah kedua saldo setiap user melalui menu **Users → Atur Saldo**.
+- Semua top up, bonus referral, pembayaran saldo, dan koreksi owner dicatat di `wallet_ledger`.
+- Proses saldo, stok, top up, dan transaksi menggunakan RPC database atomik untuk mencegah saldo atau stok terpotong dua kali.
 
-## 1. Urutan SQL
+## 1. Jalankan SQL v65
 
-Untuk database yang sudah memakai v63:
+Untuk database yang sudah memakai v64, buka:
 
 ```text
 Supabase → SQL Editor → New query
 ```
 
-Jalankan seluruh isi:
+Jalankan seluruh isi file:
 
 ```text
-supabase/update-v64-percentage-discount.sql
+supabase/update-v65-referral-wallet-topup.sql
 ```
 
-SQL v64:
+SQL v65 menambahkan:
 
-- menormalisasi tipe `percent`, `percentage`, `persen`, dan `%` menjadi `percent`;
-- memperbaiki data voucher lama yang masih memakai kolom `discount`;
-- membatasi diskon persen maksimal 100%;
-- menambahkan validasi database agar nilai diskon berikutnya tetap konsisten.
+- kolom saldo dan referral pada `bot_users`;
+- tabel `wallet_ledger`;
+- tabel `pending_topups`;
+- kolom metode pembayaran pada pending order dan transaksi;
+- RPC registrasi referral;
+- RPC koreksi saldo owner;
+- RPC top up idempoten;
+- RPC checkout saldo atomik;
+- trigger bonus referral setelah pembelian pertama.
 
-SQL tersebut aman dijalankan berulang kali.
+SQL aman dijalankan berulang kali. Untuk instalasi baru, `supabase/schema.sql` sudah membundel v62 dan v65. Tetap jalankan SQL v63 dan v64 setelahnya apabila fitur status penjualan dan normalisasi diskon belum ada.
 
-Jika belum pernah memakai v62/v63, jalankan berurutan:
+Urutan lengkap untuk database lama yang belum pernah diperbarui:
 
 ```text
 supabase/update-v62-security-reliability.sql
 supabase/update-v63-ui-order-status.sql
 supabase/update-v64-percentage-discount.sql
+supabase/update-v65-referral-wallet-topup.sql
 ```
-
-Untuk instalasi baru dari nol, jalankan `supabase/schema.sql`, kemudian jalankan SQL v64 agar data diskon dan constraint menggunakan format terbaru.
 
 ## 2. Environment Variables
 
-Tidak ada Environment Variable wajib baru pada v64. Pertahankan seluruh variabel Production yang sudah digunakan, misalnya:
+Tidak ada secret baru khusus referral. Pertahankan konfigurasi Production yang sudah digunakan.
+
+Referral link memerlukan:
+
+```env
+BOT_USERNAME=username_bot_tanpa_tanda_at
+```
+
+Top up otomatis memakai provider yang aktif, misalnya AutoGoPay:
 
 ```env
 PAYMENT_PROVIDER=autogopay
@@ -68,151 +80,126 @@ QR_DOWNLOAD_SECRET=RAHASIA_UNDUH_QRIS_ANDA
 MINIAPP_DEV_MODE=false
 ```
 
-Jangan menyimpan API key atau secret di GitHub.
+Top up dapat selesai otomatis hanya jika callback pembayaran atau `payment-cron` bekerja. Tombol **Cek Top Up** tetap tersedia sebagai cadangan.
 
-## 3. Upload dan deployment
+## 3. Upload dan deploy
 
-1. Ekstrak ZIP v64.
+1. Ekstrak ZIP v65.
 2. Unggah seluruh isi folder proyek ke root repository GitHub.
 3. Ganti file lama dan commit.
 4. Buka **Vercel → Deployments → Redeploy**.
 5. Pilih redeploy tanpa build cache.
-6. Tunggu status deployment menjadi **Ready**.
-
-## 4. Pastikan versi aktif
-
-Buka:
+6. Tunggu hingga status **Ready**.
+7. Buka endpoint berikut dan pastikan versinya v65:
 
 ```text
 https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 ```
 
-Respons harus memuat:
+Hasil harus memuat:
 
 ```json
 {
-  "ok": true,
-  "version": "v64-ui-promo-bot-menu-broadcast",
-  "active_provider": "autogopay"
+  "version": "v65-referral-wallet-topup"
 }
 ```
 
-Jika masih menampilkan v63, periksa Production deployment dan redeploy tanpa cache.
-
-## 5. Mengatur tombol menu bot
+## 4. Mengatur referral dan top up
 
 Buka:
 
 ```text
-Dashboard Reseller → Pengaturan → Pengaturan Toko
+Reseller Dashboard
+→ Pengaturan
+→ Saldo, Referral & Top Up
 ```
 
-Pada **Tombol Utama di Bot**, pilih salah satu:
+Tersedia pengaturan:
 
-- **Marketplace + Daftar Produk**
-- **Marketplace saja**
-- **Daftar Produk saja**
+- Status Referral;
+- hadiah rupiah per undangan;
+- hadiah langsung atau setelah pembelian pertama;
+- aktif/nonaktif Top Up;
+- aktif/nonaktif pembayaran produk dengan saldo;
+- minimum dan maksimum top up.
 
-Simpan pengaturan. Pilihan diterapkan pada menu `/start`. Perintah `/produk` tetap dapat dipakai meskipun tombol Daftar Produk disembunyikan.
+Mode **langsung** berarti orang yang diundang tidak perlu melakukan pembelian pertama. Hadiah masuk ketika akun Telegram tersebut pertama kali membuka bot melalui link referral.
 
-## 6. Menggunakan diskon persen
+## 5. Mengedit saldo user
 
 Buka:
 
 ```text
-Dashboard Reseller → Promo → Buat
+Reseller Dashboard → Users → Atur Saldo
 ```
 
-Pilih:
+Owner dapat menetapkan:
+
+- Saldo Utama;
+- Saldo Referral;
+- catatan penyesuaian.
+
+Sistem menyimpan nilai saldo baru dan mencatat selisihnya ke ledger. Nilai tidak boleh negatif.
+
+## 6. Alur user
+
+User dapat membuka:
 
 ```text
-Tipe Diskon: Persen
+/start
+/saldo
+/referral
+/topup
 ```
 
-Lalu isi nilai antara `1` sampai `100`. Contoh:
+Menu **Saldo, Top Up & Referral** menampilkan:
+
+- Saldo Utama;
+- Saldo Referral;
+- total saldo;
+- jumlah undangan;
+- link referral;
+- mutasi terbaru;
+- tombol Top Up dan Belanja dengan Saldo.
+
+Saat checkout, pilihan pembayaran menjadi:
 
 ```text
-10
+Bayar dengan Saldo
+Bayar dengan QRIS
+Top Up Saldo
 ```
 
-berarti potongan 10% dari subtotal yang memenuhi target, jumlah minimum, jadwal, dan syarat belanja.
+Tombol bayar dengan saldo hanya muncul ketika total Saldo Utama + Saldo Referral mencukupi.
 
-Contoh subtotal Rp50.000 dengan diskon 10%:
+## 7. Aturan keamanan referral
 
-```text
-Potongan: Rp5.000
-Total setelah diskon: Rp45.000
-```
+- Satu akun Telegram hanya dapat memberikan satu bonus referral.
+- User lama yang membuka link referral lain tidak mengubah pengundangnya.
+- Referral diri sendiri ditolak.
+- Hadiah dan nominal disimpan sebagai snapshot saat user mendaftar.
+- Bonus pembelian pertama diproses di database dan tidak dapat dikreditkan dua kali.
+- Top up dan checkout saldo dikunci secara atomik.
 
-Aturan ini berlaku untuk promo otomatis dan voucher manual.
+## 8. Pengujian setelah deployment
 
-## 7. Menambahkan tombol Order Sekarang pada broadcast
-
-Buka:
-
-```text
-Dashboard Reseller → Broadcast
-```
-
-Aktifkan:
-
-```text
-Tambahkan tombol “Order Sekarang”
-```
-
-Kemudian pilih tujuan:
-
-- **Buka Marketplace** — tombol membuka website Marketplace.
-- **Buka Daftar Produk Bot** — tombol menjalankan daftar produk di Telegram.
-
-Tombol dapat dipakai bersama broadcast teks, foto, atau stiker. Jika tidak dibutuhkan, biarkan opsi tersebut nonaktif.
-
-## 8. Perubahan status Penjualan
-
-Pada kartu Penjualan, badge status berada segaris dengan nama produk/varian. Tekan badge untuk membuka konfirmasi:
-
-- `COMPLETED` dapat ditandai menjadi `CANCELED`.
-- `CANCELED` dapat dikembalikan menjadi `COMPLETED`.
-
-Perubahan ini hanya untuk pencatatan administratif. Sistem tidak otomatis melakukan refund atau mengembalikan produk yang sudah terkirim.
-
-## 9. Pengujian setelah deployment
-
-1. Buat promo otomatis nominal dan pastikan potongan benar.
-2. Buat promo otomatis persen, misalnya 10%, lalu cek harga checkout.
-3. Buat voucher persen dan uji pada checkout baru.
-4. Uji ketiga pilihan tombol bot melalui `/start`.
-5. Kirim broadcast tanpa tombol, kemudian broadcast dengan tombol Marketplace.
-6. Kirim broadcast dengan tombol Daftar Produk Bot.
-7. Periksa kartu Penjualan dan Users pada HP, tablet, serta desktop.
-8. Uji satu pembayaran asli sampai produk terkirim.
-
-## Troubleshooting
-
-### Diskon persen masih dianggap nominal
-
-Pastikan SQL berikut sudah dijalankan:
-
-```text
-supabase/update-v64-percentage-discount.sql
-```
-
-Kemudian edit dan simpan ulang promo/voucher tersebut agar data lama dinormalisasi.
-
-### Tombol Order Sekarang tidak muncul
-
-Pastikan checkbox di form Broadcast aktif dan broadcast dikirim dari deployment v64. Untuk tujuan Marketplace, pastikan `STORE_URL` atau `PUBLIC_URL` berisi URL HTTPS yang benar.
-
-### Tombol bot belum berubah
-
-Simpan ulang **Pengaturan Toko**, lalu kirim `/start` kembali. Pesan lama tidak ikut berubah; menu baru muncul pada respons `/start` berikutnya.
+1. Atur hadiah referral, misalnya Rp500, dengan mode langsung.
+2. Buka link referral menggunakan akun Telegram baru.
+3. Pastikan Saldo Referral pengundang bertambah satu kali.
+4. Ulangi `/start` pada akun baru dan pastikan bonus tidak bertambah lagi.
+5. Ubah mode menjadi pembelian pertama dan uji akun baru berikutnya.
+6. Lakukan top up kecil dan pastikan Saldo Utama bertambah setelah pembayaran selesai.
+7. Beli produk menggunakan Saldo Utama saja.
+8. Beli produk menggunakan gabungan Saldo Utama dan Saldo Referral.
+9. Ubah saldo user dari dashboard dan periksa mutasi saldo.
+10. Uji webhook dan `payment-cron` agar top up tetap terdeteksi saat user menutup bot.
 
 ## Status pengujian
 
 - Pemeriksaan sintaks JavaScript: berhasil.
-- Unit/static tests: **84/84 berhasil**.
-- Pemeriksaan struktur HTML dan fitur v64: berhasil.
-- Pengujian lokal menggunakan stub dependency sementara karena lingkungan pengujian tidak mengunduh paket eksternal.
-- Stub pengujian tidak disertakan dalam ZIP final.
-- SQL ditinjau secara statis, tetapi belum dijalankan pada Supabase produksi.
-- Integrasi nyata Telegram, AutoGoPay, Supabase, dan Vercel tetap perlu diuji menggunakan kredensial aktif Anda.
+- Unit/static tests: **93/93 berhasil**.
+- Pemeriksaan ID HTML dashboard: tidak ada ID ganda.
+- Pengujian lokal menggunakan stub dependency sementara karena registry paket eksternal tidak tersedia di lingkungan pengujian.
+- Stub tidak disertakan dalam ZIP final.
+- SQL ditinjau secara statis dan dibundel ke schema, tetapi belum dijalankan pada Supabase produksi.
+- Transaksi nyata Telegram, AutoGoPay, Supabase, dan Vercel tetap perlu dites menggunakan kredensial aktif Anda.

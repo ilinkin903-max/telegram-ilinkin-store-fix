@@ -1,21 +1,24 @@
-iLink.in Store v64 — TEST REPORT
-================================
-Version: v64-ui-promo-bot-menu-broadcast
+iLink.in Store v65 — TEST REPORT
+=================================
 
-Checks completed:
-- JavaScript syntax checks: PASS
-- Node tests: 84/84 PASS
-- Percentage discount aliases and calculation: PASS
-- Promo/voucher percentage validation: PASS
-- Compact promo UI markers: PASS
-- Sales status inline layout markers: PASS
-- Responsive Users layout markers: PASS
-- Bot menu mode settings: PASS
-- Broadcast Order Sekarang markup: PASS
-- Existing v62/v63 reliability tests: PASS
+Version: v65-referral-wallet-topup
+Tests: 93 passed / 93 total
+
+Checked:
+- JavaScript syntax for API, bot, database helpers, marketplace, and dashboard
+- Existing payment, promo, marketplace, dashboard, and reliability tests
+- Referral registration and one-time reward safeguards
+- Immediate reward and first-purchase reward modes
+- Wallet checkout using main balance before referral balance
+- Atomic wallet fulfillment and stock locking
+- Top-up idempotency, webhook, watcher, and payment cron integration
+- Dashboard referral/top-up settings
+- Per-user main/referral balance editor with ledger note
+- Fresh-install schema includes v65 migration
+- Dashboard HTML IDs are unique
 
 Notes:
-- Tests were run with temporary local dependency stubs because the execution environment had no package download access.
-- Temporary node_modules stubs are removed from the final ZIP.
-- SQL migration was reviewed statically and was not executed against the user's production Supabase project.
-- Real Telegram, AutoGoPay, Supabase, and Vercel integration must be tested after deployment.
+- External dependencies were represented by temporary local stubs because the test registry was unavailable.
+- Stubs are not included in the final ZIP.
+- SQL was statically reviewed but not executed against the user's production Supabase.
+- Real Telegram/AutoGoPay transactions still require production testing.

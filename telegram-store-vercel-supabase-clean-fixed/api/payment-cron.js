@@ -40,7 +40,25 @@ module.exports = async function handler(req, res) {
         results.push({ invoice: paymentService.displayPaymentReference(invoice), state: 'error', error: error.message || String(error) });
       }
     }
-    return res.status(200).json({ ok: true, version: getAppVersion(), checked: orders.length, results });
+    const topups = await db.listPendingTopupsAwaitingPayment(10).catch(() => []);
+    for (const topup of topups) {
+      const ref = String(topup.topup_ref || '');
+      try {
+        const transaction = await paymentService.verifyTopupTransaction(topup);
+        if (transaction.status === 'completed') {
+          const completed = await paymentService.completeTopupPayment({ topup, incoming: transaction, source: 'payment-cron-topup' });
+          results.push({ topup: paymentService.displayPaymentReference(ref), state: completed.state || 'completed' });
+        } else if (['expired', 'cancelled', 'failed'].includes(transaction.status)) {
+          await db.cancelPendingTopup(topup.telegram_id, topup.topup_ref);
+          results.push({ topup: paymentService.displayPaymentReference(ref), state: transaction.status });
+        } else {
+          results.push({ topup: paymentService.displayPaymentReference(ref), state: transaction.status || 'pending' });
+        }
+      } catch (error) {
+        results.push({ topup: paymentService.displayPaymentReference(ref), state: 'error', error: error.message || String(error) });
+      }
+    }
+    return res.status(200).json({ ok: true, version: getAppVersion(), checked: orders.length + topups.length, orders_checked: orders.length, topups_checked: topups.length, results });
   } catch (error) {
     console.error('payment cron error:', error);
     return res.status(500).json({ ok: false, error: error.message || 'Server error' });

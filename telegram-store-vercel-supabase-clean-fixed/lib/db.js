@@ -216,6 +216,92 @@ async function upsertUser(from) {
   if (error) throw error;
 }
 
+async function registerUserWithReferral(from = {}, referralCode = '', settings = {}) {
+  const telegramId = Number(from.id || from.telegram_id || 0);
+  if (!telegramId) throw new Error('ID Telegram pengguna tidak valid.');
+  const rewardMode = String(settings.referral_reward_mode || 'signup').trim().toLowerCase() === 'first_purchase'
+    ? 'first_purchase'
+    : 'signup';
+  const referralEnabled = String(settings.referral_enabled ?? 'true').toLowerCase() !== 'false';
+  const rewardAmount = Math.max(0, Number(settings.referral_reward_amount || 0));
+  const { data, error } = await sb().rpc('register_bot_user_v65', {
+    p_user: {
+      telegram_id: telegramId,
+      id: telegramId,
+      first_name: from.first_name || null,
+      username: from.username || null
+    },
+    p_referral_code: String(referralCode || '').trim().toUpperCase(),
+    p_referral_enabled: referralEnabled,
+    p_reward_amount: rewardAmount,
+    p_reward_mode: rewardMode
+  });
+  if (error) {
+    const message = String(error.message || error);
+    if (/register_bot_user_v65|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fitur referral v65 belum tersedia. Jalankan supabase/update-v65-referral-wallet-topup.sql terlebih dahulu.');
+    }
+    throw error;
+  }
+  return data || {};
+}
+
+async function getWalletSummary(telegramId, ledgerLimit = 8) {
+  const userId = Number(telegramId || 0);
+  const [userResult, invitedResult, rewardedResult, ledgerResult] = await Promise.all([
+    sb().from('bot_users').select('*').eq('telegram_id', userId).maybeSingle(),
+    sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }).eq('referred_by', userId),
+    sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }).eq('referred_by', userId).eq('referral_status', 'rewarded'),
+    sb().from('wallet_ledger').select('*').eq('telegram_id', userId).order('created_at', { ascending: false }).limit(Math.max(1, Math.min(50, Number(ledgerLimit || 8))))
+  ]);
+  if (userResult.error) throw userResult.error;
+  if (invitedResult.error) throw invitedResult.error;
+  if (rewardedResult.error) throw rewardedResult.error;
+  if (ledgerResult.error && String(ledgerResult.error.code || '') !== '42P01') throw ledgerResult.error;
+  const user = userResult.data;
+  if (!user) return null;
+  return {
+    ...user,
+    balance_main: Math.max(0, Number(user.balance_main || 0)),
+    balance_referral: Math.max(0, Number(user.balance_referral || 0)),
+    balance_total: Math.max(0, Number(user.balance_main || 0)) + Math.max(0, Number(user.balance_referral || 0)),
+    invited_total: Number(invitedResult.count || 0),
+    rewarded_total: Number(rewardedResult.count || 0),
+    ledger: ledgerResult.data || []
+  };
+}
+
+async function setUserBalances(telegramId, mainBalance, referralBalance, options = {}) {
+  const reference = String(options.reference || `balance-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+  const { data, error } = await sb().rpc('set_user_balances_v65', {
+    p_telegram_id: Number(telegramId),
+    p_balance_main: Math.max(0, Number(mainBalance || 0)),
+    p_balance_referral: Math.max(0, Number(referralBalance || 0)),
+    p_reason: String(options.reason || 'Penyesuaian saldo oleh owner'),
+    p_reference: reference,
+    p_actor_id: options.actorId ? Number(options.actorId) : null
+  });
+  if (error) {
+    const message = String(error.message || error);
+    if (/set_user_balances_v65|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fitur saldo v65 belum tersedia. Jalankan SQL v65 terlebih dahulu.');
+    }
+    if (/USER_NOT_FOUND/i.test(message)) throw new Error('User tidak ditemukan.');
+    throw error;
+  }
+  return data;
+}
+
+async function listWalletLedger(telegramId, limit = 20) {
+  const { data, error } = await sb().from('wallet_ledger')
+    .select('*')
+    .eq('telegram_id', Number(telegramId))
+    .order('created_at', { ascending: false })
+    .limit(Math.max(1, Math.min(100, Number(limit || 20))));
+  if (error) throw error;
+  return data || [];
+}
+
 const HISTORICAL_STATS_KEY = 'historical_stats';
 
 function normalizeHistoricalStats(value = {}) {
@@ -714,6 +800,7 @@ async function upsertPendingOrder(input) {
     payment_provider: String(input.payment_provider || 'pakasir').trim().toLowerCase(),
     provider_transaction_id: String(input.provider_transaction_id || '').trim(),
     provider_checkout_url: String(input.provider_checkout_url || '').trim(),
+    payment_method: String(input.payment_method || 'gateway').trim().toLowerCase(),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
@@ -763,6 +850,93 @@ async function deletePendingOrder(telegramId, invoiceRef = '') {
 }
 
 
+async function upsertPendingTopup(input = {}) {
+  const payload = {
+    telegram_id: Number(input.telegram_id || 0),
+    topup_ref: String(input.topup_ref || '').trim(),
+    amount: Math.max(0, Number(input.amount || 0)),
+    fee: Math.max(0, Number(input.fee || 0)),
+    total_amount: Math.max(0, Number(input.total_amount || 0)),
+    payment_provider: String(input.payment_provider || '').trim().toLowerCase(),
+    provider_transaction_id: String(input.provider_transaction_id || '').trim() || null,
+    provider_checkout_url: String(input.provider_checkout_url || '').trim(),
+    qr_payload: String(input.qr_payload || ''),
+    status: String(input.status || 'waiting_amount').trim().toLowerCase(),
+    expires_at: input.expires_at || null,
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.telegram_id || !payload.topup_ref) throw new Error('Data top up tidak lengkap.');
+  const { data, error } = await sb().from('pending_topups').upsert(payload, { onConflict: 'topup_ref' }).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingTopupByUser(telegramId) {
+  const { data, error } = await sb().from('pending_topups')
+    .select('*')
+    .eq('telegram_id', Number(telegramId))
+    .in('status', ['waiting_amount', 'awaiting_payment'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingTopupByRef(topupRef) {
+  const ref = String(topupRef || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('pending_topups').select('*').eq('topup_ref', ref).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingTopupByProviderTransactionId(transactionId) {
+  const ref = String(transactionId || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('pending_topups').select('*').eq('provider_transaction_id', ref).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function listPendingTopupsAwaitingPayment(limit = 20) {
+  const { data, error } = await sb().from('pending_topups')
+    .select('*')
+    .eq('status', 'awaiting_payment')
+    .order('updated_at', { ascending: true })
+    .limit(Math.max(1, Math.min(100, Number(limit || 20))));
+  if (error) throw error;
+  return data || [];
+}
+
+async function cancelPendingTopup(telegramId, topupRef = '') {
+  let query = sb().from('pending_topups').update({ status: 'canceled', updated_at: new Date().toISOString() })
+    .eq('telegram_id', Number(telegramId))
+    .in('status', ['waiting_amount', 'awaiting_payment']);
+  const ref = String(topupRef || '').trim();
+  if (ref) query = query.eq('topup_ref', ref);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+async function completeTopup(topup, incoming = {}) {
+  const { data, error } = await sb().rpc('complete_topup_v65', {
+    p_topup_ref: String(topup?.topup_ref || incoming?.order_id || '').trim(),
+    p_provider_transaction_id: String(incoming?.transaction_id || topup?.provider_transaction_id || '').trim(),
+    p_paid_total: Number(incoming?.amount || topup?.total_amount || 0)
+  });
+  if (error) {
+    const message = String(error.message || error);
+    if (/complete_topup_v65|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fitur top up v65 belum tersedia. Jalankan SQL v65 terlebih dahulu.');
+    }
+    if (/TOPUP_AMOUNT_MISMATCH/i.test(message)) throw new Error('Nominal top up tidak cocok.');
+    throw error;
+  }
+  return data || {};
+}
+
+
 async function getShopSettings() {
   const defaults = {
     store_name: '',
@@ -783,7 +957,14 @@ async function getShopSettings() {
     start_media_caption: '',
     customer_service_link: '',
     group_link: '',
-    bot_menu_mode: 'both'
+    bot_menu_mode: 'both',
+    referral_enabled: 'true',
+    referral_reward_amount: '500',
+    referral_reward_mode: 'signup',
+    topup_enabled: 'true',
+    wallet_payment_enabled: 'true',
+    topup_min_amount: '10000',
+    topup_max_amount: '1000000'
   };
   const { data, error } = await sb().from('shop_settings').select('key,value');
   if (error) {
@@ -822,7 +1003,14 @@ async function saveShopSettings(input = {}) {
     'start_media_caption',
     'customer_service_link',
     'group_link',
-    'bot_menu_mode'
+    'bot_menu_mode',
+    'referral_enabled',
+    'referral_reward_amount',
+    'referral_reward_mode',
+    'topup_enabled',
+    'wallet_payment_enabled',
+    'topup_min_amount',
+    'topup_max_amount'
   ];
   const rows = allowed
     .filter((key) => input[key] !== undefined)
@@ -928,10 +1116,11 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     fee: Math.max(0, Number(order.fee || 0)),
     cost_unit: Math.max(0, Number(order.cost_unit || 0)),
     cost_total: Math.max(0, Number(order.cost_total || 0)),
-    cost_source: String(order.cost_source || 'unset')
+    cost_source: String(order.cost_source || 'unset'),
+    payment_method: String(order.payment_method || 'gateway').trim().toLowerCase()
   };
 
-  const { data, error } = await sb().rpc('fulfill_paid_order_v62', {
+  const rpcPayload = {
     p_order: payloadOrder,
     p_product_code: String(product?.kode || order.product_code || '').trim(),
     p_total_price: Number(totalPrice || 0),
@@ -939,12 +1128,20 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
       first_name: buyer?.first_name || null,
       username: buyer?.username || null
     }
-  });
+  };
+  const rpcResult = payloadOrder.payment_method === 'wallet'
+    ? await sb().rpc('fulfill_wallet_order_v65', rpcPayload)
+    : await sb().rpc('fulfill_paid_order_v62', rpcPayload);
+  const { data, error } = rpcResult;
   if (error) {
     const message = String(error.message || error);
+    if (/fulfill_wallet_order_v65|schema cache|could not find the function/i.test(message) && payloadOrder.payment_method === 'wallet') {
+      throw new Error('Fungsi pembayaran saldo v65 belum tersedia. Jalankan SQL v65 terlebih dahulu.');
+    }
     if (/fulfill_paid_order_v62|schema cache|could not find the function/i.test(message)) {
       throw new Error('Fungsi stok atomik v62 belum tersedia. Jalankan supabase/update-v62-security-reliability.sql terlebih dahulu.');
     }
+    if (/INSUFFICIENT_WALLET_BALANCE/i.test(message)) throw new Error('Saldo tidak mencukupi. Silakan top up atau gunakan QRIS.');
     if (/INSUFFICIENT_STOCK/i.test(message)) throw new Error('Stok produk tidak mencukupi.');
     if (/VARIANT_NOT_FOUND/i.test(message)) throw new Error('Varian produk tidak ditemukan.');
     if (/PRODUCT_NOT_FOUND/i.test(message)) throw new Error('Produk untuk invoice ini tidak ditemukan.');
@@ -958,7 +1155,37 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   return {
     delivered,
     transaction: result.transaction || null,
-    already_completed: result.already_completed === true
+    already_completed: result.already_completed === true,
+    wallet: result.wallet || null
+  };
+}
+
+
+async function getReferralRewardForInvitee(inviteeId) {
+  const userId = Number(inviteeId);
+  const [{ data: invitee, error }, { data: ledger, error: ledgerError }] = await Promise.all([
+    sb().from('bot_users')
+      .select('telegram_id,referred_by,referral_status,referral_reward_amount,referral_rewarded_at,first_name,username')
+      .eq('telegram_id', userId)
+      .maybeSingle(),
+    sb().from('wallet_ledger')
+      .select('entry_key,amount,created_at')
+      .like('entry_key', `referral:%:${userId}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ]);
+  if (error) throw error;
+  if (ledgerError && String(ledgerError.code || '') !== '42P01') throw ledgerError;
+  if (!invitee || invitee.referral_status !== 'rewarded' || !invitee.referred_by || !invitee.referral_rewarded_at || !ledger) return null;
+  const mode = String(ledger.entry_key || '').includes(':first_purchase:') ? 'first_purchase' : 'signup';
+  return {
+    telegram_id: Number(invitee.referred_by),
+    amount: Number(ledger.amount || invitee.referral_reward_amount || 0),
+    invitee_id: Number(invitee.telegram_id),
+    invitee_name: invitee.username ? '@' + invitee.username : (invitee.first_name || String(invitee.telegram_id)),
+    rewarded_at: ledger.created_at || invitee.referral_rewarded_at,
+    mode
   };
 }
 
@@ -1363,7 +1590,7 @@ async function cleanupDatabase(input = {}) {
 }
 
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs'];
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs'];
 
 async function safeSelectAll(table) {
   try {
@@ -1440,6 +1667,8 @@ async function importBackupData(backup = {}, options = {}) {
   if (tables.vouchers) result.vouchers = await upsertRows('vouchers', tables.vouchers, 'code');
   if (tables.shop_settings) result.shop_settings = await upsertRows('shop_settings', tables.shop_settings, 'key');
   if (tables.pending_orders) result.pending_orders = await upsertRows('pending_orders', tables.pending_orders, 'telegram_id');
+  if (tables.pending_topups) result.pending_topups = await upsertRows('pending_topups', tables.pending_topups, 'topup_ref');
+  if (tables.wallet_ledger) result.wallet_ledger = await upsertRows('wallet_ledger', tables.wallet_ledger, 'entry_key');
   if (tables.auto_promos) result.auto_promos = await upsertRows('auto_promos', tables.auto_promos, 'code');
 
   // Transactions are imported only when explicitly requested, to prevent double totals.
@@ -1649,6 +1878,10 @@ module.exports = {
   markClaimDone,
   releaseClaim,
   upsertUser,
+  registerUserWithReferral,
+  getWalletSummary,
+  setUserBalances,
+  listWalletLedger,
   getStats,
   ensureHistoricalStatsFromCurrentTransactions,
   listProducts,
@@ -1674,6 +1907,13 @@ module.exports = {
   getPendingOrderByProviderTransactionId,
   listPendingOrdersAwaitingPayment,
   deletePendingOrder,
+  upsertPendingTopup,
+  getPendingTopupByUser,
+  getPendingTopupByRef,
+  getPendingTopupByProviderTransactionId,
+  listPendingTopupsAwaitingPayment,
+  cancelPendingTopup,
+  completeTopup,
   getVoucher,
   voucherIsValid,
   voucherDiscountAmount,
@@ -1685,6 +1925,7 @@ module.exports = {
   updateTransactionCost,
   updateTransactionStatus,
   getUserByTelegramId,
+  getReferralRewardForInvitee,
   completeOrder,
   normalizeBulkPrices,
   normalizeVariants,

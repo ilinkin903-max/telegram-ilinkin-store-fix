@@ -244,7 +244,7 @@ async function broadcast(payload = {}, req = null) {
 
 module.exports = async function handler(req, res) {
   try {
-    assertOwnerMiniApp(req);
+    const owner = assertOwnerMiniApp(req);
     const action = req.query?.action || '';
 
     if (req.method === 'GET' && action === 'license-status') return json(res, 200, { ok: true, data: await license.checkLicense({ force: true }) });
@@ -343,7 +343,14 @@ module.exports = async function handler(req, res) {
         start_media_caption: body.start_media_caption,
         customer_service_link: body.customer_service_link,
         group_link: body.group_link,
-        bot_menu_mode: body.bot_menu_mode
+        bot_menu_mode: body.bot_menu_mode,
+        referral_enabled: body.referral_enabled,
+        referral_reward_amount: body.referral_reward_amount,
+        referral_reward_mode: body.referral_reward_mode,
+        topup_enabled: body.topup_enabled,
+        wallet_payment_enabled: body.wallet_payment_enabled,
+        topup_min_amount: body.topup_min_amount,
+        topup_max_amount: body.topup_max_amount
       });
       return json(res, 200, { ok: true, data });
     }
@@ -420,6 +427,22 @@ module.exports = async function handler(req, res) {
       const product = await db.updateProductByCode(code, updates);
       if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
       return json(res, 200, { ok: true, data: product });
+    }
+
+    if (action === 'set-user-balances') {
+      const telegramId = numberOf(body.telegram_id);
+      const balanceMain = Number(body.balance_main);
+      const balanceReferral = Number(body.balance_referral);
+      if (!telegramId) return json(res, 400, { ok: false, error: 'ID Telegram user wajib diisi.' });
+      if (!Number.isFinite(balanceMain) || !Number.isFinite(balanceReferral) || balanceMain < 0 || balanceReferral < 0) {
+        return json(res, 400, { ok: false, error: 'Saldo Utama dan Saldo Referral harus berupa angka nol atau lebih.' });
+      }
+      const user = await db.setUserBalances(telegramId, balanceMain, balanceReferral, {
+        reason: String(body.reason || 'Penyesuaian saldo dari Reseller Dashboard').trim(),
+        actorId: Number(owner?.id || config.ownerId || 0),
+        reference: `dashboard-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+      });
+      return json(res, 200, { ok: true, data: user });
     }
 
     if (action === 'delete-user') {

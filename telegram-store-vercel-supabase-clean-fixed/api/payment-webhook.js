@@ -183,7 +183,17 @@ async function processAutoGopayWebhook(req, res, payload) {
   const order = await db.getPendingOrderByProviderTransactionId(incoming.transaction_id)
     || (incoming.order_id ? await db.getPendingOrderByInvoice(incoming.order_id) : null);
   if (!order) {
-    return res.status(200).json({ success: true, state: 'invoice_not_found' });
+    const topup = await db.getPendingTopupByProviderTransactionId(incoming.transaction_id)
+      || (incoming.order_id ? await db.getPendingTopupByRef(incoming.order_id) : null);
+    if (!topup) return res.status(200).json({ success: true, state: 'invoice_not_found' });
+    if (String(topup.payment_provider || '').toLowerCase() !== 'autogopay') {
+      return res.status(400).json({ success: false, error: 'Provider top up tidak cocok.' });
+    }
+    if (Number(topup.total_amount || 0) !== Number(incoming.amount || 0)) {
+      return res.status(400).json({ success: false, error: 'Nominal top up tidak cocok.' });
+    }
+    const topupResult = await paymentService.completeTopupPayment({ topup, incoming, source: 'autogopay-topup-webhook' });
+    return res.status(200).json({ success: true, state: topupResult.state, transaction_id: incoming.transaction_id, topup_ref: topup.topup_ref });
   }
   if (String(order.payment_provider || '').toLowerCase() !== 'autogopay') {
     return res.status(400).json({ success: false, error: 'Provider invoice tidak cocok.' });
@@ -227,6 +237,16 @@ async function processPakasirWebhook(req, res, payload) {
 
   const order = await db.getPendingOrderByInvoice(incoming.order_id);
   if (!order) {
+    const topup = await db.getPendingTopupByRef(incoming.order_id).catch(() => null);
+    if (topup) {
+      if (Number(topup.total_amount || 0) !== Number(incoming.amount || 0)) {
+        return res.status(400).json({ ok: false, error: 'Nominal top up tidak cocok.' });
+      }
+      const verifiedTopup = await paymentService.verifyTopupTransaction(topup);
+      if (verifiedTopup.status !== 'completed') return res.status(200).json({ ok: true, state: 'not_completed' });
+      const topupResult = await paymentService.completeTopupPayment({ topup, incoming: verifiedTopup, source: 'pakasir-topup-webhook' });
+      return res.status(200).json({ ok: true, state: topupResult.state, topup_ref: topup.topup_ref });
+    }
     const existing = await db.getTransactionByOrderRef(incoming.order_id).catch(() => null);
     return res.status(200).json({ ok: true, state: existing ? 'already_completed' : 'invoice_not_found' });
   }
