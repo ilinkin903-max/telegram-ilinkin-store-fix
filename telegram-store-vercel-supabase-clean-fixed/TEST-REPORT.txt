@@ -1,18 +1,24 @@
-iLink.in Store v66 — Test Report
+iLink.in Store v67 — Test Report
+=================================
 
-Version: v66-referral-credit-channel-notification
-JavaScript syntax checks: PASS
-Automated tests: 99 passed, 0 failed
+Version: v67-marketplace-wallet-payment
+Package version: 4.7.0
 
-Coverage tambahan v66:
-- referral untuk user lama yang belum pernah bertransaksi
-- penolakan referral untuk user yang sudah bertransaksi
-- idempotensi bonus referral melalui wallet_ledger
-- advisory lock registrasi referral
-- notifikasi referral langsung ke channel
-- notifikasi referral pembelian pertama ke channel
-- notifikasi top up berhasil ke channel
-- WALLET_CHANNEL dengan fallback CHANNEL_LOG
+Checks:
+- JavaScript syntax checks: PASSED
+- Node test suites: PASSED
+- Total tests: 104
+- Passed: 104
+- Failed: 0
 
-Catatan:
-Pengujian lokal memakai stub dependency sementara karena registry npm pada lingkungan pengujian tidak lengkap. Stub telah dihapus dan tidak disertakan pada paket ZIP final. SQL diperiksa secara statis tetapi belum dijalankan pada Supabase produksi.
+New v67 coverage:
+- Marketplace wallet balance header
+- Safe catalog wallet payload
+- QRIS / Saldo Bot checkout selector
+- Wallet checkout API routing
+- Atomic wallet fulfillment through SQL v65
+- Header balance refresh after wallet payment
+
+Important:
+- SQL v65 and v66 must already be installed.
+- Production Telegram, Supabase, and payment gateway integration were not executed in this local environment.

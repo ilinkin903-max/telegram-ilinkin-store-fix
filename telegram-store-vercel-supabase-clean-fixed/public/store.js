@@ -24,12 +24,15 @@
     bannerIndex: 0,
     bannerTimer: null,
     bannerInterval: 5000,
-    flashTimer: null
+    flashTimer: null,
+    paymentMethod: 'qris',
+    checkoutTotal: 0
   };
 
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     brandLogo: $('brandLogo'), brandName: $('brandName'), searchInput: $('searchInput'), clearSearch: $('clearSearch'),
+    walletBalanceChip: $('walletBalanceChip'), walletBalanceValue: $('walletBalanceValue'),
     telegramNotice: $('telegramNotice'), hero: $('hero'), heroTitle: $('heroTitle'), heroDescription: $('heroDescription'),
     heroCarousel: $('heroCarousel'), heroTrack: $('heroTrack'), heroDots: $('heroDots'),
     flashSaleSection: $('flashSaleSection'), flashSaleTitle: $('flashSaleTitle'), flashSaleGrid: $('flashSaleGrid'),
@@ -47,7 +50,10 @@
     paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'), paymentCheckoutLink: $('paymentCheckoutLink'),
     paymentBubble: $('paymentBubble'), paymentBubbleText: $('paymentBubbleText'), historyModal: $('historyModal'), historyList: $('historyList'),
     historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast'),
-    confirmModal: $('confirmModal'), confirmOrderSummary: $('confirmOrderSummary'), confirmCheckoutButton: $('confirmCheckoutButton')
+    confirmModal: $('confirmModal'), confirmOrderSummary: $('confirmOrderSummary'), confirmCheckoutButton: $('confirmCheckoutButton'),
+    paymentMethodQris: $('paymentMethodQris'), paymentMethodWallet: $('paymentMethodWallet'), walletPaymentOption: $('walletPaymentOption'),
+    walletPaymentBalance: $('walletPaymentBalance'), walletPaymentHint: $('walletPaymentHint'),
+    paymentSuccessTitle: $('paymentSuccessTitle'), paymentSuccessText: $('paymentSuccessText')
   };
 
   function escapeHtml(value) {
@@ -121,6 +127,66 @@
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
     el.href = url; el.classList.remove('hidden');
   }
+  function viewerWallet() {
+    var viewer = state.catalog && state.catalog.viewer ? state.catalog.viewer : {};
+    var wallet = viewer.wallet || {};
+    return {
+      ready: Boolean(viewer.telegram_ready && viewer.wallet_ready),
+      main: Math.max(0, Number(wallet.balance_main || 0)),
+      referral: Math.max(0, Number(wallet.balance_referral || 0)),
+      total: Math.max(0, Number(wallet.balance_total || 0))
+    };
+  }
+  function renderWalletBalance() {
+    if (!els.walletBalanceChip || !els.walletBalanceValue) return;
+    var viewer = state.catalog && state.catalog.viewer ? state.catalog.viewer : {};
+    var wallet = viewerWallet();
+    els.walletBalanceChip.classList.toggle('hidden', !viewer.telegram_ready);
+    els.walletBalanceChip.classList.toggle('is-unavailable', !wallet.ready);
+    els.walletBalanceValue.textContent = wallet.ready ? rupiah(wallet.total) : 'Belum aktif';
+    els.walletBalanceChip.title = wallet.ready
+      ? 'Saldo Utama ' + rupiah(wallet.main) + ' · Saldo Referral ' + rupiah(wallet.referral)
+      : 'Jalankan SQL saldo v65 lalu buka ulang bot.';
+  }
+  function setPaymentMethod(method) {
+    var next = method === 'wallet' && els.paymentMethodWallet && !els.paymentMethodWallet.disabled ? 'wallet' : 'qris';
+    state.paymentMethod = next;
+    if (els.paymentMethodQris) els.paymentMethodQris.checked = next === 'qris';
+    if (els.paymentMethodWallet) els.paymentMethodWallet.checked = next === 'wallet';
+    document.querySelectorAll('[data-payment-method-card]').forEach(function (card) {
+      card.classList.toggle('active', card.dataset.paymentMethodCard === next);
+    });
+    if (els.confirmCheckoutButton) {
+      els.confirmCheckoutButton.textContent = next === 'wallet' ? 'Bayar Sekarang dengan Saldo' : 'Lanjutkan dengan QRIS';
+    }
+  }
+  function renderPaymentMethods(total, voucherCode) {
+    var wallet = viewerWallet();
+    var enabled = Boolean(state.catalog && state.catalog.settings && state.catalog.settings.wallet_payment_enabled !== false);
+    var hasVoucher = Boolean(String(voucherCode || '').trim());
+    var enough = wallet.total >= Number(total || 0);
+    var canTryWallet = enabled && wallet.ready && (Number(total || 0) === 0 || wallet.total > 0) && (enough || hasVoucher);
+    if (els.walletPaymentBalance) {
+      els.walletPaymentBalance.textContent = wallet.ready
+        ? 'Saldo tersedia ' + rupiah(wallet.total)
+        : 'Saldo belum tersedia';
+    }
+    if (els.paymentMethodWallet) els.paymentMethodWallet.disabled = !canTryWallet;
+    if (els.walletPaymentOption) {
+      els.walletPaymentOption.classList.toggle('disabled', !canTryWallet);
+      els.walletPaymentOption.setAttribute('aria-disabled', canTryWallet ? 'false' : 'true');
+    }
+    if (els.walletPaymentHint) {
+      if (!enabled) els.walletPaymentHint.textContent = 'Pembayaran dengan saldo sedang dinonaktifkan oleh toko.';
+      else if (!wallet.ready) els.walletPaymentHint.textContent = 'Saldo belum siap. Pastikan fitur saldo v65 sudah terpasang.';
+      else if (!wallet.total) els.walletPaymentHint.textContent = 'Saldo kosong. Lakukan top up atau kumpulkan bonus referral melalui bot.';
+      else if (!enough && !hasVoucher) els.walletPaymentHint.textContent = 'Saldo kurang ' + rupiah(Number(total || 0) - wallet.total) + '. Gunakan QRIS atau top up terlebih dahulu.';
+      else if (hasVoucher) els.walletPaymentHint.textContent = 'Voucher akan divalidasi ulang. Saldo dipotong hanya jika total akhir mencukupi.';
+      else els.walletPaymentHint.textContent = 'Saldo Utama dipakai lebih dahulu, lalu Saldo Referral.';
+    }
+    setPaymentMethod('qris');
+  }
+
   function imageFallback(img, productName) {
     img.onerror = function () {
       var parent = img.parentElement;
@@ -315,6 +381,7 @@
     setLink(els.customerServiceBubble, settings.customer_service_link);
     setLink(els.groupFooter, settings.group_link);
     var viewer = state.catalog.viewer || {};
+    renderWalletBalance();
     if (state.catalog.store_active === false) {
       els.telegramNotice.classList.remove('hidden');
       els.telegramNotice.querySelector('strong').textContent = 'Toko sedang tidak aktif';
@@ -523,15 +590,18 @@
     var promo = variant && variant.promo ? variant.promo : product.promo;
     var shownTotal = unit * qty;
     if (promo && qty === 1 && Number(promo.original_price) === Number(unit)) shownTotal = Number(promo.final_price);
+    state.checkoutTotal = shownTotal;
+    var voucherCode = els.voucherInput.value.trim();
     els.confirmOrderSummary.innerHTML = [
       ['Produk', product.name],
       ['Varian', variant ? variant.name : 'Tanpa varian'],
       ['Jumlah', qty + ' item'],
       ['Perkiraan total', rupiah(shownTotal)],
-      ['Voucher', els.voucherInput.value.trim() || 'Tidak digunakan']
+      ['Voucher', voucherCode || 'Tidak digunakan']
     ].map(function (row) {
       return '<div class="confirm-order-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
     }).join('');
+    renderPaymentMethods(shownTotal, voucherCode);
     openModal(els.confirmModal);
   }
 
@@ -549,12 +619,39 @@
         product_code: product.code,
         variant_key: state.selectedVariantKey,
         quantity: qty,
-        voucher_code: els.voucherInput.value.trim()
+        voucher_code: els.voucherInput.value.trim(),
+        payment_method: state.paymentMethod
       }});
-      state.activePayment = payment;
       closeModal(els.confirmModal);
       closeModal(els.productModal);
-      showPayment(payment);
+      if (payment.payment_method === 'wallet' && payment.status === 'completed') {
+        clearPaymentTimers();
+        clearActivePaymentStorage();
+        state.activePayment = null;
+        state.paymentStatus = 'success';
+        if (payment.wallet && state.catalog && state.catalog.viewer) {
+          state.catalog.viewer.wallet_ready = true;
+          state.catalog.viewer.wallet = payment.wallet;
+          renderWalletBalance();
+        }
+        els.paymentPendingView.classList.add('hidden');
+        els.paymentExpiredView.classList.add('hidden');
+        els.paymentSuccessView.classList.remove('hidden');
+        if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = 'Pembayaran Saldo Berhasil';
+        if (els.paymentSuccessText) {
+          var used = Number(payment.wallet_main_used || 0) + Number(payment.wallet_referral_used || 0);
+          els.paymentSuccessText.textContent = 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong dan produk dikirim ke chat Telegram Anda.';
+        }
+        openModal(els.paymentModal);
+        updatePaymentBubble();
+        if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch (_) {}
+        await loadCatalog(false);
+      } else {
+        state.activePayment = payment;
+        if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = 'Pembayaran Berhasil';
+        if (els.paymentSuccessText) els.paymentSuccessText.textContent = 'Produk telah diproses dan dikirim ke chat Telegram Anda.';
+        showPayment(payment);
+      }
     } catch (error) {
       if (error.code === 'ACTIVE_ORDER' && error.details && error.details.invoice) {
         toast('Masih ada invoice aktif: ' + (error.details.invoice_display || error.details.invoice), true);
@@ -765,6 +862,8 @@
   $('plusQuantity').addEventListener('click', function () { els.quantityInput.value = Number(els.quantityInput.value || 1) + 1; updateProductEstimate(); });
   els.quantityInput.addEventListener('input', updateProductEstimate);
   els.buyNowButton.addEventListener('click', openCheckoutConfirmation);
+  if (els.paymentMethodQris) els.paymentMethodQris.addEventListener('change', function () { if (els.paymentMethodQris.checked) setPaymentMethod('qris'); });
+  if (els.paymentMethodWallet) els.paymentMethodWallet.addEventListener('change', function () { if (els.paymentMethodWallet.checked) setPaymentMethod('wallet'); });
   els.confirmCheckoutButton.addEventListener('click', startCheckout);
   $('cancelCheckoutConfirm').addEventListener('click', function () { closeModal(els.confirmModal); });
   $('checkPaymentButton').addEventListener('click', function () { checkPayment(true); });

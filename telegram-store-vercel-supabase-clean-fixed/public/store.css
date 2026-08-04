@@ -631,3 +631,73 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
 }
 .history-card.canceled { opacity:.72; }
 .history-status.canceled { background:#fee2e2; color:#b42318; }
+
+/* v67: saldo pengguna di header dan pilihan pembayaran Marketplace */
+.wallet-balance-chip {
+  min-width: 132px;
+  height: 46px;
+  padding: 7px 12px;
+  border: 1px solid #cfe0ff;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wallet-balance-chip.is-unavailable { border-color: var(--line); background: #f7f8fa; color: var(--muted); }
+.wallet-balance-icon { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: white; font-size: 15px; }
+.wallet-balance-copy { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.wallet-balance-copy small { font-size: 9px; color: var(--muted); font-weight: 700; }
+.wallet-balance-copy strong { margin-top: 3px; max-width: 112px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+
+.payment-method-section {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  text-align: left;
+}
+.payment-method-section legend { margin-bottom: 8px; font-size: 12px; font-weight: 900; color: var(--ink); }
+.payment-method-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  cursor: pointer;
+  transition: border-color .16s, background .16s, box-shadow .16s;
+}
+.payment-method-card input { position: absolute; opacity: 0; pointer-events: none; }
+.payment-method-card.active { border-color: var(--primary); background: #f6f9ff; box-shadow: 0 0 0 3px rgba(23,105,224,.10); }
+.payment-method-card.disabled { cursor: not-allowed; opacity: .58; background: #f7f8fa; }
+.payment-method-icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary-dark); font-size: 17px; font-weight: 900; }
+.payment-method-copy { min-width: 0; display: flex; flex-direction: column; }
+.payment-method-copy strong { font-size: 12px; }
+.payment-method-copy small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.payment-method-check { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #e8ecf2; color: transparent; font-size: 11px; font-weight: 900; }
+.payment-method-card.active .payment-method-check { background: var(--primary); color: white; }
+.payment-method-hint { min-height: 16px; margin: 2px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+@media (max-width: 950px) {
+  .wallet-balance-chip { min-width: 118px; padding-inline: 9px; }
+  .wallet-balance-copy strong { max-width: 95px; }
+}
+@media (max-width: 720px) {
+  .top-actions { display: flex; grid-column: 2; grid-row: 1; }
+  .top-actions .header-button { display: none; }
+  .wallet-balance-chip { min-width: 0; height: 39px; padding: 5px 9px; border-radius: 12px; }
+  .wallet-balance-icon { width: 27px; height: 27px; border-radius: 9px; font-size: 13px; }
+  .wallet-balance-copy small { font-size: 8px; }
+  .wallet-balance-copy strong { max-width: 108px; font-size: 11px; }
+  .payment-method-card { grid-template-columns: 34px minmax(0,1fr) 22px; padding: 10px; }
+  .payment-method-icon { width: 34px; height: 34px; }
+}
+@media (max-width: 380px) {
+  .wallet-balance-copy strong { max-width: 82px; }
+  .wallet-balance-icon { display: none; }
+}

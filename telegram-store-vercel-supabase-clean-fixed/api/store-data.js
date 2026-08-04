@@ -55,7 +55,9 @@ module.exports = async function handler(req, res) {
         error.code = 'STORE_INACTIVE';
         throw error;
       }
-      const data = await store.createPayment({
+      const paymentMethod = String(body.payment_method || 'qris').trim().toLowerCase();
+      const createCheckout = paymentMethod === 'wallet' ? store.createWalletPayment : store.createPayment;
+      const data = await createCheckout({
         user,
         productCode: body.product_code,
         variantKey: body.variant_key,

@@ -74,5 +74,5 @@ test('versi API memakai satu sumber VERSION', () => {
   assert.match(read('api/index.js'), /getAppVersion/);
   assert.match(read('api/telegram.js'), /getAppVersion/);
   assert.match(read('api/payment-webhook.js'), /getAppVersion/);
-  assert.equal(read('VERSION.txt').trim(), 'v66-referral-credit-channel-notification');
+  assert.equal(read('VERSION.txt').trim(), 'v67-marketplace-wallet-payment');
 });

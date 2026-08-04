@@ -281,6 +281,16 @@ async function getCatalog(viewer = null) {
     db.getShopSettings(),
     db.listAutoPromos(200).catch(() => [])
   ]);
+  let wallet = null;
+  if (viewer?.id) {
+    await db.upsertUser(viewer).catch((error) => {
+      console.warn('Gagal memperbarui user marketplace:', error.message || error);
+    });
+    wallet = await db.getWalletSummary(Number(viewer.id), 1).catch((error) => {
+      console.warn('Saldo marketplace belum tersedia:', error.message || error);
+      return null;
+    });
+  }
   const flashPromoCodes = parseFlashSalePromoCodes(settings.flash_sale_promo_codes);
   const flashPromoCodeSet = new Set(flashPromoCodes);
   const flashWindow = db.flashSaleWindowState(settings);
@@ -345,7 +355,8 @@ async function getCatalog(viewer = null) {
       flash_sale_promo_codes: flashPromoCodes,
       flash_sale_product_codes: parseFlashSaleProductCodes(settings.flash_sale_products),
       customer_service_link: settings.customer_service_link || config.customerService || '',
-      group_link: settings.group_link || config.channelStore || ''
+      group_link: settings.group_link || config.channelStore || '',
+      wallet_payment_enabled: String(settings.wallet_payment_enabled ?? 'true').toLowerCase() !== 'false'
     },
     bot_username: String(config.botUsername || '').replace(/^@/, ''),
     products: publicProducts,
@@ -355,10 +366,22 @@ async function getCatalog(viewer = null) {
       id: Number(viewer.id),
       first_name: viewer.first_name || '',
       username: viewer.username || '',
-      is_owner: Number(viewer.id) === Number(config.ownerId)
+      is_owner: Number(viewer.id) === Number(config.ownerId),
+      wallet_ready: Boolean(wallet),
+      wallet: wallet ? {
+        balance_main: Number(wallet.balance_main || 0),
+        balance_referral: Number(wallet.balance_referral || 0),
+        balance_total: Number(wallet.balance_total || 0)
+      } : {
+        balance_main: 0,
+        balance_referral: 0,
+        balance_total: 0
+      }
     } : {
       telegram_ready: false,
-      is_owner: false
+      is_owner: false,
+      wallet_ready: false,
+      wallet: { balance_main: 0, balance_referral: 0, balance_total: 0 }
     }
   };
 }
@@ -392,11 +415,8 @@ async function ensureNoActiveOrder(telegramId) {
   }
 }
 
-async function createPayment({ user, productCode, variantKey, quantity, voucherCode }) {
+async function prepareCheckout({ user, productCode, variantKey, quantity, voucherCode }) {
   if (!user?.id) throw httpError('Buka toko melalui Telegram agar identitas pembeli dapat diverifikasi.', 401, 'TELEGRAM_REQUIRED');
-  if (!paymentService.paymentConfigured()) {
-    throw httpError(`Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap.`, 503, 'PAYMENT_NOT_CONFIGURED');
-  }
 
   const qty = Math.max(1, Math.min(100, Number(quantity || 1)));
   const code = String(productCode || '').trim().toUpperCase();
@@ -446,10 +466,45 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
 
   discount = Math.min(subtotal, Math.max(0, Number(discount || 0)));
   const afterDiscount = Math.max(0, subtotal - discount);
+  const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
+  return {
+    user,
+    product,
+    selected,
+    qty,
+    draftOrder,
+    unitPrice,
+    costUnit,
+    costTotal,
+    subtotal,
+    voucherApplied,
+    promoApplied,
+    discount,
+    afterDiscount,
+    appliedCode
+  };
+}
+
+function discountLabelForCheckout(checkout) {
+  return checkout.voucherApplied
+    ? `Voucher ${checkout.voucherApplied.code}`
+    : (checkout.promoApplied ? `Promo ${checkout.promoApplied.name || checkout.promoApplied.code}` : '');
+}
+
+async function createPayment({ user, productCode, variantKey, quantity, voucherCode }) {
+  if (!paymentService.paymentConfigured()) {
+    throw httpError(`Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap.`, 503, 'PAYMENT_NOT_CONFIGURED');
+  }
+
+  const checkout = await prepareCheckout({ user, productCode, variantKey, quantity, voucherCode });
+  const {
+    product, selected, qty, draftOrder, unitPrice, costUnit, costTotal,
+    subtotal, discount, afterDiscount, appliedCode
+  } = checkout;
   const fee = randomFee();
   const total = afterDiscount + fee;
   const checkoutKey = `checkout_rate:${Number(user.id)}`;
-  const checkoutClaimed = await db.claimOnce(checkoutKey, 30, { telegram_id: Number(user.id) }, { failClosed: true });
+  const checkoutClaimed = await db.claimOnce(checkoutKey, 30, { telegram_id: Number(user.id), method: 'qris' }, { failClosed: true });
   if (!checkoutClaimed) {
     throw httpError('Permintaan checkout sedang diproses. Tunggu beberapa detik lalu coba lagi.', 429, 'CHECKOUT_BUSY');
   }
@@ -466,26 +521,28 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const qrText = gatewayPayment.qr_string;
 
-  const appliedCode = promoApplied ? `AUTO_PROMO:${promoApplied.code}` : (voucherApplied?.code || '');
-  await db.upsertUser(user);
-  await db.upsertPendingOrder({
-    ...draftOrder,
-    cost_unit: costUnit,
-    cost_total: costTotal,
-    cost_source: costUnit > 0 ? 'snapshot' : 'unset',
-    voucher_code: appliedCode,
-    invoice_ref: invoice,
-    amount: total,
-    fee,
-    status: 'awaiting_payment',
-    expires_at: expiresAt,
-    qr_payload: qrText,
-    payment_provider: gatewayPayment.provider,
-    provider_transaction_id: gatewayPayment.transaction_id,
-    provider_checkout_url: gatewayPayment.checkout_url
-  });
-
-  await db.releaseClaim(checkoutKey).catch(() => null);
+  try {
+    await db.upsertUser(user);
+    await db.upsertPendingOrder({
+      ...draftOrder,
+      cost_unit: costUnit,
+      cost_total: costTotal,
+      cost_source: costUnit > 0 ? 'snapshot' : 'unset',
+      voucher_code: appliedCode,
+      invoice_ref: invoice,
+      amount: total,
+      fee,
+      status: 'awaiting_payment',
+      expires_at: expiresAt,
+      qr_payload: qrText,
+      payment_method: 'gateway',
+      payment_provider: gatewayPayment.provider,
+      provider_transaction_id: gatewayPayment.transaction_id,
+      provider_checkout_url: gatewayPayment.checkout_url
+    });
+  } finally {
+    await db.releaseClaim(checkoutKey).catch(() => null);
+  }
 
   const watcher_scheduled = paymentService.schedulePaymentWatcher({
     invoiceRef: invoice,
@@ -494,6 +551,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   const qr_data_url = await QRCode.toDataURL(qrText, { width: 640, margin: 2, errorCorrectionLevel: 'M' });
 
   return {
+    payment_method: 'qris',
+    status: 'pending',
     invoice,
     invoice_display: paymentService.displayPaymentReference(invoice),
     product: product.nama,
@@ -503,9 +562,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     unit_price: unitPrice,
     subtotal,
     discount,
-    discount_label: voucherApplied
-      ? `Voucher ${voucherApplied.code}`
-      : (promoApplied ? `Promo ${promoApplied.name || promoApplied.code}` : ''),
+    discount_label: discountLabelForCheckout(checkout),
     after_discount: afterDiscount,
     fee,
     total,
@@ -516,6 +573,91 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     payment_provider: gatewayPayment.provider,
     watcher_scheduled
   };
+}
+
+async function createWalletPayment({ user, productCode, variantKey, quantity, voucherCode }) {
+  const settings = await db.getShopSettings();
+  if (String(settings.wallet_payment_enabled ?? 'true').toLowerCase() === 'false') {
+    throw httpError('Pembayaran dengan saldo sedang dinonaktifkan.', 409, 'WALLET_PAYMENT_DISABLED');
+  }
+
+  await db.upsertUser(user);
+  const checkout = await prepareCheckout({ user, productCode, variantKey, quantity, voucherCode });
+  const {
+    product, selected, qty, draftOrder, unitPrice, costUnit, costTotal,
+    subtotal, discount, afterDiscount, appliedCode
+  } = checkout;
+  const walletBefore = await db.getWalletSummary(Number(user.id), 1);
+  if (!walletBefore) throw httpError('Data saldo belum tersedia. Jalankan SQL v65 lalu buka bot kembali.', 503, 'WALLET_NOT_READY');
+  if (Number(walletBefore.balance_total || 0) < afterDiscount) {
+    throw httpError(
+      `Saldo tidak mencukupi. Kekurangan ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(afterDiscount - Number(walletBefore.balance_total || 0))}.`,
+      409,
+      'INSUFFICIENT_WALLET_BALANCE',
+      { required: afterDiscount, available: Number(walletBefore.balance_total || 0) }
+    );
+  }
+
+  const checkoutKey = `checkout_rate:${Number(user.id)}`;
+  const checkoutClaimed = await db.claimOnce(checkoutKey, 30, { telegram_id: Number(user.id), method: 'wallet' }, { failClosed: true });
+  if (!checkoutClaimed) {
+    throw httpError('Permintaan checkout sedang diproses. Tunggu beberapa detik lalu coba lagi.', 429, 'CHECKOUT_BUSY');
+  }
+
+  const invoice = `WALLET-${randomRef()}`;
+  let savedOrder = null;
+  try {
+    savedOrder = await db.upsertPendingOrder({
+      ...draftOrder,
+      cost_unit: costUnit,
+      cost_total: costTotal,
+      cost_source: costUnit > 0 ? 'snapshot' : 'unset',
+      voucher_code: appliedCode,
+      invoice_ref: invoice,
+      amount: afterDiscount,
+      fee: 0,
+      status: 'processing',
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      qr_payload: '',
+      payment_method: 'wallet',
+      payment_provider: 'wallet',
+      provider_transaction_id: '',
+      provider_checkout_url: ''
+    });
+    const result = await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: user, source: 'wallet-marketplace' });
+    const walletAfter = await db.getWalletSummary(Number(user.id), 1).catch(() => null);
+    const transaction = result.transaction || {};
+    return {
+      payment_method: 'wallet',
+      status: 'completed',
+      invoice,
+      invoice_display: paymentService.displayPaymentReference(invoice),
+      product: transaction.product_name || product.nama,
+      product_code: transaction.product_code || product.kode,
+      variant: transaction.variant_name || selected.variant?.name || '',
+      quantity: Number(transaction.quantity || qty),
+      unit_price: unitPrice,
+      subtotal,
+      discount,
+      discount_label: discountLabelForCheckout(checkout),
+      after_discount: afterDiscount,
+      fee: 0,
+      total: Number(transaction.total_price || afterDiscount),
+      wallet_main_used: Number(transaction.wallet_main_used || result.wallet?.main_used || 0),
+      wallet_referral_used: Number(transaction.wallet_referral_used || result.wallet?.referral_used || 0),
+      wallet: walletAfter ? {
+        balance_main: Number(walletAfter.balance_main || 0),
+        balance_referral: Number(walletAfter.balance_referral || 0),
+        balance_total: Number(walletAfter.balance_total || 0)
+      } : null,
+      completed_at: transaction.created_at || new Date().toISOString()
+    };
+  } catch (error) {
+    if (savedOrder) await db.deletePendingOrder(Number(user.id), invoice).catch(() => null);
+    throw error;
+  } finally {
+    await db.releaseClaim(checkoutKey).catch(() => null);
+  }
 }
 
 async function createQrDownloadToken(user, invoice) {
@@ -649,6 +791,7 @@ module.exports = {
   sanitizeProduct,
   getCatalog,
   createPayment,
+  createWalletPayment,
   createQrDownloadToken,
   getQrDownloadByToken,
   getQrDownload,

@@ -27,3 +27,31 @@ Unduhan QRIS sekarang meminta token singkat dari server. URL unduhan tidak lagi 
 ## Pembayaran tertunda
 
 Selain webhook dan pengecekan dari browser, v62 menyediakan `/api/payment-cron`. Jalankan endpoint ini setiap 1–2 menit memakai `Authorization: Bearer CRON_SECRET` agar pesanan yang sudah dibayar tetap diselesaikan saat pembeli menutup Marketplace.
+
+## Saldo dan pembayaran Marketplace — v67
+
+Saldo user tampil pada sisi kanan header jika Marketplace dibuka dari Telegram.
+
+Saldo yang ditampilkan:
+
+```text
+Saldo Utama + Saldo Referral
+```
+
+Pada konfirmasi pesanan tersedia pilihan:
+
+```text
+QRIS
+Saldo Bot
+```
+
+Pembayaran saldo dapat diaktifkan atau dinonaktifkan melalui:
+
+```text
+Reseller Dashboard
+→ Pengaturan
+→ Saldo, Referral & Top Up
+→ Pembayaran produk dengan saldo
+```
+
+Saldo Utama digunakan terlebih dahulu, kemudian Saldo Referral. Produk langsung dikirim ke chat Telegram setelah transaksi saldo berhasil.

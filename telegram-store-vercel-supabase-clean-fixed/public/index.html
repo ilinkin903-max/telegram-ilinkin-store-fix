@@ -26,6 +26,10 @@
           <button id="clearSearch" class="icon-button hidden" type="button" aria-label="Hapus pencarian">×</button>
         </div>
         <div class="top-actions">
+          <div id="walletBalanceChip" class="wallet-balance-chip hidden" aria-label="Saldo pengguna">
+            <span class="wallet-balance-icon" aria-hidden="true">💰</span>
+            <span class="wallet-balance-copy"><small>Saldo</small><strong id="walletBalanceValue">Rp 0</strong></span>
+          </div>
           <button id="historyButton" class="header-button" type="button"><span>🧾</span><b>Pesanan</b></button>
           <a id="resellerButton" class="header-button hidden" href="/reseller"><span>📊</span><b>Panel</b></a>
         </div>
@@ -190,11 +194,27 @@
       <div class="confirm-icon" aria-hidden="true">🛒</div>
       <p class="eyebrow">KONFIRMASI PESANAN</p>
       <h2 id="confirmTitle">Lanjutkan ke pembayaran?</h2>
-      <p class="confirm-copy">Periksa pilihan produk sebelum invoice QRIS dibuat.</p>
+      <p class="confirm-copy">Periksa pesanan lalu pilih metode pembayaran yang paling nyaman.</p>
       <div id="confirmOrderSummary" class="confirm-order-summary"></div>
+      <fieldset id="paymentMethodSection" class="payment-method-section">
+        <legend>Metode Pembayaran</legend>
+        <label class="payment-method-card active" data-payment-method-card="qris">
+          <input id="paymentMethodQris" type="radio" name="payment_method" value="qris" checked>
+          <span class="payment-method-icon" aria-hidden="true">▦</span>
+          <span class="payment-method-copy"><strong>QRIS</strong><small>Bayar melalui aplikasi bank atau e-wallet.</small></span>
+          <span class="payment-method-check" aria-hidden="true">✓</span>
+        </label>
+        <label id="walletPaymentOption" class="payment-method-card" data-payment-method-card="wallet">
+          <input id="paymentMethodWallet" type="radio" name="payment_method" value="wallet">
+          <span class="payment-method-icon" aria-hidden="true">💰</span>
+          <span class="payment-method-copy"><strong>Saldo Bot</strong><small id="walletPaymentBalance">Saldo tersedia Rp 0</small></span>
+          <span class="payment-method-check" aria-hidden="true">✓</span>
+        </label>
+        <p id="walletPaymentHint" class="payment-method-hint"></p>
+      </fieldset>
       <div class="confirm-actions">
-        <button id="confirmCheckoutButton" class="button button-primary" type="button">Ya, Lanjut ke Pembayaran</button>
-        <button id="cancelCheckoutConfirm" class="button button-secondary" type="button">Kembali</button>
+        <button id="confirmCheckoutButton" class="button button-primary" type="button">Lanjutkan dengan QRIS</button>
+        <button id="cancelCheckoutConfirm" class="button button-secondary" type="button">Periksa Lagi</button>
       </div>
     </section>
   </div>
@@ -221,8 +241,8 @@
       </div>
       <div id="paymentSuccessView" class="payment-result hidden">
         <div class="payment-status-icon success">✓</div>
-        <h2>Pembayaran Berhasil</h2>
-        <p>Produk telah diproses dan dikirim ke chat Telegram Anda.</p>
+        <h2 id="paymentSuccessTitle">Pembayaran Berhasil</h2>
+        <p id="paymentSuccessText">Produk telah diproses dan dikirim ke chat Telegram Anda.</p>
         <button id="successDoneButton" class="button button-primary button-full" type="button">Selesai</button>
       </div>
       <div id="paymentExpiredView" class="payment-result hidden">

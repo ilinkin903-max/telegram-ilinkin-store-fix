@@ -93,7 +93,7 @@ test('v53 menempatkan blok benefit setelah katalog', () => {
 
 test('v53 meminta konfirmasi sebelum membuat pembayaran', () => {
   assert.match(html, /id="confirmModal"/);
-  assert.match(html, /Ya, Lanjut ke Pembayaran/);
+  assert.match(html, /Lanjutkan dengan QRIS/);
   assert.match(js, /openCheckoutConfirmation/);
   assert.match(js, /confirmCheckoutButton/);
 });
