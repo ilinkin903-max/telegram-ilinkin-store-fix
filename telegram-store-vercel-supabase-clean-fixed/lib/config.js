@@ -10,6 +10,7 @@ const config = {
   channelStore: required('CHANNEL_STORE', ''),
   customerService: required('CUSTOMER_SERVICE', ''),
   channelLog: required('CHANNEL_LOG', ''),
+  walletChannel: required('WALLET_CHANNEL', required('CHANNEL_LOG', '')),
   paymentProvider: required('PAYMENT_PROVIDER', process.env.AUTOGOPAY_API_KEY ? 'autogopay' : 'pakasir').toLowerCase(),
   autogopayApiKey: required('AUTOGOPAY_API_KEY', '').trim(),
   autogopayBaseUrl: required('AUTOGOPAY_BASE_URL', 'https://v1-gateway.autogopay.site').replace(/\/$/, ''),

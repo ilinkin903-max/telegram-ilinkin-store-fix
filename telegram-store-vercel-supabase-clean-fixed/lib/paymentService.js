@@ -2,6 +2,7 @@ const axios = require('axios');
 const { config } = require('./config');
 const db = require('./db');
 const tg = require('./telegram');
+const walletNotifications = require('./walletNotifications');
 const { formatRupiah, formatWIB } = require('./utils');
 
 function getVercelWaitUntil() {
@@ -382,7 +383,11 @@ async function notifyFirstPurchaseReferral(inviteeId) {
   const claimed = await db.claimOnce(key, 365 * 24 * 60 * 60, { invitee_id: Number(inviteeId) }, { failClosed: true }).catch(() => false);
   if (!claimed) return;
   try {
-    const wallet = await db.getWalletSummary(info.telegram_id, 1).catch(() => null);
+    const [wallet, referrer, invitee] = await Promise.all([
+      db.getWalletSummary(info.telegram_id, 1).catch(() => null),
+      db.getUserByTelegramId(info.telegram_id).catch(() => null),
+      db.getUserByTelegramId(inviteeId).catch(() => null)
+    ]);
     await tg.sendMessage(info.telegram_id,
       `🎁 <b>BONUS REFERRAL MASUK</b>
 ` +
@@ -395,7 +400,16 @@ async function notifyFirstPurchaseReferral(inviteeId) {
 ` +
       `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
       { parse_mode: 'HTML' }
-    );
+    ).catch((error) => console.error('Gagal mengirim notifikasi referral ke user:', error.message || error));
+    await walletNotifications.notifyReferralReward({
+      referrer: referrer || { telegram_id: info.telegram_id },
+      referrerId: info.telegram_id,
+      invitee: invitee || { telegram_id: inviteeId, first_name: info.invitee_name },
+      inviteeId,
+      amount: info.amount,
+      balanceReferral: wallet?.balance_referral || 0,
+      mode: 'first_purchase'
+    });
     await db.markClaimDone(key, { invitee_id: Number(inviteeId), notified: true }).catch(() => null);
   } catch (error) {
     await db.releaseClaim(key).catch(() => null);
@@ -495,7 +509,17 @@ async function completeTopupPayment({ topup, incoming = {}, source = 'webhook' }
 ` +
         `Saldo Referral: <b>${escapeHtml(formatRupiah(user?.balance_referral || 0))}</b>`,
         { parse_mode: 'HTML' }
-      );
+      ).catch((error) => console.error('Gagal mengirim notifikasi top up ke user:', error.message || error));
+      await walletNotifications.notifyTopupSuccess({
+        user: user || { telegram_id: row.telegram_id },
+        telegramId: row.telegram_id,
+        reference: displayPaymentReference(row.topup_ref),
+        amount: Number(row.amount || 0),
+        fee: Number(row.fee || 0),
+        total: Number(row.total_amount || 0),
+        balanceMain: Number(user?.balance_main || 0),
+        balanceReferral: Number(user?.balance_referral || 0)
+      });
     }
     await db.markClaimDone(claimKey, { ref, source, state: 'completed' });
     return { ok: true, state: result.already_completed ? 'already_completed' : 'completed', ...result };

@@ -224,7 +224,7 @@ async function registerUserWithReferral(from = {}, referralCode = '', settings =
     : 'signup';
   const referralEnabled = String(settings.referral_enabled ?? 'true').toLowerCase() !== 'false';
   const rewardAmount = Math.max(0, Number(settings.referral_reward_amount || 0));
-  const { data, error } = await sb().rpc('register_bot_user_v65', {
+  const { data, error } = await sb().rpc('register_bot_user_v66', {
     p_user: {
       telegram_id: telegramId,
       id: telegramId,
@@ -238,8 +238,8 @@ async function registerUserWithReferral(from = {}, referralCode = '', settings =
   });
   if (error) {
     const message = String(error.message || error);
-    if (/register_bot_user_v65|schema cache|could not find the function/i.test(message)) {
-      throw new Error('Fitur referral v65 belum tersedia. Jalankan supabase/update-v65-referral-wallet-topup.sql terlebih dahulu.');
+    if (/register_bot_user_v66|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Perbaikan referral v66 belum tersedia. Jalankan supabase/update-v66-referral-notifications-fix.sql setelah SQL v65.');
     }
     throw error;
   }

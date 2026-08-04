@@ -1,24 +1,18 @@
-iLink.in Store v65 — TEST REPORT
-=================================
+iLink.in Store v66 — Test Report
 
-Version: v65-referral-wallet-topup
-Tests: 93 passed / 93 total
+Version: v66-referral-credit-channel-notification
+JavaScript syntax checks: PASS
+Automated tests: 99 passed, 0 failed
 
-Checked:
-- JavaScript syntax for API, bot, database helpers, marketplace, and dashboard
-- Existing payment, promo, marketplace, dashboard, and reliability tests
-- Referral registration and one-time reward safeguards
-- Immediate reward and first-purchase reward modes
-- Wallet checkout using main balance before referral balance
-- Atomic wallet fulfillment and stock locking
-- Top-up idempotency, webhook, watcher, and payment cron integration
-- Dashboard referral/top-up settings
-- Per-user main/referral balance editor with ledger note
-- Fresh-install schema includes v65 migration
-- Dashboard HTML IDs are unique
+Coverage tambahan v66:
+- referral untuk user lama yang belum pernah bertransaksi
+- penolakan referral untuk user yang sudah bertransaksi
+- idempotensi bonus referral melalui wallet_ledger
+- advisory lock registrasi referral
+- notifikasi referral langsung ke channel
+- notifikasi referral pembelian pertama ke channel
+- notifikasi top up berhasil ke channel
+- WALLET_CHANNEL dengan fallback CHANNEL_LOG
 
-Notes:
-- External dependencies were represented by temporary local stubs because the test registry was unavailable.
-- Stubs are not included in the final ZIP.
-- SQL was statically reviewed but not executed against the user's production Supabase.
-- Real Telegram/AutoGoPay transactions still require production testing.
+Catatan:
+Pengujian lokal memakai stub dependency sementara karena registry npm pada lingkungan pengujian tidak lengkap. Stub telah dihapus dan tidak disertakan pada paket ZIP final. SQL diperiksa secara statis tetapi belum dijalankan pada Supabase produksi.

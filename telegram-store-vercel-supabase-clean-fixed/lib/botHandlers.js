@@ -5,6 +5,7 @@ const { config, getMiniAppUrl, getStorefrontUrl } = require('./config');
 const tg = require('./telegram');
 const db = require('./db');
 const paymentService = require('./paymentService');
+const walletNotifications = require('./walletNotifications');
 const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
@@ -1057,14 +1058,32 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     try {
       const registration = await db.registerUserWithReferral(from, refCode, settings);
       const reward = registration?.referral_reward;
+      if (registration?.referral_state === 'pending') {
+        await tg.sendMessage(chatId,
+          `✅ <b>REFERRAL BERHASIL TERHUBUNG</b>
+Bonus untuk pengundang akan masuk setelah kamu menyelesaikan pembelian pertama.`,
+          { parse_mode: 'HTML' }
+        ).catch(() => null);
+      }
       if (reward?.telegram_id && Number(reward.amount || 0) > 0) {
-        const wallet = await db.getWalletSummary(reward.telegram_id, 1).catch(() => null);
+        await tg.sendMessage(chatId,
+          `✅ <b>REFERRAL BERHASIL DIGUNAKAN</b>
+Pengundang langsung menerima bonus ${escapeHtml(formatRupiah(reward.amount))}.`,
+          { parse_mode: 'HTML' }
+        ).catch(() => null);
+        const [wallet, referrer] = await Promise.all([
+          db.getWalletSummary(reward.telegram_id, 1).catch(() => null),
+          db.getUserByTelegramId(reward.telegram_id).catch(() => null)
+        ]);
+        const inviteeLabel = reward.invitee_username
+          ? '@' + String(reward.invitee_username).replace(/^@/, '')
+          : (reward.invitee_name || from.first_name || String(from.id));
         await tg.sendMessage(reward.telegram_id,
           `🎁 <b>BONUS REFERRAL MASUK</b>
 ` +
           `=======================
 ` +
-          `Seseorang baru bergabung melalui link referral kamu.
+          `Pengguna yang kamu undang (${escapeHtml(inviteeLabel)}) baru membuka bot melalui link referral kamu.
 
 ` +
           `Bonus: <b>${escapeHtml(formatRupiah(reward.amount))}</b>
@@ -1072,6 +1091,19 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
           `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
           { parse_mode: 'HTML' }
         ).catch(() => null);
+        await walletNotifications.notifyReferralReward({
+          referrer: referrer || {
+            telegram_id: reward.telegram_id,
+            first_name: reward.referrer_name,
+            username: reward.referrer_username
+          },
+          referrerId: reward.telegram_id,
+          invitee: registration?.user || from,
+          inviteeId: reward.invitee_id || from.id,
+          amount: reward.amount,
+          balanceReferral: wallet?.balance_referral || 0,
+          mode: 'signup'
+        });
       }
     } catch (error) {
       console.error('Registrasi referral gagal:', error.message || error);
