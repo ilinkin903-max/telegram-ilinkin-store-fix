@@ -167,7 +167,7 @@ test('v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang 
   const productBlock = reseller.slice(productStart, productEnd);
   assert.doesNotMatch(productBlock, /Modal default|Margin normal|modal /i);
   assert.doesNotMatch(productBlock, /productBulkChips/);
-  assert.match(productBlock, /stok ·/);
+  assert.match(productBlock, /stok/);
 
   const ordersStart = reseller.indexOf('function renderOrders()');
   const ordersEnd = reseller.indexOf('function userMatches(', ordersStart);

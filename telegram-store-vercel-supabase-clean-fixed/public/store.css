@@ -701,3 +701,51 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
   .wallet-balance-copy strong { max-width: 82px; }
   .wallet-balance-icon { display: none; }
 }
+
+/* v68: marketplace ringkas, gambar 1:1, deskripsi lipat, dan PO */
+.product-image-wrap,
+.flash-image-wrap,
+.detail-image-wrap { aspect-ratio: 1 / 1; }
+.product-card-body { gap: 4px; }
+.product-name { min-height: 0; line-height: 1.28; margin-top: 1px; }
+.product-meta { gap: 4px; line-height: 1.2; margin-top: 0; }
+.product-price { margin-top: 1px; padding-top: 0; gap: 6px; }
+.product-price strong { order: 1; }
+.product-price del { order: 2; }
+.card-actions { margin-top: auto; padding-top: 5px; }
+.card-badge.promo { background: var(--primary); font-variant-numeric: tabular-nums; }
+.detail-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.detail-price strong { order: 1; }
+.detail-price del { order: 2; margin-right: 0; }
+.variant-button .variant-price strong { order: 1; }
+.variant-button .variant-price del { order: 2; }
+.variant-promo-chip { display: none !important; }
+.flash-price strong { order: 1; color: var(--primary-dark); }
+.flash-price del { order: 2; }
+.detail-description { white-space: pre-line; margin-bottom: 5px; }
+.detail-description.collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  max-height: 4.5em;
+}
+.detail-description.expanded { display: block; max-height: none; overflow: visible; }
+.description-toggle {
+  border: 0;
+  padding: 3px 0 9px;
+  background: transparent;
+  color: var(--primary-dark);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .detail-image-wrap { aspect-ratio: 1 / 1; }
+  .product-card-body { gap: 3px; padding: 9px; }
+  .product-name { min-height: 0; line-height: 1.25; }
+  .product-meta { gap: 3px; }
+  .product-price { margin-top: 1px; padding-top: 0; }
+  .flash-image-wrap { aspect-ratio: 1 / 1; }
+}

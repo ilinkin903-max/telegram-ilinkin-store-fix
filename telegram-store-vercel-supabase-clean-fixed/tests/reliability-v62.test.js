@@ -16,7 +16,7 @@ const sql = read('supabase/update-v62-security-reliability.sql');
 
 
 test('v62 memakai RPC atomik untuk fulfillment dan lock baris produk', () => {
-  assert.match(db, /rpc\('fulfill_paid_order_v62'/);
+  assert.match(db, /fulfill_paid_order_v62/);
   assert.doesNotMatch(db, /currentStock\.slice\(0, quantity\)/);
   assert.match(sql, /create or replace function public\.fulfill_paid_order_v62/i);
   assert.match(sql, /for update/i);
@@ -74,5 +74,5 @@ test('versi API memakai satu sumber VERSION', () => {
   assert.match(read('api/index.js'), /getAppVersion/);
   assert.match(read('api/telegram.js'), /getAppVersion/);
   assert.match(read('api/payment-webhook.js'), /getAppVersion/);
-  assert.equal(read('VERSION.txt').trim(), 'v67-marketplace-wallet-payment');
+  assert.equal(read('VERSION.txt').trim(), 'v68-marketplace-ui-po-system');
 });

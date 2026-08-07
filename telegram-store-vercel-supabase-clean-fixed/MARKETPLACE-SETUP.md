@@ -1,57 +1,46 @@
-# Pengaturan Marketplace v62
+# Pengaturan Marketplace v68
 
-Fitur marketplace dari v61 tetap tersedia: tema biru, logo URL, banner 2,39:1, flash sale satu baris, promo varian, konfirmasi checkout, bubble detail pembayaran, unduh QRIS, serta pilihan produk Bot + Marketplace atau Marketplace saja.
+Marketplace mempertahankan tema biru, saldo user di header, QRIS, Saldo Bot, Flash Sale, promo/voucher, banner promosi, dan pilihan produk Bot + Marketplace atau Marketplace saja.
 
-## Upgrade database
+## Banner promosi
 
-Database v61/v60 wajib menjalankan:
+Banner disarankan tetap berasio **2,39:1**. Jika terdapat lebih dari satu banner, carousel berjalan otomatis dan melakukan looping terus menerus dari banner terakhir ke banner pertama.
 
-```text
-supabase/update-v62-security-reliability.sql
-```
+## Gambar produk
 
-Instalasi baru cukup menjalankan `supabase/schema.sql`.
+Seluruh gambar produk ditampilkan dalam bingkai **1:1** pada:
 
-## Pengaturan utama
+- katalog Marketplace;
+- Flash Sale;
+- popup/detail produk;
+- HP, tablet, dan desktop.
 
-```text
-Dashboard Reseller → Pengaturan
-```
+Gunakan gambar persegi untuk hasil terbaik.
 
-Submenu vertikal tetap berisi Pengaturan Toko, Banner Promosi, Media `/start`, Lisensi, Statistik Lengkap, Backup, dan Maintenance.
+## Deskripsi
 
-## QRIS
+Deskripsi panjang dilipat otomatis. Pembeli dapat menekan `Lihat selengkapnya` dan `Tampilkan lebih sedikit`.
 
-Unduhan QRIS sekarang meminta token singkat dari server. URL unduhan tidak lagi membawa `initData` Telegram. Atur `QR_DOWNLOAD_SECRET` di Vercel atau biarkan sistem memakai `WEBHOOK_SECRET`.
+## Promo
 
-## Pembayaran tertunda
-
-Selain webhook dan pengecekan dari browser, v62 menyediakan `/api/payment-cron`. Jalankan endpoint ini setiap 1–2 menit memakai `Authorization: Bearer CRON_SECRET` agar pesanan yang sudah dibayar tetap diselesaikan saat pembeli menutup Marketplace.
-
-## Saldo dan pembayaran Marketplace — v67
-
-Saldo user tampil pada sisi kanan header jika Marketplace dibuka dari Telegram.
-
-Saldo yang ditampilkan:
+Pada kartu produk:
 
 ```text
-Saldo Utama + Saldo Referral
+-25%
+Rp15.000   Rp20.000 (dicoret)
 ```
 
-Pada konfirmasi pesanan tersedia pilihan:
+Harga setelah diskon tampil terlebih dahulu. Keterangan `hemat Rp...` dan kode/nama promo tidak ditampilkan pada pilihan varian agar UI lebih bersih.
+
+## Sistem pengiriman produk
+
+Setiap produk dapat diatur menjadi:
 
 ```text
-QRIS
-Saldo Bot
+AUTO       = produk diambil dari stok dan dikirim otomatis
+PRE-ORDER  = produk dikirim manual oleh seller setelah pembayaran
 ```
 
-Pembayaran saldo dapat diaktifkan atau dinonaktifkan melalui:
+Pengaturan tersedia pada Tambah/Edit Produk di Reseller Dashboard.
 
-```text
-Reseller Dashboard
-→ Pengaturan
-→ Saldo, Referral & Top Up
-→ Pembayaran produk dengan saldo
-```
-
-Saldo Utama digunakan terlebih dahulu, kemudian Saldo Referral. Produk langsung dikirim ke chat Telegram setelah transaksi saldo berhasil.
+Untuk PRE-ORDER, lihat `PO-SETUP.md`.

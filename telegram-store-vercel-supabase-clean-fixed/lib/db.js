@@ -147,6 +147,7 @@ function normalizeProduct(row) {
     category: row.category || '',
     active: row.active !== false,
     display_scope: String(row.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
+    delivery_mode: String(row.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
     bulk_prices: normalizeBulkPrices(row.bulk_prices),
     variants: normalizeVariants(row.variants),
     data: Array.isArray(row.stock) ? row.stock.map((x) => String(x).trim()).filter(Boolean) : [],
@@ -170,6 +171,7 @@ function variantStockCount(product) {
 }
 
 function productAvailableStock(product, variantKeyValue = '') {
+  if (String(product?.delivery_mode || 'auto').toLowerCase() === 'po') return 0;
   const variantsTotal = variantStockCount(product);
   if (variantKeyValue) {
     const found = findVariant(product, variantKeyValue);
@@ -488,6 +490,7 @@ async function addProduct(input) {
     image_url: String(input.image_url || input.imageUrl || '').trim(),
     category: String(input.category || input.kategori || '').trim(),
     display_scope: String(input.display_scope || input.displayScope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
+    delivery_mode: String(input.delivery_mode || input.deliveryMode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
     bulk_prices: normalizeBulkPrices(input.bulk_prices || input.bulkPrices || []),
     variants: normalizeVariants(input.variants || []),
     stock: Array.isArray(input.data || input.stock) ? (input.data || input.stock) : splitStock(input.stock_text || ''),
@@ -532,6 +535,7 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
   if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
   if (updates.display_scope !== undefined || updates.displayScope !== undefined) payload.display_scope = String((updates.display_scope ?? updates.displayScope) || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
+  if (updates.delivery_mode !== undefined || updates.deliveryMode !== undefined) payload.delivery_mode = String((updates.delivery_mode ?? updates.deliveryMode) || 'auto').toLowerCase() === 'po' ? 'po' : 'auto';
   if (updates.active !== undefined) payload.active = updates.active === true || String(updates.active).toLowerCase() === 'true' || String(updates.active) === '1' || String(updates.active).toLowerCase() === 'on';
   if (updates.bulk_prices !== undefined || updates.bulkPrices !== undefined) payload.bulk_prices = normalizeBulkPrices(updates.bulk_prices ?? updates.bulkPrices);
   if (updates.variants !== undefined) payload.variants = normalizeVariants(updates.variants);
@@ -1129,12 +1133,18 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
       username: buyer?.username || null
     }
   };
-  const rpcResult = payloadOrder.payment_method === 'wallet'
-    ? await sb().rpc('fulfill_wallet_order_v65', rpcPayload)
-    : await sb().rpc('fulfill_paid_order_v62', rpcPayload);
+  const isPo = String(product?.delivery_mode || 'auto').toLowerCase() === 'po';
+  const rpcName = isPo
+    ? (payloadOrder.payment_method === 'wallet' ? 'fulfill_po_wallet_order_v68' : 'fulfill_po_paid_order_v68')
+    : (payloadOrder.payment_method === 'wallet' ? 'fulfill_wallet_order_v65' : 'fulfill_paid_order_v62');
+  const rpcResult = await sb().rpc(rpcName, rpcPayload);
   const { data, error } = rpcResult;
   if (error) {
     const message = String(error.message || error);
+    if (isPo && /fulfill_po_(?:wallet|paid)_order_v68|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fungsi Pre-Order v68 belum tersedia. Jalankan supabase/update-v68-marketplace-po.sql terlebih dahulu.');
+    }
+    if (isPo && /PRODUCT_NOT_PO/i.test(message)) throw new Error('Produk bukan produk Pre-Order. Muat ulang produk lalu coba lagi.');
     if (/fulfill_wallet_order_v65|schema cache|could not find the function/i.test(message) && payloadOrder.payment_method === 'wallet') {
       throw new Error('Fungsi pembayaran saldo v65 belum tersedia. Jalankan SQL v65 terlebih dahulu.');
     }
@@ -1156,6 +1166,8 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     delivered,
     transaction: result.transaction || null,
     already_completed: result.already_completed === true,
+    po_waiting: result.po_waiting === true,
+    po_order: result.po_order || null,
     wallet: result.wallet || null
   };
 }
@@ -1189,6 +1201,48 @@ async function getReferralRewardForInvitee(inviteeId) {
   };
 }
 
+
+
+async function listPoOrders(limit = 100) {
+  const safeLimit = Math.max(1, Math.min(300, Number(limit || 100)));
+  const { data, error } = await sb().from('po_orders').select('*').order('created_at', { ascending: false }).limit(safeLimit);
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function getPoOrder(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('po_orders').select('*').eq('order_ref', ref).maybeSingle();
+  if (error) {
+    if (String(error.code || '') === '42P01') return null;
+    throw error;
+  }
+  return data;
+}
+
+async function markPoDelivered(orderRef, deliveryText, actorId = null) {
+  const ref = String(orderRef || '').trim();
+  const text = String(deliveryText || '').trim();
+  if (!ref) throw new Error('Invoice PO wajib diisi.');
+  if (!text) throw new Error('Data produk/akun wajib diisi.');
+  const { data, error } = await sb().rpc('mark_po_delivered_v68', {
+    p_order_ref: ref,
+    p_delivery_text: text,
+    p_actor_id: actorId ? Number(actorId) : null
+  });
+  if (error) {
+    const message = String(error.message || error);
+    if (/mark_po_delivered_v68|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fungsi pengiriman PO v68 belum tersedia. Jalankan SQL v68 terlebih dahulu.');
+    }
+    throw error;
+  }
+  return data || {};
+}
 
 async function updateTransactionCost(orderRef, costTotalInput) {
   const ref = String(orderRef || '').trim();
@@ -1242,6 +1296,14 @@ async function updateTransactionStatus(orderRef, statusInput) {
       throw new Error('Kolom status transaksi v63 belum tersedia. Jalankan supabase/update-v63-ui-order-status.sql terlebih dahulu.');
     }
     throw error;
+  }
+  if (data && String(data.delivery_mode || '') === 'po') {
+    const poStatus = status === 'canceled'
+      ? 'canceled'
+      : (String(data.delivery_status || '') === 'delivered' ? 'delivered' : 'waiting_delivery');
+    await sb().from('po_orders').update({ status: poStatus, updated_at: nowIso }).eq('order_ref', ref).then(({ error: poError }) => {
+      if (poError && String(poError.code || '') !== '42P01') throw poError;
+    });
   }
   return data;
 }
@@ -1837,8 +1899,8 @@ async function getDeepStats() {
   const revenue = Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0));
   const qtySold = Math.max(Number(summary.quantity_sold || 0), Number(historical.quantity_sold || 0));
   const ordersTotal = Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0));
-  const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active }))
-    .filter((p) => p.active !== false && p.stock <= 5)
+  const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active, delivery_mode: String(p.delivery_mode || 'auto') }))
+    .filter((p) => p.active !== false && p.delivery_mode !== 'po' && p.stock <= 5)
     .sort((a, b) => a.stock - b.stock)
     .slice(0, 20);
   const topUsers = users.slice().sort((a, b) => Number(b.spending || 0) - Number(a.spending || 0)).slice(0, 10);
@@ -1926,6 +1988,9 @@ module.exports = {
   updateTransactionStatus,
   getUserByTelegramId,
   getReferralRewardForInvitee,
+  listPoOrders,
+  getPoOrder,
+  markPoDelivered,
   completeOrder,
   normalizeBulkPrices,
   normalizeVariants,

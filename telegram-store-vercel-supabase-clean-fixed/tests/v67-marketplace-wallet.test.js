@@ -44,7 +44,7 @@ test('API marketplace mengarahkan pembayaran saldo ke fulfillment atomik v65', (
 });
 
 test('pembayaran saldo memperbarui header dan menampilkan sukses tanpa QRIS', () => {
-  assert.match(js, /payment\.payment_method === 'wallet' && payment\.status === 'completed'/);
+  assert.match(js, /payment\.payment_method === 'wallet' && \(payment\.status === 'completed' \|\| payment\.status === 'awaiting_delivery'\)/);
   assert.match(js, /Pembayaran Saldo Berhasil/);
   assert.match(js, /state\.catalog\.viewer\.wallet = payment\.wallet/);
   assert.match(js, /els\.paymentPendingView\.classList\.add\('hidden'\)/);

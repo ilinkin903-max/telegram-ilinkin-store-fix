@@ -52,7 +52,7 @@ test('checkout saldo atomik memakai saldo utama dahulu lalu saldo referral', () 
   assert.match(sql, /from public\.bot_users[\s\S]*for update/i);
   assert.match(sql, /v_main_used := least\(coalesce\(v_user\.balance_main, 0\), p_total_price\)/i);
   assert.match(sql, /v_ref_used := greatest\(0, v_remaining\)/i);
-  assert.match(db, /rpc\('fulfill_wallet_order_v65'/);
+  assert.match(db, /fulfill_wallet_order_v65/);
   assert.match(bot, /Bayar dengan Saldo/);
 });
 

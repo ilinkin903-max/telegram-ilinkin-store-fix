@@ -1,24 +1,29 @@
-iLink.in Store v67 — Test Report
-=================================
+iLink.in Store v68 — Local Validation Report
+=============================================
+Version: v68-marketplace-ui-po-system
+Date: 2026-08-07
 
-Version: v67-marketplace-wallet-payment
-Package version: 4.7.0
+Validation completed:
+- JavaScript syntax checks: PASS
+- Node test suite: 114 passed / 0 failed
+- New v68 tests cover:
+  * seamless banner looping
+  * 1:1 product/flash/detail images including mobile
+  * expandable product description
+  * percentage promo badge and discounted-price ordering
+  * AUTO/PRE-ORDER product modes
+  * atomic PO paid/wallet flow without stock consumption
+  * awaiting_delivery state
+  * seller confirmation and canceled-order guard
+  * TXT delivery for long PO payloads
 
-Checks:
-- JavaScript syntax checks: PASSED
-- Node test suites: PASSED
-- Total tests: 104
-- Passed: 104
-- Failed: 0
+Environment note:
+- The test environment could not install npm packages from its configured registry.
+- Temporary local dependency stubs were used only to execute deterministic local unit/static tests.
+- Those stubs are removed before packaging and are NOT part of the ZIP.
 
-New v67 coverage:
-- Marketplace wallet balance header
-- Safe catalog wallet payload
-- QRIS / Saldo Bot checkout selector
-- Wallet checkout API routing
-- Atomic wallet fulfillment through SQL v65
-- Header balance refresh after wallet payment
-
-Important:
-- SQL v65 and v66 must already be installed.
-- Production Telegram, Supabase, and payment gateway integration were not executed in this local environment.
+Not production-tested:
+- Supabase migration execution
+- Live Telegram delivery
+- Live AutoGoPay payment/webhook
+- Live wallet transaction on the user's production database

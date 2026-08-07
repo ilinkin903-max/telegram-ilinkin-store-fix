@@ -1,6 +1,7 @@
 const { assertOwnerMiniApp } = require('../lib/miniappAuth');
 const db = require('../lib/db');
 const tg = require('../lib/telegram');
+const paymentService = require('../lib/paymentService');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
@@ -251,6 +252,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'stats') return json(res, 200, { ok: true, data: await db.getStats() });
     if (req.method === 'GET' && action === 'products') return json(res, 200, { ok: true, data: await db.listProducts() });
     if (req.method === 'GET' && action === 'orders') return json(res, 200, { ok: true, data: await db.listTransactions(100) });
+    if (req.method === 'GET' && action === 'po-orders') return json(res, 200, { ok: true, data: await db.listPoOrders(150) });
     if (req.method === 'GET' && action === 'users') return json(res, 200, { ok: true, data: await db.listUsers(200) });
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
@@ -365,6 +367,7 @@ module.exports = async function handler(req, res) {
       const image_url = String(body.image_url || '').trim();
       const category = String(body.category || body.kategori || '').trim();
       const display_scope = String(body.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
+      const delivery_mode = String(body.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto';
       const bulk_prices = parseBulkPrices(body.bulk_text || body.bulk_prices);
       const variants = parseVariantPayload(body);
       const hasVariants = variants.length > 0;
@@ -373,7 +376,7 @@ module.exports = async function handler(req, res) {
       const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
       const finalSnk = snk || (hasVariants ? (variants[0].snk || 'Syarat mengikuti varian yang dipilih.') : '');
       if (!nama || !kode || !finalHarga || !finalDeskripsi || !finalSnk) return json(res, 400, { ok: false, error: hasVariants ? 'Nama, kode, dan minimal satu varian dengan harga wajib diisi.' : 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga: finalHarga, cost_price: finalCostPrice, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, bulk_prices, variants, data: splitStock(body.stock_text || '') });
+      const product = await db.addProduct({ nama, kode, harga: finalHarga, cost_price: finalCostPrice, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, delivery_mode, bulk_prices, variants, data: delivery_mode === 'po' ? [] : splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 
@@ -415,7 +418,7 @@ module.exports = async function handler(req, res) {
       const code = String(body.current_code || body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
       const updates = {};
-      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category', 'display_scope'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category', 'display_scope', 'delivery_mode'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
       if (body.active !== undefined) updates.active = boolOf(body.active);
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);
@@ -427,6 +430,50 @@ module.exports = async function handler(req, res) {
       const product = await db.updateProductByCode(code, updates);
       if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
       return json(res, 200, { ok: true, data: product });
+    }
+
+    if (action === 'fulfill-po') {
+      const orderRef = String(body.order_ref || '').trim();
+      const deliveryText = String(body.delivery_text || '').trim();
+      if (!orderRef) return json(res, 400, { ok: false, error: 'Invoice PO wajib diisi.' });
+      if (!deliveryText) return json(res, 400, { ok: false, error: 'Masukkan produk/akun yang akan dikirim ke pembeli.' });
+      const po = await db.getPoOrder(orderRef);
+      if (!po) return json(res, 404, { ok: false, error: 'Pesanan PO tidak ditemukan.' });
+      if (String(po.status || '') === 'delivered') return json(res, 200, { ok: true, data: { already_delivered: true, po_order: po } });
+      if (String(po.status || '') !== 'waiting_delivery') return json(res, 409, { ok: false, error: 'Pesanan PO ini tidak sedang menunggu pengiriman.' });
+      const transactionBeforeSend = await db.getTransactionByOrderRef(orderRef).catch(() => null);
+      if (String(transactionBeforeSend?.status || 'completed').toLowerCase() === 'canceled') {
+        return json(res, 409, { ok: false, error: 'Penjualan ini sudah CANCELED. Produk PO tidak dikirim.' });
+      }
+
+      const claimKey = `po_send:${orderRef}`;
+      const claimed = await db.claimOnce(claimKey, 60 * 60, { order_ref: orderRef, actor_id: Number(owner?.id || 0) }, { failClosed: true });
+      if (!claimed) return json(res, 409, { ok: false, error: 'Pengiriman PO ini sedang diproses. Muat ulang beberapa saat lagi.' });
+
+      let telegramSent = false;
+      try {
+        await paymentService.sendPoDeliveryReceipt(po.telegram_id, po, deliveryText);
+        telegramSent = true;
+        const result = await db.markPoDelivered(orderRef, deliveryText, Number(owner?.id || config.ownerId || 0));
+        const transaction = result.transaction || await db.getTransactionByOrderRef(orderRef).catch(() => null);
+        const [product, buyer] = await Promise.all([
+          db.getProductByCode(po.product_code).catch(() => null),
+          db.getUserByTelegramId(po.telegram_id).catch(() => null)
+        ]);
+        await paymentService.sendOwnerLog(
+          { invoice_ref: orderRef, telegram_id: po.telegram_id, fee: Number(transaction?.payment_fee || 0), quantity: po.quantity, variant_name: po.variant_name },
+          product || { nama: po.product_name, kode: po.product_code },
+          transaction || { order_ref: orderRef, product_name: po.product_name, product_code: po.product_code, variant_name: po.variant_name, quantity: po.quantity, total_price: po.total_price },
+          buyer || { telegram_id: po.telegram_id, username: po.username }
+        ).catch(() => null);
+        await db.markClaimDone(claimKey, { order_ref: orderRef, state: 'delivered' }).catch(() => null);
+        return json(res, 200, { ok: true, data: result });
+      } catch (error) {
+        // Jika pesan Telegram belum terkirim, lock aman dilepas agar seller dapat mencoba lagi.
+        // Jika pesan sudah terkirim tetapi update DB gagal, lock dibiarkan sampai TTL untuk mencegah pengiriman ganda.
+        if (!telegramSent) await db.releaseClaim(claimKey).catch(() => null);
+        throw error;
+      }
     }
 
     if (action === 'set-user-balances') {

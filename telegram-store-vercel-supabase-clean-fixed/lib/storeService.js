@@ -220,10 +220,11 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
 }
 
 function sanitizeProduct(product, promos = [], flashPromos = []) {
+  const isPo = String(product?.delivery_mode || 'auto').toLowerCase() === 'po';
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
     .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos))
     .filter((variant) => variant.active);
-  const buyableVariants = variants.filter((variant) => variant.stock > 0 && variant.price > 0);
+  const buyableVariants = variants.filter((variant) => variant.price > 0 && (isPo || variant.stock > 0));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
   const stock = variants.length ? variants.reduce((sum, variant) => sum + variant.stock, 0) : baseStock;
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
@@ -256,6 +257,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
+    delivery_mode: isPo ? 'po' : 'auto',
     price: Number(product.harga || 0),
     price_min: priceMin,
     price_max: priceMax,
@@ -271,7 +273,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     flash_sale_eligible: Boolean(baseFlashPromo || variants.some((variant) => variant.flash_promo)),
     flash_sale_sold: 0,
     has_promo: hasPromo,
-    available: product.active !== false && stock > 0 && (!variants.length || buyableVariants.length > 0)
+    available: product.active !== false && (isPo ? (variants.length ? buyableVariants.length > 0 : Number(product?.harga || 0) > 0) : (stock > 0 && (!variants.length || buyableVariants.length > 0)))
   };
 }
 
@@ -427,10 +429,11 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   if (!product || product.active === false) throw httpError('Produk tidak tersedia.', 404, 'PRODUCT_NOT_FOUND');
 
   const selected = selectedProductVariant(product, variantKey);
+  const isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
   const availableStock = selected.variant
     ? variantStock(selected.variant)
     : (Array.isArray(product.data) ? product.data.length : 0);
-  if (availableStock < qty) {
+  if (!isPo && availableStock < qty) {
     throw httpError(`Stok tidak mencukupi. Stok tersedia: ${availableStock}.`, 409, 'INSUFFICIENT_STOCK', { available_stock: availableStock });
   }
 
@@ -571,7 +574,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     qr_download_token: qrTokenSecret() ? issueQrDownloadToken(invoice, Number(user.id), expiresAt) : '',
     checkout_url: gatewayPayment.checkout_url || '',
     payment_provider: gatewayPayment.provider,
-    watcher_scheduled
+    watcher_scheduled,
+    delivery_mode: String(product.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto'
   };
 }
 
@@ -629,7 +633,8 @@ async function createWalletPayment({ user, productCode, variantKey, quantity, vo
     const transaction = result.transaction || {};
     return {
       payment_method: 'wallet',
-      status: 'completed',
+      status: result.po_waiting ? 'awaiting_delivery' : 'completed',
+      delivery_mode: result.po_waiting ? 'po' : 'auto',
       invoice,
       invoice_display: paymentService.displayPaymentReference(invoice),
       product: transaction.product_name || product.nama,
@@ -703,15 +708,19 @@ async function getOrderStatus(user, invoice) {
   const transaction = await db.getTransactionByOrderRef(ref);
   if (transaction) {
     if (Number(transaction.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
+    const waitingDelivery = String(transaction.delivery_mode || 'auto') === 'po' && String(transaction.delivery_status || '') !== 'delivered';
     return {
-      status: 'completed',
+      status: waitingDelivery ? 'awaiting_delivery' : 'completed',
+      delivery_mode: String(transaction.delivery_mode || 'auto'),
+      delivery_status: String(transaction.delivery_status || 'delivered'),
       invoice: ref,
       invoice_display: paymentService.displayPaymentReference(ref),
       product: transaction.product_name,
       variant: transaction.variant_name || '',
       quantity: Number(transaction.quantity || 1),
       total: Number(transaction.total_price || 0),
-      completed_at: transaction.created_at
+      completed_at: transaction.created_at,
+      delivered_at: transaction.delivered_at || null
     };
   }
 
@@ -725,8 +734,11 @@ async function getOrderStatus(user, invoice) {
       if (verified.status === 'completed') {
         const result = await paymentService.fulfillPaidOrder({ order, buyer: user, source: 'marketplace-status-check' });
         const completed = result.transaction || await db.getTransactionByOrderRef(ref).catch(() => null);
+        const waitingDelivery = String(completed?.delivery_mode || '') === 'po' && String(completed?.delivery_status || '') !== 'delivered';
         return {
-          status: 'completed',
+          status: waitingDelivery ? 'awaiting_delivery' : 'completed',
+          delivery_mode: completed?.delivery_mode || (result.po_waiting ? 'po' : 'auto'),
+          delivery_status: completed?.delivery_status || (result.po_waiting ? 'waiting_delivery' : 'delivered'),
           invoice: ref,
           invoice_display: paymentService.displayPaymentReference(ref),
           product: completed?.product_name || order.product_code,
@@ -778,7 +790,9 @@ async function getHistory(user, limit = 20) {
     quantity: Number(row.quantity || 1),
     total: Number(row.total_price || 0),
     created_at: row.created_at,
-    status: String(row.status || 'completed').toLowerCase() === 'canceled' ? 'canceled' : 'completed'
+    status: String(row.status || 'completed').toLowerCase() === 'canceled' ? 'canceled' : 'completed',
+    delivery_mode: String(row.delivery_mode || 'auto'),
+    delivery_status: String(row.delivery_status || 'delivered')
   }));
 }
 

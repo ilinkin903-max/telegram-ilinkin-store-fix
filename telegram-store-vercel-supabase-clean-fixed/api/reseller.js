@@ -60,6 +60,10 @@ module.exports = async function handler(req, res) {
     @media(max-width:620px){.walletPreview,.balanceEditorSummary{grid-template-columns:1fr}.userCard.walletUserCard{grid-template-columns:minmax(0,1fr) 56px 92px;gap:7px}.userWallet{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.userWallet span{padding:4px}.userWallet small{font-size:6px}.userWallet b{font-size:9px}.userActions{justify-content:stretch}.userActions .btn{flex:1;min-height:28px;padding:6px 7px!important;font-size:8px!important}.walletSettingCard{padding:10px}}
     @media(max-width:390px){.userCard.walletUserCard{grid-template-columns:minmax(0,1fr) 52px 84px}.userWallet{grid-template-columns:1fr 1fr}.userWallet span:last-child{grid-column:1/-1}.userActions{flex-wrap:wrap}}
 
+
+    /* v68: PRE-ORDER */
+    .poGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.poCard{background:#fff;border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:13px;display:grid;gap:9px}.poCard.delivered{opacity:.78}.poHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.poHead h3{margin:0;font-size:17px;line-height:1.25}.poStatus{border:2px solid #000;border-radius:999px;padding:4px 7px;font-size:10px;white-space:nowrap}.poStatus.waiting{background:var(--yellow)}.poStatus.delivered{background:var(--lime)}.poMeta{font-size:12px;line-height:1.5;color:var(--muted)}.poDelivery{min-height:120px}.deliveryModeBadge{display:inline-flex;border:2px solid #000;border-radius:6px;padding:3px 6px;font-size:10px;background:#dff6ff;margin-top:5px}.product.poProduct{background:#f5fbff}.poProduct .approved{background:#dff6ff}.poNotice{background:#dff6ff;border:var(--line);border-radius:var(--radius);padding:10px 12px;font-size:12px;line-height:1.45;margin-bottom:12px}
+    @media(max-width:760px){.poGrid{grid-template-columns:1fr}.poCard{padding:11px}.poDelivery{min-height:105px}}
 </style>
 </head>
 <body>
@@ -79,6 +83,7 @@ module.exports = async function handler(req, res) {
     <button class="tile active" data-tab="dashboard"><span class="ico">📊</span>Dashboard</button>
     <button class="tile" data-tab="products"><span class="ico">📦</span>Produk</button>
     <button class="tile" data-tab="orders"><span class="ico">🧾</span>Penjualan</button>
+    <button class="tile" data-tab="poOrders"><span class="ico">📨</span>Pesanan PO</button>
     <button class="tile" data-tab="users"><span class="ico">👥</span>Users</button>
     <button class="tile" data-tab="broadcast"><span class="ico">📣</span>Broadcast</button>
     <button class="tile" data-tab="promos"><span class="ico">🎟</span>Promo</button>
@@ -127,6 +132,10 @@ module.exports = async function handler(req, res) {
           <div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive"></div></div>
           <div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both">Bot Telegram + Marketplace</option><option value="marketplace">Marketplace saja</option></select><p class="help">Marketplace saja tidak akan muncul pada daftar /produk dan stok di bot.</p></div>
         </div>
+        <div class="row">
+          <div class="field"><label class="label">Sistem Pengiriman</label><select class="select" name="delivery_mode"><option value="auto">Otomatis dari stok</option><option value="po">Pre-Order · saya kirim manual setelah pembayaran</option></select><p class="help">PRE-ORDER tidak memotong stok otomatis. Setelah pembayaran berhasil, pesanan masuk ke menu Pesanan PO untuk Anda kirim.</p></div>
+          <div class="field"><label class="label">Catatan Sistem PO</label><div class="variantMainCompact">Gunakan PRE-ORDER untuk produk yang baru Anda beli/siapkan dari supplier setelah konsumen membayar.</div></div>
+        </div>
         <div class="row variantMainHide" data-hide-when-variant>
           <div class="field"><label class="label">Deskripsi</label><textarea class="textarea" name="deskripsi" placeholder="Contoh: Canva EDU 1 tahun, cocok untuk desain, login via email." required></textarea></div>
           <div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea" name="snk" placeholder="Contoh: Garansi 7 hari jika akun bermasalah. Dilarang ganti password." required></textarea></div>
@@ -153,6 +162,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   </section>
 
   <section id="orders" class="section"><div class="panel"><h2 class="sectionTitle">Penjualan</h2><div id="orderList" class="orderGrid"></div></div></section>
+  <section id="poOrders" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Pesanan Pre-Order</h2><p class="help">Hanya pesanan yang pembayarannya sudah berhasil. Masukkan produk/akun, lalu kirim ke chat pembeli.</p></div></div><div class="poNotice"><b>Alur aman:</b> pembayaran berhasil → pesanan masuk di sini → Anda tempel akun/produk → konfirmasi → bot mengirim ke pembeli → status menjadi TERKIRIM.</div><div id="poOrderList" class="poGrid"></div></div></section>
   <section id="users" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Users</h2><p class="help">Ringkasan pelanggan dan aktivitas transaksi.</p></div></div><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><div id="userList" class="userCardGrid"></div></div></section>
   <section id="broadcast" class="section">
     <div class="forms broadcastGrid">
@@ -360,7 +370,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
   var initData = tg && tg.initData ? tg.initData : '';
-  var state = { stats:{}, products:[], orders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[] };
+  var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[] };
   function rupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0)); }
   function displayRef(v){ var original=String(v==null?'':v).trim(); var cleaned=original.replace(/^AUTOGOPAY(?:[-_: ]+)?/i,''); return cleaned||original||'-'; }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
@@ -571,14 +581,33 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     if(!vars.length) vars=productVariants(p);
     if(!vars.length) return rupiah(p.harga);
     var prices=vars.map(function(v){return Number(v.price||v.harga||0);}).filter(function(n){return n>0;}).sort(function(a,b){return a-b;});
-    if(!prices.length) return rupiah(p.harga);
-    if(prices[0]===prices[prices.length-1]) return rupiah(prices[0]);
-    return rupiah(prices[0])+' - '+rupiah(prices[prices.length-1]);
+    return prices.length ? rupiah(prices[0]) : rupiah(p.harga);
   }
-  function renderProducts(){ var q=searchQuery(); var rows=state.products.filter(function(p){return productMatches(p,q);}); updateSearchCounter(); document.getElementById('productList').innerHTML=rows.map(function(p){ var varsArr=productVariants(p); var visibleVars=varsArr.slice(0,3); var vars=visibleVars.map(function(v){return '<span class="chip '+(variantActive(v)?'purple':'red')+'">'+esc(v.name||v.nama)+' · '+rupiah(v.price||v.harga||p.harga)+' · '+variantStock(v).length+' stok · '+(variantActive(v)?'ON':'OFF')+'</span>';}).join(''); if(varsArr.length>visibleVars.length) vars+='<span class="chip">+'+(varsArr.length-visibleVars.length)+' varian lain</span>'; return '<article class="product '+(p.active===false?'productOff':'')+'">'+
-      '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - STOK '+stockCount(p)+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span></div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
-      '<div class="price">'+productDisplayPrice(p)+'</div>'+(vars?'<div class="chips">'+vars+'</div>':'')+ 
-      '<div class="actions"><button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button><button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button><button class="btn small red" data-delete-product="'+esc(p.kode)+'">Hapus</button></div></article>'; }).join('')||'<div class="empty">Produk belum ada.</div>'; wireProductButtons(); }
+
+  function renderProducts(){
+    var q=searchQuery();
+    var rows=state.products.filter(function(p){return productMatches(p,q);});
+    updateSearchCounter();
+    document.getElementById('productList').innerHTML=rows.map(function(p){
+      var isPo=String(p.delivery_mode||'auto')==='po';
+      var varsArr=productVariants(p);
+      var visibleVars=varsArr.slice(0,3);
+      var vars=visibleVars.map(function(v){
+        return '<span class="chip '+(variantActive(v)?'purple':'red')+'">'+esc(v.name||v.nama)+' · '+rupiah(v.price||v.harga||p.harga)+' · '+(isPo?'PO':(variantStock(v).length+' stok'))+' · '+(variantActive(v)?'ON':'OFF')+'</span>';
+      }).join('');
+      if(varsArr.length>visibleVars.length) vars+='<span class="chip">+'+(varsArr.length-visibleVars.length)+' varian lain</span>';
+      var availability=isPo?'PRE-ORDER':('STOK '+stockCount(p));
+      var actions='<button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button>'+
+        (isPo?'':'<button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button>')+
+        '<button class="btn small red" data-delete-product="'+esc(p.kode)+'">Hapus</button>';
+      return '<article class="product '+(isPo?'poProduct ':'')+(p.active===false?'productOff':'')+'">'+
+        '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - '+availability+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span>'+(isPo?'<br><span class="deliveryModeBadge">PRE-ORDER · KIRIM MANUAL</span>':'')+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
+        '<div class="price">'+productDisplayPrice(p)+'</div>'+(vars?'<div class="chips">'+vars+'</div>':'')+
+        '<div class="actions">'+actions+'</div></article>';
+    }).join('')||'<div class="empty">Produk belum ada.</div>';
+    wireProductButtons();
+  }
+
   function findProduct(code){ return state.products.find(function(x){return x.kode===code;}); }
   function editVariantCardHtml(v,i, allowRemove){
     v=v||{};
@@ -646,7 +675,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var variantCards=(p.variants||[]).map(function(v,i){return editVariantCardHtml(v,i,true);}).join('');
     return '<form id="modalEditForm" class="form"><input type="hidden" name="kode" value="'+esc(p.kode)+'">'+
       '<div class="row3"><div class="field"><label class="label">Nama Produk</label><input class="input" name="nama" placeholder="Contoh: Canva Pro 1 Bulan" value="'+esc(p.nama||'')+'"></div><div class="field"><label class="label">Kode Produk</label><input class="input" name="kode_baru" placeholder="Contoh: CANVA1B" value="'+esc(p.kode||'')+'"></div><div class="field"><label class="label">Kategori</label><input class="input" name="category" placeholder="Contoh: Akun Premium" value="'+esc(p.category||'')+'"></div></div>'+
-      '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ 
+      '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+       '<div class="row"><div class="field"><label class="label">Sistem Pengiriman</label><select class="select" name="delivery_mode"><option value="auto" '+(String(p.delivery_mode||'auto')!=='po'?'selected':'')+'>Otomatis dari stok</option><option value="po" '+(String(p.delivery_mode||'auto')==='po'?'selected':'')+'>Pre-Order · kirim manual</option></select><p class="help">Pesanan PRE-ORDER baru dikirim setelah Anda mengisi produk pada menu Pesanan PO.</p></div><div class="field"><label class="label">Mode Aktif</label><div class="variantMainCompact">'+(String(p.delivery_mode||'auto')==='po'?'PRE-ORDER · tidak memotong stok otomatis':'AUTO · produk diambil dari stok setelah pembayaran')+'</div></div></div>'+ 
       '<div class="row3 '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Jual Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier / Item</label><input class="input" name="cost_price" type="number" min="0" placeholder="Contoh: 9000" value="'+esc(p.cost_price||'')+'"><p class="help">Berlaku untuk checkout berikutnya.</p></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
       '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
       '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
@@ -776,6 +805,50 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     document.querySelectorAll('[data-order-cost]').forEach(function(btn){btn.onclick=function(){openOrderCost(btn.dataset.orderCost);};});
     document.querySelectorAll('[data-order-status]').forEach(function(btn){btn.onclick=function(){openOrderStatusConfirm(btn.dataset.orderStatus);};});
   }
+  function poMatches(o,q){ return textMatch([o.order_ref,o.product_name,o.product_code,o.variant_name,o.username,o.telegram_id,o.status,o.delivery_text,o.total_price],q); }
+  function findPoTextarea(ref){
+    var rows=Array.prototype.slice.call(document.querySelectorAll('[data-po-text]'));
+    return rows.find(function(el){return String(el.dataset.poText||'')===String(ref||'');})||null;
+  }
+  function openPoDeliveryConfirm(ref){
+    var po=(state.poOrders||[]).find(function(x){return String(x.order_ref||'')===String(ref||'');});
+    if(!po) return toast('Pesanan PO tidak ditemukan.',true);
+    if(String(po.status||'')!=='waiting_delivery') return toast('Pesanan PO ini tidak sedang menunggu pengiriman.',true);
+    var input=findPoTextarea(ref);
+    var text=String(input&&input.value||'').trim();
+    if(!text) return toast('Masukkan produk/akun yang akan dikirim.',true);
+    var preview=text.length>900?text.slice(0,900)+'\n…':text;
+    var body='<div class="statusConfirm"><div class="statusConfirmIcon success">➤</div><h3>Kirim produk ke pembeli sekarang?</h3><p>Pastikan akun/produk sudah benar. Setelah Telegram berhasil menerima pesan, status PO akan menjadi <b>TERKIRIM</b>.</p><div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(po.order_ref||'-'))+'</div><div class="detailItem"><b>Pembeli</b><br>'+(po.username?'@'+esc(po.username):'ID '+esc(po.telegram_id))+'</div><div class="detailItem"><b>Produk</b><br>'+esc(po.product_name||po.product_code||'-')+(po.variant_name?' · '+esc(po.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(po.quantity||1)+' item</div></div><div class="field" style="margin-top:10px"><label class="label">Produk / akun yang akan dikirim</label><pre class="detailItem" style="max-height:220px;overflow:auto;white-space:pre-wrap">'+esc(preview)+'</pre></div><div class="statusConfirmActions"><button class="btn lime" id="confirmPoSend" type="button">Kirim ke Pembeli</button><button class="btn" id="cancelPoSend" type="button">Periksa Lagi</button></div></div>';
+    openModal('Konfirmasi Pengiriman PRE-ORDER',body);
+    document.getElementById('cancelPoSend').onclick=closeModal;
+    document.getElementById('confirmPoSend').onclick=async function(){
+      var btn=this; btn.disabled=true; btn.textContent='Mengirim...';
+      try{ await post('fulfill-po',{order_ref:po.order_ref,delivery_text:text}); closeModal(); toast('Produk PO berhasil dikirim ke pembeli.'); }
+      catch(e){ btn.disabled=false; btn.textContent='Kirim ke Pembeli'; }
+    };
+  }
+  function renderPoOrders(){
+    var box=document.getElementById('poOrderList'); if(!box) return;
+    var q=searchQuery();
+    var rows=(state.poOrders||[]).filter(function(o){return poMatches(o,q);}).slice().sort(function(a,b){
+      var aw=String(a.status||'')==='waiting_delivery'?0:1, bw=String(b.status||'')==='waiting_delivery'?0:1;
+      return aw-bw || new Date(b.created_at||0)-new Date(a.created_at||0);
+    });
+    box.innerHTML=rows.map(function(o){
+      var status=String(o.status||'waiting_delivery');
+      var waiting=status==='waiting_delivery';
+      var delivered=status==='delivered';
+      var label=waiting?'MENUNGGU DIKIRIM':(delivered?'TERKIRIM':'DIBATALKAN');
+      var badgeClass=waiting?'waiting':(delivered?'delivered':'');
+      var user=o.username?'@'+esc(o.username):'ID '+esc(o.telegram_id);
+      var editor=waiting
+        ? '<div class="field"><label class="label">Produk / Akun untuk Pembeli</label><textarea class="textarea poDelivery" data-po-text="'+esc(o.order_ref)+'" placeholder="Tempel akun, password, link, lisensi, atau data produk yang akan diterima pembeli."></textarea><p class="help">Data baru dikirim setelah Anda menekan Kirim dan mengonfirmasi.</p></div><button class="btn lime" type="button" data-po-send="'+esc(o.order_ref)+'">Kirim Produk ke Pembeli</button>'
+        : (delivered?'<div class="detailItem"><b>Produk yang sudah dikirim</b><br><pre style="white-space:pre-wrap;margin:7px 0 0">'+esc(o.delivery_text||'-')+'</pre></div>':'<div class="detailItem">Pesanan dibatalkan. Produk tidak dapat dikirim dari menu PO.</div>');
+      return '<article class="poCard '+(delivered?'delivered':'')+'"><div class="poHead"><div><h3>'+esc(o.product_name||o.product_code||'-')+'</h3><div class="poMeta">'+(o.variant_name?esc(o.variant_name)+' · ':'')+esc(o.quantity||1)+' item · '+rupiah(o.total_price||0)+'</div></div><span class="poStatus '+badgeClass+'">'+label+'</span></div><div class="poMeta"><b>Invoice:</b> '+esc(displayRef(o.order_ref||'-'))+'<br><b>Pembeli:</b> '+user+'<br><b>Dibayar:</b> '+(o.paid_at?new Date(o.paid_at).toLocaleString('id-ID'):'-')+(o.delivered_at?'<br><b>Dikirim:</b> '+new Date(o.delivered_at).toLocaleString('id-ID'):'')+'</div>'+editor+'</article>';
+    }).join('')||'<div class="empty">Belum ada pesanan PRE-ORDER.</div>';
+    document.querySelectorAll('[data-po-send]').forEach(function(btn){btn.onclick=function(){openPoDeliveryConfirm(btn.dataset.poSend);};});
+  }
+
   function userMatches(u,q){ return textMatch([u.telegram_id,u.username,u.first_name,u.transaction_count,u.spending,u.balance_main,u.balance_referral,u.referral_code],q); }
   function renderUsers(sortMode){
     if(sortMode) state.userSort=sortMode;
@@ -953,16 +1026,16 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   async function load(){
     try{
       var all=await Promise.all([
-        apiSafe('license-status',{}), apiSafe('stats',{}), apiSafe('products',[]), apiSafe('orders',[]), apiSafe('users',[]), apiSafe('vouchers',[]), apiSafe('settings',{}), apiSafe('analytics',{}), apiSafe('polls',[]), apiSafe('maintenance-stats',{}), apiSafe('backup-logs',[]), apiSafe('promos',[]), apiSafe('deep-stats',{})
+        apiSafe('license-status',{}), apiSafe('stats',{}), apiSafe('products',[]), apiSafe('orders',[]), apiSafe('po-orders',[]), apiSafe('users',[]), apiSafe('vouchers',[]), apiSafe('settings',{}), apiSafe('analytics',{}), apiSafe('polls',[]), apiSafe('maintenance-stats',{}), apiSafe('backup-logs',[]), apiSafe('promos',[]), apiSafe('deep-stats',{})
       ]);
-      state.license=all[0]||{}; state.stats=all[1]||{}; state.products=all[2]||[]; state.orders=all[3]||[]; state.users=all[4]||[]; state.vouchers=all[5]||[]; state.settings=all[6]||{}; state.analytics=all[7]||{}; state.polls=all[8]||[]; state.maintenance=all[9]||{}; state.backups=all[10]||[]; state.promos=all[11]||[]; state.deepStats=all[12]||{}; refreshPromoTargetProducts();
-      renderHeader(); renderLicense(); renderStats(); renderCharts(); renderProducts(); renderOrders(); renderUsers(); renderVouchers(); renderPolls(); renderMaintenance(); renderBackup(); renderPromos(); renderDeepStats(); updateSearchCounter();
+      state.license=all[0]||{}; state.stats=all[1]||{}; state.products=all[2]||[]; state.orders=all[3]||[]; state.poOrders=all[4]||[]; state.users=all[5]||[]; state.vouchers=all[6]||[]; state.settings=all[7]||{}; state.analytics=all[8]||{}; state.polls=all[9]||[]; state.maintenance=all[10]||{}; state.backups=all[11]||[]; state.promos=all[12]||[]; state.deepStats=all[13]||{}; refreshPromoTargetProducts();
+      renderHeader(); renderLicense(); renderStats(); renderCharts(); renderProducts(); renderOrders(); renderPoOrders(); renderUsers(); renderVouchers(); renderPolls(); renderMaintenance(); renderBackup(); renderPromos(); renderDeepStats(); updateSearchCounter();
     }catch(e){ toast(e.message,true); renderLicense(); renderStats(); renderProducts(); renderMaintenance(); }
   }
   async function post(action,data){ try{ var r=await api(action,data); toast('Berhasil diproses'); await load(); return r; }catch(e){ toast(e.message,true); throw e; } }
   document.querySelectorAll('[data-tab]').forEach(function(btn){btn.onclick=function(){ switchTab(btn.dataset.tab,{smooth:btn.classList.contains('settingsSubBtn'),scrollTarget:btn.dataset.scrollTarget}); };});
   var refreshLicense=document.getElementById('refreshLicense'); if(refreshLicense) refreshLicense.onclick=async function(){ state.license=await apiSafe('license-status',{}); renderLicense(); toast('Status lisensi diperbarui'); }; try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)) switchTab(lastTab); }catch(e){}
-  document.getElementById('search').oninput=function(){ renderProducts(); renderOrders(); renderUsers(); renderUnifiedPromos(); };
+  document.getElementById('search').oninput=function(){ renderProducts(); renderOrders(); renderPoOrders(); renderUsers(); renderUnifiedPromos(); };
   document.querySelectorAll('[data-promo-sub]').forEach(function(btn){btn.onclick=function(){ if(btn.dataset.promoSub==='create') promoUnifiedReset(); else setPromoSub(btn.dataset.promoSub||'list'); };});
   document.getElementById('addForm').onsubmit=async function(e){
     e.preventDefault();

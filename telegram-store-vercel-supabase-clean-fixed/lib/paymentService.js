@@ -347,6 +347,72 @@ async function sendOrderReceipt(userId, order, product, transaction, delivered) 
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
+
+async function sendPoPaidNotice(userId, order, product, transaction) {
+  const ctx = receiptContext(order, product, transaction, []);
+  const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
+  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
+    `=======================\n` +
+    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
+    `Produk: <b>${escapeHtml(title)}</b>\n` +
+    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
+    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
+    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>\n` +
+    `=======================\n\n` +
+    `📦 <b>PESANAN PRE-ORDER</b>\n` +
+    `Pembayaran sudah diterima. Produk/akun akan dikirim langsung ke chat ini setelah seller menyiapkan dan mengirimkannya.`;
+  return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
+}
+
+async function sendPoDeliveryReceipt(userId, poOrder, deliveryText) {
+  const title = `${poOrder?.product_name || poOrder?.product_code || '-'}${poOrder?.variant_name ? ' - ' + poOrder.variant_name : ''}`;
+  const raw = String(deliveryText || '').trim();
+  if (!raw) throw new Error('Data produk PO kosong.');
+  const header = `📦 <b>PESANAN PO SUDAH DIKIRIM</b>\n` +
+    `=======================\n` +
+    `Invoice: <b>${escapeHtml(displayPaymentReference(poOrder?.order_ref || '-'))}</b>\n` +
+    `Produk: <b>${escapeHtml(title)}</b>\n` +
+    `Jumlah: <b>${escapeHtml(Number(poOrder?.quantity || 1))}</b>\n` +
+    `=======================\n\n`;
+
+  // Satu request Telegram per pengiriman PO mengurangi risiko produk terkirim sebagian/duplikat.
+  if (raw.length <= 2600) {
+    return tg.sendMessage(Number(userId),
+      header + `<b>PRODUK / AKUN</b>\n<pre>${escapeHtml(raw)}</pre>\nSimpan data produk ini dengan baik. Jika ada kendala, hubungi seller.`,
+      { parse_mode: 'HTML' }
+    );
+  }
+
+  const safeRef = String(displayPaymentReference(poOrder?.order_ref || 'PO')).replace(/[^a-z0-9_-]/gi, '-').slice(0, 50) || 'PO';
+  return tg.sendDocument(Number(userId), `PRODUK-${safeRef}.txt`, raw, {
+    caption: header + `Data produk cukup panjang, sehingga dikirim sebagai file TXT agar tidak terpotong.`,
+    parse_mode: 'HTML'
+  });
+}
+
+
+async function sendOwnerPoWaitingLog(order, product, transaction, buyer = {}) {
+  if (!config.channelLog) return;
+  try {
+    const username = buyer?.username ? '@' + buyer.username : (buyer?.first_name || String(order?.telegram_id || '-'));
+    const productName = transaction?.product_name || product?.nama || order?.product_code || '-';
+    const variantName = transaction?.variant_name || order?.variant_name || '';
+    await tg.sendMessage(config.channelLog,
+      `⏳ PO MENUNGGU PENGIRIMAN\n` +
+      `=======================\n` +
+      `User: ${username}\n` +
+      `Trx ID: ${displayPaymentReference(transaction?.order_ref || order?.invoice_ref || '-')}\n` +
+      `Produk: ${productName}${variantName ? ' - ' + variantName : ''}\n` +
+      `Jumlah Beli: ${Number(transaction?.quantity || order?.quantity || 1)}\n` +
+      `Total Harga: ${formatRupiah(transaction?.total_price || order?.amount || 0)}\n` +
+      `Status: MENUNGGU SELLER MENGIRIM PRODUK\n` +
+      `Tanggal: ${formatWIB(new Date())}`
+    );
+  } catch (error) {
+    console.error('Gagal kirim log PO:', error.message || error);
+  }
+}
+
 async function sendOwnerLog(order, product, transaction, buyer = {}) {
   if (!config.channelLog) return;
   try {
@@ -447,15 +513,34 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       result = await db.completeOrder(order, product, Number(order.amount || 0), currentBuyer);
     }
 
-    await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
+    const poWaiting = result.po_waiting === true || (String(product?.delivery_mode || 'auto').toLowerCase() === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
+    if (poWaiting) {
+      // Notifikasi pembayaran PO memakai lock terpisah dari lock fulfillment.
+      // Jika transaksi DB sudah sukses tetapi kirim Telegram sempat gagal, webhook/cron berikutnya masih dapat mencoba lagi.
+      const noticeKey = `po_paid_notice:${invoice}`;
+      const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
+      if (noticeClaimed) {
+        try {
+          await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
+          await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
+        } catch (noticeError) {
+          await db.releaseClaim(noticeKey).catch(() => null);
+          throw noticeError;
+        }
+      }
+      if (!result.already_completed) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
+    } else {
+      await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
+      await sendOwnerLog(order, product, result.transaction, currentBuyer);
+    }
     await db.deletePendingOrder(order.telegram_id, order.invoice_ref);
-    await sendOwnerLog(order, product, result.transaction, currentBuyer);
     await notifyFirstPurchaseReferral(order.telegram_id);
-    await db.markClaimDone(processKey, { invoice, source, state: 'completed' });
+    await db.markClaimDone(processKey, { invoice, source, state: poWaiting ? 'awaiting_delivery' : 'completed' });
 
     return {
       ok: true,
-      state: result.already_completed ? 'already_completed' : 'completed',
+      state: result.already_completed ? 'already_completed' : (poWaiting ? 'awaiting_delivery' : 'completed'),
+      po_waiting: poWaiting,
       transaction: result.transaction,
       delivered: result.delivered
     };
@@ -672,6 +757,9 @@ module.exports = {
   scheduleTopupWatcher,
   fulfillPaidOrder,
   sendOrderReceipt,
+  sendPoPaidNotice,
+  sendPoDeliveryReceipt,
+  sendOwnerPoWaitingLog,
   sendOwnerLog,
   watchPendingPayment,
   schedulePaymentWatcher
