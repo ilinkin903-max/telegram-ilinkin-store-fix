@@ -364,28 +364,56 @@ async function sendPoPaidNotice(userId, order, product, transaction) {
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
-async function sendPoDeliveryReceipt(userId, poOrder, deliveryText) {
+async function sendPoDeliveryReceipt(userId, poOrder, deliveryText, product = null) {
   const title = `${poOrder?.product_name || poOrder?.product_code || '-'}${poOrder?.variant_name ? ' - ' + poOrder.variant_name : ''}`;
   const raw = String(deliveryText || '').trim();
   if (!raw) throw new Error('Data produk PO kosong.');
-  const header = `📦 <b>PESANAN PO SUDAH DIKIRIM</b>\n` +
-    `=======================\n` +
-    `Invoice: <b>${escapeHtml(displayPaymentReference(poOrder?.order_ref || '-'))}</b>\n` +
-    `Produk: <b>${escapeHtml(title)}</b>\n` +
-    `Jumlah: <b>${escapeHtml(Number(poOrder?.quantity || 1))}</b>\n` +
-    `=======================\n\n`;
+  const variant = product ? selectedVariant(product, { variant_key: poOrder?.variant_key || '' }) : null;
+  const terms = String(poOrder?.terms_snapshot || variantTerms(product || {}, variant) || '-').trim() || '-';
+  const header = `📦 <b>PESANAN PO SUDAH DIKIRIM</b>
+` +
+    `=======================
+` +
+    `Invoice: <b>${escapeHtml(displayPaymentReference(poOrder?.order_ref || '-'))}</b>
+` +
+    `Produk: <b>${escapeHtml(title)}</b>
+` +
+    `Jumlah: <b>${escapeHtml(Number(poOrder?.quantity || 1))}</b>
+` +
+    `=======================
 
-  // Satu request Telegram per pengiriman PO mengurangi risiko produk terkirim sebagian/duplikat.
-  if (raw.length <= 2600) {
+`;
+  const termsBlock = `<b>SYARAT &amp; KETENTUAN</b>
+${escapeHtml(terms)}
+
+`;
+
+  // Blok <pre> menjaga format akun dan mudah dipilih/disalin dari Telegram.
+  // Sisakan ruang aman dari batas 4096 karakter setelah header + SnK.
+  const inlineLimit = Math.max(500, 3850 - header.length - termsBlock.length);
+  if (raw.length <= inlineLimit) {
     return tg.sendMessage(Number(userId),
-      header + `<b>PRODUK / AKUN</b>\n<pre>${escapeHtml(raw)}</pre>\nSimpan data produk ini dengan baik. Jika ada kendala, hubungi seller.`,
+      header + termsBlock + `<b>PRODUK / AKUN</b>
+<pre>${escapeHtml(raw)}</pre>
+Tekan lama/blok data produk di atas untuk menyalin. Simpan data dengan baik.`,
       { parse_mode: 'HTML' }
     );
   }
 
   const safeRef = String(displayPaymentReference(poOrder?.order_ref || 'PO')).replace(/[^a-z0-9_-]/gi, '-').slice(0, 50) || 'PO';
-  return tg.sendDocument(Number(userId), `PRODUK-${safeRef}.txt`, raw, {
-    caption: header + `Data produk cukup panjang, sehingga dikirim sebagai file TXT agar tidak terpotong.`,
+  const textFile = `SYARAT & KETENTUAN
+${terms}
+
+PRODUK / AKUN
+${raw}
+`;
+  const captionTerms = terms.length > 420 ? `${terms.slice(0, 417)}...` : terms;
+  const caption = header + `<b>SYARAT &amp; KETENTUAN</b>
+${escapeHtml(captionTerms)}
+
+Data produk panjang dikirim sebagai TXT agar utuh dan mudah disalin.`;
+  return tg.sendDocument(Number(userId), `PRODUK-${safeRef}.txt`, textFile, {
+    caption,
     parse_mode: 'HTML'
   });
 }
@@ -513,7 +541,9 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       result = await db.completeOrder(order, product, Number(order.amount || 0), currentBuyer);
     }
 
-    const poWaiting = result.po_waiting === true || (String(product?.delivery_mode || 'auto').toLowerCase() === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
+    const selected = product ? selectedVariant(product, order) : null;
+    const effectiveMode = String(result.transaction?.delivery_mode || order?.delivery_mode || (product ? db.variantDeliveryMode(product, selected) : 'auto')).toLowerCase();
+    const poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
     if (poWaiting) {
       // Notifikasi pembayaran PO memakai lock terpisah dari lock fulfillment.
       // Jika transaksi DB sudah sukses tetapi kirim Telegram sempat gagal, webhook/cron berikutnya masih dapat mencoba lagi.

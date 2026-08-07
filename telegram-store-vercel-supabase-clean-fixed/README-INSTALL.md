@@ -1,52 +1,79 @@
-# iLink.in Store v68 — Marketplace UI + Sistem PRE-ORDER
+# iLink.in Store v69 — PO per Varian + Voucher Preview + UI Ringkas
 
-v68 menggunakan v67 sebagai dasar. Fitur saldo Marketplace, referral, top up, AutoGoPay, promo/voucher, Flash Sale, broadcast, dashboard reseller, dan pengiriman stok otomatis tetap dipertahankan.
+v69 menggunakan **v68 sebagai dasar**. Seluruh fitur marketplace, saldo/referral, top up, AutoGoPay, promo/voucher, Flash Sale, broadcast, dashboard reseller, stok AUTO, dan sistem PRE-ORDER tetap dipertahankan.
 
-## Perubahan utama v68
+## Perubahan utama v69
 
-### Marketplace lebih ringkas
+### 1. Pesan produk PRE-ORDER lebih lengkap
 
-- Banner promosi sekarang **loop terus menerus**. Setelah banner terakhir, animasi berlanjut ke banner pertama tanpa memantul balik.
-- Seluruh gambar produk menggunakan rasio **1:1**:
-  - kartu katalog;
-  - Flash Sale;
-  - popup/detail produk;
-  - tampilan HP/tablet/desktop.
-- Deskripsi panjang hanya menampilkan maksimal sekitar 3 baris. Pembeli dapat menekan **Lihat selengkapnya** untuk membuka seluruh deskripsi.
-- Keterangan promo pada varian tidak lagi menampilkan kode/nama promo dan teks `hemat Rp...`.
-- Jarak nama produk, rating, terjual, varian, dan harga dipadatkan agar kartu lebih ringkas.
-- Badge `PROMO` di gambar diganti menjadi nilai diskon, misalnya `-25%`.
-- Harga promo ditampilkan lebih dahulu, lalu harga normal yang dicoret.
+Saat seller mengirim akun/produk dari `Reseller Dashboard → Pesanan PO`, pembeli tetap menerima:
 
-### Sistem PRE-ORDER (PO)
+- invoice;
+- nama produk dan varian;
+- jumlah;
+- **Syarat & Ketentuan**;
+- data produk/akun.
 
-Produk sekarang mempunyai **Sistem Pengiriman**:
+Syarat & Ketentuan PO disimpan sebagai **snapshot saat checkout dibayar**, sehingga perubahan SnK produk setelah transaksi tidak mengubah ketentuan transaksi lama.
 
-- `Otomatis dari stok` — alur lama. Setelah pembayaran berhasil, stok dipotong dan produk langsung dikirim bot.
-- `PRE-ORDER` — pembayaran tetap diproses, tetapi produk **tidak diambil dari stok otomatis**. Pesanan masuk ke menu `Pesanan PO` dan menunggu seller mengirim akun/produk.
+Data akun yang cukup pendek dikirim di blok `<pre>` Telegram agar formatnya tetap rapi dan mudah dipilih/disalin. Data yang terlalu panjang dikirim sebagai TXT yang berisi SnK dan seluruh data produk.
 
-Alur PRE-ORDER:
+### 2. PRE-ORDER dapat diatur per varian
+
+Produk masih memiliki `Sistem Pengiriman Default`, tetapi setiap varian dapat memilih:
+
+- `Ikuti pengaturan produk`;
+- `AUTO · kirim dari stok`;
+- `PRE-ORDER · seller kirim manual`.
+
+Contoh satu produk dapat memiliki:
 
 ```text
-Pembeli pilih produk PO
-→ Bayar dengan QRIS atau Saldo Bot
-→ Sistem mencatat transaksi sudah dibayar
-→ Pembeli mendapat pemberitahuan menunggu pengiriman
-→ Seller buka Reseller Dashboard → Pesanan PO
-→ Tempel akun/produk yang akan dikirim
-→ Konfirmasi Kirim ke Pembeli
-→ Bot mengirim produk ke chat pembeli
-→ Status PO menjadi TERKIRIM
+1 Bulan   → AUTO
+1 Tahun   → PRE-ORDER
+Lifetime  → PRE-ORDER
 ```
 
-Jika isi produk sangat panjang, bot mengirimnya sebagai file TXT agar data tidak terpotong.
+Mode varian yang dipilih disimpan sebagai snapshot di invoice, jadi perubahan pengaturan produk setelah pembeli checkout tidak mengubah cara pengiriman invoice tersebut.
 
-## 1. Database — SQL v68 WAJIB
+### 3. Voucher dihitung sebelum konfirmasi pembelian
 
-Untuk upgrade dari v67 yang database referral/saldonya sudah sehat, cukup jalankan:
+Saat pembeli memasukkan voucher lalu menekan `Beli Sekarang` atau `Pre-Order Sekarang`, Marketplace meminta server menghitung ulang:
 
 ```text
-supabase/update-v68-marketplace-po.sql
+Subtotal
+- Potongan voucher
+= Total setelah diskon
+```
+
+Konfirmasi pembayaran langsung menampilkan nilai setelah voucher. Validasi voucher dilakukan di server, bukan hanya JavaScript browser. Pada pembayaran QRIS, fee payment gateway tetap ditambahkan saat invoice QRIS dibuat.
+
+### 4. Flash Sale lebih padat
+
+Kartu Flash Sale dirapikan agar jarak berikut lebih rapat:
+
+```text
+Nama Produk
+Varian (jika ada)
+★ Rating · Terjual
+Harga promo + harga coret
+Progress stok
+```
+
+### 5. Tombol Simpan Edit Produk selalu terjangkau
+
+Pada HP dan tablet, tombol `Simpan Perubahan` menjadi **floating action bar di bagian bawah layar** selama popup Edit Produk terbuka. Jadi tidak perlu scroll sampai bagian paling bawah untuk menyimpan perubahan.
+
+---
+
+## 1. Database — SQL v69 WAJIB dijalankan sebelum deploy kode
+
+### Jika database v68 sudah berhasil dipasang
+
+Jalankan:
+
+```text
+supabase/update-v69-po-variant-voucher-ui.sql
 ```
 
 Buka:
@@ -55,132 +82,147 @@ Buka:
 Supabase → SQL Editor → New query
 ```
 
-Tempel seluruh isi SQL v68 lalu klik **Run**.
+Tempel seluruh isi file, kemudian klik **Run**.
 
-### Jika sebelumnya masih mendapat error `public.bot_users does not exist`
+SQL v69 akan:
 
-Gunakan file gabungan berikut agar urutannya tidak tertukar:
+- menambahkan `pending_orders.delivery_mode` sebagai snapshot pengiriman;
+- membackfill invoice pending lama dari pengaturan produk/varian;
+- menambahkan `po_orders.terms_snapshot`;
+- membuat RPC atomik `fulfill_po_paid_order_v69`;
+- membuat RPC atomik `fulfill_po_wallet_order_v69`.
+
+### Jika v65/v66/v68 sebelumnya belum berhasil atau `bot_users` pernah bermasalah
+
+Gunakan file gabungan:
 
 ```text
-supabase/update-v68-referral-wallet-po-all-in-one.sql
+supabase/update-v69-referral-wallet-po-all-in-one.sql
 ```
 
-File itu menjalankan perbaikan `bot_users`, v65, v66, lalu v68 dalam urutan yang benar. Prasyaratnya: schema dasar serta update v62/v63/v64 sudah terpasang.
+Prasyaratnya schema dasar + update v62/v63/v64 sudah terpasang pada project Supabase yang sama dengan `SUPABASE_URL` di Vercel.
 
-Alternatifnya, jalankan manual:
+> Jangan deploy kode v69 sebelum SQL v69 berhasil. Kode v69 sengaja menggunakan RPC v69 agar mode PO per varian tidak salah diproses sebagai AUTO.
 
-```text
-1. supabase/repair-bot-users-before-v65-v66.sql
-2. supabase/update-v65-referral-wallet-topup.sql
-3. supabase/update-v66-referral-notifications-fix.sql
-4. supabase/update-v68-marketplace-po.sql
-```
+---
 
-Pastikan semuanya dijalankan pada project Supabase yang sama dengan `SUPABASE_URL` di Vercel.
+## 2. Deploy v69
 
-## 2. Deploy
+1. Ekstrak ZIP v69.
+2. Upload **isi folder proyek** ke root repository GitHub.
+3. Timpa file versi lama.
+4. Commit.
+5. Vercel → Deployments → Redeploy.
+6. Gunakan Production dan lakukan redeploy tanpa build cache.
+7. Tunggu status `Ready`.
 
-1. Ekstrak ZIP v68.
-2. Upload **isi folder proyek** ke root repository GitHub dan ganti file versi lama.
-3. Commit perubahan.
-4. Buka Vercel → Deployments.
-5. Lakukan **Redeploy tanpa build cache** ke Production.
-6. Tunggu status `Ready`.
-
-Setelah deploy, buka:
+Cek:
 
 ```text
 https://telegram-ilinkin-store-fix.vercel.app/api/payment-webhook
 ```
 
-Pastikan versi yang aktif adalah:
+Versi aktif harus:
 
 ```text
-v68-marketplace-ui-po-system
+v69-po-variant-voucher-ui
 ```
 
-## 3. Membuat produk PRE-ORDER
+---
+
+## 3. Mengatur PO per varian
 
 Buka:
 
 ```text
-Reseller Dashboard → Produk → Tambah Produk
+Reseller Dashboard → Produk → Edit
 ```
 
-Pada **Sistem Pengiriman**, pilih:
+Pada produk tersedia:
 
 ```text
-Pre-Order · saya kirim manual setelah pembayaran
+Sistem Pengiriman Default
 ```
 
-Untuk produk lama:
+Pada masing-masing varian tersedia:
 
 ```text
-Produk → Edit → Sistem Pengiriman → Pre-Order · kirim manual
+Sistem Pengiriman Varian
 ```
 
-Produk PO tidak memerlukan stok akun yang disimpan di database karena produk akan Anda kirim manual sesudah pembayaran.
+Pilihan `Ikuti pengaturan produk` cocok bila sebagian besar varian menggunakan mode yang sama. Pilih AUTO atau PRE-ORDER hanya pada varian yang perlu berbeda.
+
+Untuk varian PO, stok akun di database tidak diperlukan untuk checkout. Untuk varian AUTO, stok tetap wajib tersedia.
+
+---
 
 ## 4. Mengirim pesanan PO
 
-Setelah pembayaran berhasil:
+Setelah pembayaran QRIS atau Saldo berhasil:
 
 ```text
 Reseller Dashboard → Pesanan PO
 ```
 
-Pesanan terbaru yang belum dikirim akan berstatus **MENUNGGU PENGIRIMAN**.
+1. Buka pesanan yang berstatus `MENUNGGU PENGIRIMAN`.
+2. Tempel akun/produk yang akan dikirim.
+3. Tekan `Kirim ke Pembeli`.
+4. Periksa konfirmasi invoice, user, produk, varian, jumlah, dan data.
+5. Konfirmasi pengiriman.
+6. Bot mengirim SnK + produk/akun ke chat pembeli.
+7. Setelah Telegram berhasil menerima data, status berubah menjadi `TERKIRIM`.
 
-1. Masukkan akun/produk pada kolom pengiriman.
-2. Tekan **Kirim ke Pembeli**.
-3. Sistem menampilkan konfirmasi berisi invoice, pembeli, produk, varian, jumlah, dan data yang akan dikirim.
-4. Tekan **Kirim ke Pembeli** pada konfirmasi hanya setelah datanya benar.
-5. Setelah Telegram menerima pesan, status menjadi **TERKIRIM**.
+Pesanan `CANCELED` tetap diblokir dari pengiriman.
 
-Pesanan yang sudah berstatus `CANCELED` diblokir dari pengiriman PO.
+---
 
-## 5. Perbedaan AUTO dan PRE-ORDER
+## 5. Pengujian yang disarankan setelah deploy
 
-| Fitur | AUTO | PRE-ORDER |
-|---|---|---|
-| Harus mempunyai stok tersimpan | Ya | Tidak |
-| Stok dipotong otomatis | Ya | Tidak |
-| QRIS | Ya | Ya |
-| Pembayaran saldo | Ya | Ya |
-| Produk dikirim langsung setelah bayar | Ya | Tidak |
-| Seller mengisi produk setelah bayar | Tidak | Ya |
-| Menu Pesanan PO | Tidak | Ya |
+Gunakan produk/invoice baru.
 
-## 6. Pengujian yang disarankan setelah deploy
+### Varian AUTO
 
-Lakukan dengan **produk dan invoice baru**:
+- pilih varian AUTO;
+- bayar;
+- pastikan stok berkurang satu kali;
+- pastikan produk dikirim otomatis.
 
-### AUTO
+### Varian PRE-ORDER + QRIS
 
-- lakukan pembelian 1 produk stok otomatis;
-- pastikan pembayaran memotong stok satu kali;
-- pastikan produk langsung masuk ke chat pembeli.
-
-### PRE-ORDER + QRIS
-
-- buat produk PRE-ORDER;
+- pilih varian PO;
 - bayar QRIS;
-- pastikan pembeli mendapat status pembayaran berhasil dan menunggu seller;
-- pastikan pesanan muncul di `Pesanan PO`;
-- kirim data dari dashboard;
-- pastikan pembeli menerima data dan status berubah TERKIRIM.
+- pastikan stok tidak berkurang;
+- pastikan masuk menu Pesanan PO;
+- kirim data seller;
+- pastikan pembeli menerima SnK + data produk yang dapat disalin.
 
-### PRE-ORDER + Saldo Bot
+### Varian PRE-ORDER + Saldo
 
-- ulangi pengujian menggunakan Saldo Bot;
-- pastikan saldo berkurang satu kali;
-- pastikan tidak ada stok otomatis yang dipotong;
-- kirim data dari `Pesanan PO`.
+- ulangi dengan pembayaran saldo;
+- pastikan saldo dipotong satu kali;
+- pastikan stok tidak dipotong;
+- pastikan PO menunggu seller.
+
+### Voucher Marketplace
+
+- masukkan voucher valid;
+- tekan Beli/PO;
+- pastikan popup konfirmasi langsung menampilkan potongan dan `Total setelah diskon`;
+- lanjutkan QRIS/Saldo dan pastikan nominal server sama.
+
+### Edit Produk HP/Tablet
+
+- buka Edit Produk;
+- scroll pada bagian atas/tengah form;
+- pastikan tombol `Simpan Perubahan` tetap terlihat di bawah layar.
+
+---
 
 ## Status pemeriksaan lokal
 
 - Syntax JavaScript: berhasil.
-- Test suite: **114/114 berhasil** pada pengujian lokal menggunakan stub dependency untuk layanan eksternal.
-- Stub pengujian **tidak disertakan** dalam paket ZIP.
-- SQL v68 belum dijalankan pada Supabase produksi Anda.
-- Telegram, AutoGoPay, dan transaksi saldo produksi tetap harus diuji setelah deployment.
+- Test suite: **121/121 berhasil**.
+- Pengujian runtime lokal menggunakan stub sementara hanya untuk dependency eksternal (`axios`, Supabase client, QRCode, dotenv) karena registry dependency pada lingkungan pengujian tidak lengkap.
+- Stub tersebut **tidak disertakan** dalam ZIP.
+- SQL diperiksa secara statis tetapi belum dijalankan pada Supabase produksi Anda.
+- Telegram, AutoGoPay, Supabase, dan transaksi saldo produksi tetap perlu diuji setelah deployment.

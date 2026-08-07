@@ -47,6 +47,17 @@ module.exports = async function handler(req, res) {
     }
 
     const body = bodyOf(req);
+    if (action === 'checkout-preview') {
+      const data = await store.previewCheckout({
+        user,
+        productCode: body.product_code,
+        variantKey: body.variant_key,
+        quantity: body.quantity,
+        voucherCode: body.voucher_code
+      });
+      return json(res, 200, { ok: true, data });
+    }
+
     if (action === 'checkout') {
       const licenseState = await license.checkLicense();
       if (licenseState.active === false) {

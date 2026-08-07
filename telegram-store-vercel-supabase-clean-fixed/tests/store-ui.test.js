@@ -105,7 +105,7 @@ test('Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah te
   const pricePos = js.indexOf('<div class="flash-price">');
   assert.ok(namePos >= 0 && variantPos > namePos && pricePos > variantPos);
   assert.match(js, /promo\.sold/);
-  assert.match(js, /TERJUAL/);
+  assert.match(js, /terjual/i);
 });
 
 

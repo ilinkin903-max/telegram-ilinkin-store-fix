@@ -116,6 +116,9 @@ function parseVariants(value) {
       note: String(item.note || item.catatan || '').trim(),
       description: String(item.description || item.deskripsi || '').trim(),
       snk: String(item.snk || item.terms || item.syarat || '').trim(),
+      delivery_mode: ['auto', 'po'].includes(String(item.delivery_mode || item.deliveryMode || '').trim().toLowerCase())
+        ? String(item.delivery_mode || item.deliveryMode).trim().toLowerCase()
+        : '',
       active: item.active === undefined ? true : boolOf(item.active),
       stock: parseStockList(item.stock || item.stok || item.data || []),
       bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
@@ -156,7 +159,8 @@ function parseVariants(value) {
       snk: parts[6] || '',
       active: parts[7] === undefined ? true : boolOf(parts[7]),
       cost_price: numberOf(parts[8]),
-      note: parts.slice(9).join(' | ')
+      delivery_mode: ['auto', 'po'].includes(String(parts[9] || '').trim().toLowerCase()) ? String(parts[9]).trim().toLowerCase() : '',
+      note: parts.slice(10).join(' | ')
     };
   }).filter(Boolean);
 }
@@ -452,14 +456,12 @@ module.exports = async function handler(req, res) {
 
       let telegramSent = false;
       try {
-        await paymentService.sendPoDeliveryReceipt(po.telegram_id, po, deliveryText);
+        const product = await db.getProductByCode(po.product_code).catch(() => null);
+        await paymentService.sendPoDeliveryReceipt(po.telegram_id, po, deliveryText, product);
         telegramSent = true;
         const result = await db.markPoDelivered(orderRef, deliveryText, Number(owner?.id || config.ownerId || 0));
         const transaction = result.transaction || await db.getTransactionByOrderRef(orderRef).catch(() => null);
-        const [product, buyer] = await Promise.all([
-          db.getProductByCode(po.product_code).catch(() => null),
-          db.getUserByTelegramId(po.telegram_id).catch(() => null)
-        ]);
+        const buyer = await db.getUserByTelegramId(po.telegram_id).catch(() => null);
         await paymentService.sendOwnerLog(
           { invoice_ref: orderRef, telegram_id: po.telegram_id, fee: Number(transaction?.payment_fee || 0), quantity: po.quantity, variant_name: po.variant_name },
           product || { nama: po.product_name, kode: po.product_code },

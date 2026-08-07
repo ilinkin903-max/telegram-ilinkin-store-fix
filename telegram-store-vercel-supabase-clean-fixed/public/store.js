@@ -167,7 +167,7 @@
     var enabled = Boolean(state.catalog && state.catalog.settings && state.catalog.settings.wallet_payment_enabled !== false);
     var hasVoucher = Boolean(String(voucherCode || '').trim());
     var enough = wallet.total >= Number(total || 0);
-    var canTryWallet = enabled && wallet.ready && (Number(total || 0) === 0 || wallet.total > 0) && (enough || hasVoucher);
+    var canTryWallet = enabled && wallet.ready && enough;
     if (els.walletPaymentBalance) {
       els.walletPaymentBalance.textContent = wallet.ready
         ? 'Saldo tersedia ' + rupiah(wallet.total)
@@ -182,8 +182,8 @@
       if (!enabled) els.walletPaymentHint.textContent = 'Pembayaran dengan saldo sedang dinonaktifkan oleh toko.';
       else if (!wallet.ready) els.walletPaymentHint.textContent = 'Saldo belum siap. Pastikan fitur saldo v65 sudah terpasang.';
       else if (!wallet.total) els.walletPaymentHint.textContent = 'Saldo kosong. Lakukan top up atau kumpulkan bonus referral melalui bot.';
-      else if (!enough && !hasVoucher) els.walletPaymentHint.textContent = 'Saldo kurang ' + rupiah(Number(total || 0) - wallet.total) + '. Gunakan QRIS atau top up terlebih dahulu.';
-      else if (hasVoucher) els.walletPaymentHint.textContent = 'Voucher akan divalidasi ulang. Saldo dipotong hanya jika total akhir mencukupi.';
+      else if (!enough) els.walletPaymentHint.textContent = 'Saldo kurang ' + rupiah(Number(total || 0) - wallet.total) + '. Gunakan QRIS atau top up terlebih dahulu.';
+      else if (hasVoucher) els.walletPaymentHint.textContent = 'Voucher sudah diterapkan. Saldo akan dipotong sesuai total setelah diskon.';
       else els.walletPaymentHint.textContent = 'Saldo Utama dipakai lebih dahulu, lalu Saldo Referral.';
     }
     setPaymentMethod('qris');
@@ -401,8 +401,9 @@
         '<div class="flash-image-wrap">' + image + (pct ? '<span class="flash-discount">⚡-' + pct + '%</span>' : '') + '</div>' +
         '<div class="flash-body"><h3 class="flash-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="flash-variant' + (promo.variant ? '' : ' is-empty') + '">' + escapeHtml(promo.variant || 'Tanpa varian') + '</div>' +
+        '<div class="flash-meta"><span>★ 5.0</span><span>•</span><span>' + sold + ' terjual</span></div>' +
         '<div class="flash-price">' + price + '</div>' +
-        '<div class="flash-stock-track"><div class="flash-stock-fill" style="width:' + fill + '%"></div><div class="flash-stock-label">' + sold + ' TERJUAL</div></div></div></article>';
+        '<div class="flash-stock-track" aria-label="Progres Flash Sale"><div class="flash-stock-fill" style="width:' + fill + '%"></div></div></div></article>';
     }).join('');
     els.flashSaleGrid.querySelectorAll('[data-flash-product]').forEach(function (card) {
       card.addEventListener('click', function () { openProduct(card.dataset.flashProduct); });
@@ -510,7 +511,10 @@
       ? '<strong>' + escapeHtml(rupiah(bestPromo.final)) + '</strong><del>' + escapeHtml(rupiah(bestPromo.original)) + '</del>'
       : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
     var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
-    var availability = isPo ? 'PRE-ORDER' : ('Stok ' + product.stock);
+    var mixedDelivery = Boolean(product.variants && product.variants.length && product.has_po_variants && product.has_auto_variants);
+    var allPoVariants = Boolean(product.variants && product.variants.length && product.has_po_variants && !product.has_auto_variants);
+    var cardPo = product.variants && product.variants.length ? allPoVariants : isPo;
+    var availability = mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock));
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">' + escapeHtml(availability) + '</span></div>' +
       '<div class="product-card-body">' +
@@ -518,7 +522,7 @@
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
         '<div class="product-price">' + priceHtml + '</div>' +
-        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? (isPo ? 'Pre-Order' : 'Beli Sekarang') : 'Stok Habis') + '</button></div>' +
+        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? (mixedDelivery ? 'Lihat Pilihan' : (cardPo ? 'Pre-Order' : 'Beli Sekarang')) : 'Stok Habis') + '</button></div>' +
       '</div></article>';
   }
 
@@ -539,8 +543,16 @@
     if (!state.selectedProduct) return null;
     return state.selectedProduct.variants.find(function (variant) { return variant.key === state.selectedVariantKey; }) || null;
   }
+  function selectedDeliveryMode() {
+    if (!state.selectedProduct) return 'auto';
+    var variant = activeVariant();
+    var mode = variant && (variant.effective_delivery_mode || variant.delivery_mode)
+      ? String(variant.effective_delivery_mode || variant.delivery_mode).toLowerCase()
+      : String(state.selectedProduct.delivery_mode || 'auto').toLowerCase();
+    return mode === 'po' ? 'po' : 'auto';
+  }
   function selectedStock() {
-    if (state.selectedProduct && String(state.selectedProduct.delivery_mode || 'auto').toLowerCase() === 'po') return 100;
+    if (selectedDeliveryMode() === 'po') return 100;
     var variant = activeVariant();
     return variant ? variant.stock : (state.selectedProduct ? state.selectedProduct.stock : 0);
   }
@@ -580,7 +592,7 @@
     var subtotal = unit * qty;
     var product = state.selectedProduct;
     var variant = activeVariant();
-    var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
+    var isPo = selectedDeliveryMode() === 'po';
     var promo = variant && variant.promo ? variant.promo : product.promo;
     var promoAppliesToShownPrice = Boolean(promo && qty === 1 && Number(promo.original_price) === Number(unit));
     if (promoAppliesToShownPrice) {
@@ -612,10 +624,13 @@
     if (!product.variants.length) {
       els.variantSection.classList.add('hidden'); state.selectedVariantKey = ''; return;
     }
-    var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
     els.variantSection.classList.remove('hidden');
-    if (!product.variants.some(function (variant) { return variant.key === state.selectedVariantKey && (isPo || variant.stock > 0); })) {
-      var first = product.variants.find(function (variant) { return isPo || variant.stock > 0; }) || product.variants[0];
+    function variantMode(variant) {
+      var mode = String(variant.effective_delivery_mode || variant.delivery_mode || product.delivery_mode || 'auto').toLowerCase();
+      return mode === 'po' ? 'po' : 'auto';
+    }
+    if (!product.variants.some(function (variant) { return variant.key === state.selectedVariantKey && (variantMode(variant) === 'po' || variant.stock > 0); })) {
+      var first = product.variants.find(function (variant) { return variantMode(variant) === 'po' || variant.stock > 0; }) || product.variants[0];
       state.selectedVariantKey = first ? first.key : '';
     }
     els.variantHint.textContent = product.variants.length + ' pilihan';
@@ -623,8 +638,9 @@
       var priceLine = variant.promo
         ? '<span class="variant-price"><strong>' + escapeHtml(rupiah(variant.promo.final_price)) + '</strong><del>' + escapeHtml(rupiah(variant.price)) + '</del></span>'
         : '<span class="variant-price"><strong>' + escapeHtml(rupiah(variant.price)) + '</strong></span>';
-      var unavailable = !isPo && variant.stock < 1;
-      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (isPo ? 'Pre-Order' : ('Stok ' + variant.stock)) + '</small></button>';
+      var mode = variantMode(variant);
+      var unavailable = mode !== 'po' && variant.stock < 1;
+      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (mode === 'po' ? 'Pre-Order' : ('Stok ' + variant.stock)) + '</small></button>';
     }).join('');
     els.variantOptions.querySelectorAll('[data-variant]').forEach(function (button) {
       button.addEventListener('click', function () {
@@ -659,7 +675,7 @@
     openModal(els.productModal);
   }
 
-  function openCheckoutConfirmation() {
+  async function openCheckoutConfirmation() {
     if (!state.catalog.viewer.telegram_ready) {
       toast('Checkout harus dibuka melalui Telegram.', true); openTelegram(); return;
     }
@@ -668,24 +684,38 @@
     var variant = activeVariant();
     var qty = clampQuantity();
     if (product.variants.length && !variant) return toast('Pilih varian terlebih dahulu.', true);
-    var unit = selectedUnitPrice(qty);
-    var promo = variant && variant.promo ? variant.promo : product.promo;
-    var shownTotal = unit * qty;
-    if (promo && qty === 1 && Number(promo.original_price) === Number(unit)) shownTotal = Number(promo.final_price);
-    state.checkoutTotal = shownTotal;
     var voucherCode = els.voucherInput.value.trim();
-    els.confirmOrderSummary.innerHTML = [
-      ['Produk', product.name],
-      ['Varian', variant ? variant.name : 'Tanpa varian'],
-      ['Jumlah', qty + ' item'],
-      ['Pengiriman', String(product.delivery_mode || 'auto').toLowerCase() === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran'],
-      ['Perkiraan total', rupiah(shownTotal)],
-      ['Voucher', voucherCode || 'Tidak digunakan']
-    ].map(function (row) {
-      return '<div class="confirm-order-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
-    }).join('');
-    renderPaymentMethods(shownTotal, voucherCode);
-    openModal(els.confirmModal);
+    showLoading(true);
+    try {
+      var preview = await api('checkout-preview', { body: {
+        product_code: product.code,
+        variant_key: state.selectedVariantKey,
+        quantity: qty,
+        voucher_code: voucherCode
+      }});
+      state.checkoutTotal = Number(preview.after_discount || 0);
+      var rows = [
+        ['Produk', preview.product || product.name],
+        ['Varian', preview.variant || 'Tanpa varian'],
+        ['Jumlah', Number(preview.quantity || qty) + ' item'],
+        ['Pengiriman', String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran'],
+        ['Subtotal', rupiah(preview.subtotal || 0)]
+      ];
+      if (Number(preview.discount || 0) > 0) {
+        rows.push([preview.discount_label || 'Diskon', '- ' + rupiah(preview.discount)]);
+      }
+      rows.push(['Total setelah diskon', rupiah(preview.after_discount || 0)]);
+      rows.push(['Voucher', preview.voucher_code || (voucherCode || 'Tidak digunakan')]);
+      els.confirmOrderSummary.innerHTML = rows.map(function (row) {
+        return '<div class="confirm-order-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
+      }).join('');
+      renderPaymentMethods(Number(preview.after_discount || 0), preview.voucher_code || voucherCode);
+      openModal(els.confirmModal);
+    } catch (error) {
+      toast(error.message || 'Gagal menghitung total checkout.', true);
+    } finally {
+      showLoading(false);
+    }
   }
 
   async function startCheckout() {

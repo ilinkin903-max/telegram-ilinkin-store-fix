@@ -179,7 +179,7 @@ function promoDisplay(promo, originalPrice) {
   };
 }
 
-function sanitizeVariant(variant, index, promos = [], productCode = '', flashPromos = []) {
+function sanitizeVariant(variant, index, promos = [], productCode = '', flashPromos = [], productDeliveryMode = 'auto') {
   const key = db.variantKey(variant, index);
   const price = Number(variant?.price || 0);
   const promo = promoDisplay(bestPromoForSelection(promos, productCode, key, 1, price), price);
@@ -194,6 +194,8 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
     description: String(variant?.description || ''),
     terms: String(variant?.snk || ''),
     note: String(variant?.note || ''),
+    delivery_mode: db.normalizeDeliveryMode(variant?.delivery_mode, ''),
+    effective_delivery_mode: db.normalizeDeliveryMode(variant?.delivery_mode, db.normalizeDeliveryMode(productDeliveryMode, 'auto')),
     bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || []),
     promo,
     flash_promo: flashPromo,
@@ -220,13 +222,14 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
 }
 
 function sanitizeProduct(product, promos = [], flashPromos = []) {
-  const isPo = String(product?.delivery_mode || 'auto').toLowerCase() === 'po';
+  const productDeliveryMode = db.normalizeDeliveryMode(product?.delivery_mode, 'auto');
+  const isPo = productDeliveryMode === 'po';
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
-    .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos))
+    .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos, productDeliveryMode))
     .filter((variant) => variant.active);
-  const buyableVariants = variants.filter((variant) => variant.price > 0 && (isPo || variant.stock > 0));
+  const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
-  const stock = variants.length ? variants.reduce((sum, variant) => sum + variant.stock, 0) : baseStock;
+  const stock = variants.length ? variants.reduce((sum, variant) => sum + (variant.effective_delivery_mode === 'po' ? 0 : variant.stock), 0) : (isPo ? 0 : baseStock);
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
     .filter((price) => price > 0);
@@ -257,7 +260,9 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
-    delivery_mode: isPo ? 'po' : 'auto',
+    delivery_mode: productDeliveryMode,
+    has_po_variants: variants.some((variant) => variant.effective_delivery_mode === 'po'),
+    has_auto_variants: variants.some((variant) => variant.effective_delivery_mode === 'auto'),
     price: Number(product.harga || 0),
     price_min: priceMin,
     price_max: priceMax,
@@ -273,7 +278,9 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     flash_sale_eligible: Boolean(baseFlashPromo || variants.some((variant) => variant.flash_promo)),
     flash_sale_sold: 0,
     has_promo: hasPromo,
-    available: product.active !== false && (isPo ? (variants.length ? buyableVariants.length > 0 : Number(product?.harga || 0) > 0) : (stock > 0 && (!variants.length || buyableVariants.length > 0)))
+    available: product.active !== false && (variants.length
+      ? buyableVariants.length > 0
+      : (isPo ? Number(product?.harga || 0) > 0 : stock > 0))
   };
 }
 
@@ -417,19 +424,20 @@ async function ensureNoActiveOrder(telegramId) {
   }
 }
 
-async function prepareCheckout({ user, productCode, variantKey, quantity, voucherCode }) {
+async function prepareCheckout({ user, productCode, variantKey, quantity, voucherCode, skipActiveOrderCheck = false }) {
   if (!user?.id) throw httpError('Buka toko melalui Telegram agar identitas pembeli dapat diverifikasi.', 401, 'TELEGRAM_REQUIRED');
 
   const qty = Math.max(1, Math.min(100, Number(quantity || 1)));
   const code = String(productCode || '').trim().toUpperCase();
   if (!code) throw httpError('Produk belum dipilih.', 400, 'PRODUCT_REQUIRED');
 
-  await ensureNoActiveOrder(Number(user.id));
+  if (!skipActiveOrderCheck) await ensureNoActiveOrder(Number(user.id));
   const product = await db.getProductByCode(code);
   if (!product || product.active === false) throw httpError('Produk tidak tersedia.', 404, 'PRODUCT_NOT_FOUND');
 
   const selected = selectedProductVariant(product, variantKey);
-  const isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
+  const deliveryMode = db.variantDeliveryMode(product, selected.variant);
+  const isPo = deliveryMode === 'po';
   const availableStock = selected.variant
     ? variantStock(selected.variant)
     : (Array.isArray(product.data) ? product.data.length : 0);
@@ -444,6 +452,7 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
     variant_name: selected.variant?.name || '',
     unit_price: Number(selected.variant?.price || product.harga || 0),
     quantity: qty,
+    delivery_mode: deliveryMode,
     status: 'draft'
   };
   const unitPrice = db.orderUnitPrice(product, draftOrder);
@@ -484,7 +493,29 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
     promoApplied,
     discount,
     afterDiscount,
-    appliedCode
+    appliedCode,
+    deliveryMode
+  };
+}
+
+async function previewCheckout({ user, productCode, variantKey, quantity, voucherCode }) {
+  const checkout = await prepareCheckout({
+    user, productCode, variantKey, quantity, voucherCode, skipActiveOrderCheck: true
+  });
+  return {
+    product: checkout.product.nama,
+    product_code: checkout.product.kode,
+    variant: checkout.selected.variant?.name || '',
+    variant_key: checkout.selected.key || '',
+    quantity: checkout.qty,
+    unit_price: checkout.unitPrice,
+    subtotal: checkout.subtotal,
+    discount: checkout.discount,
+    discount_label: discountLabelForCheckout(checkout),
+    after_discount: checkout.afterDiscount,
+    voucher_code: checkout.voucherApplied?.code || '',
+    promo_code: checkout.promoApplied?.code || '',
+    delivery_mode: checkout.deliveryMode
   };
 }
 
@@ -502,7 +533,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
   const checkout = await prepareCheckout({ user, productCode, variantKey, quantity, voucherCode });
   const {
     product, selected, qty, draftOrder, unitPrice, costUnit, costTotal,
-    subtotal, discount, afterDiscount, appliedCode
+    subtotal, discount, afterDiscount, appliedCode, deliveryMode
   } = checkout;
   const fee = randomFee();
   const total = afterDiscount + fee;
@@ -575,7 +606,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     checkout_url: gatewayPayment.checkout_url || '',
     payment_provider: gatewayPayment.provider,
     watcher_scheduled,
-    delivery_mode: String(product.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto'
+    delivery_mode: deliveryMode
   };
 }
 
@@ -589,7 +620,7 @@ async function createWalletPayment({ user, productCode, variantKey, quantity, vo
   const checkout = await prepareCheckout({ user, productCode, variantKey, quantity, voucherCode });
   const {
     product, selected, qty, draftOrder, unitPrice, costUnit, costTotal,
-    subtotal, discount, afterDiscount, appliedCode
+    subtotal, discount, afterDiscount, appliedCode, deliveryMode
   } = checkout;
   const walletBefore = await db.getWalletSummary(Number(user.id), 1);
   if (!walletBefore) throw httpError('Data saldo belum tersedia. Jalankan SQL v65 lalu buka bot kembali.', 503, 'WALLET_NOT_READY');
@@ -634,7 +665,7 @@ async function createWalletPayment({ user, productCode, variantKey, quantity, vo
     return {
       payment_method: 'wallet',
       status: result.po_waiting ? 'awaiting_delivery' : 'completed',
-      delivery_mode: result.po_waiting ? 'po' : 'auto',
+      delivery_mode: result.po_waiting ? 'po' : deliveryMode,
       invoice,
       invoice_display: paymentService.displayPaymentReference(invoice),
       product: transaction.product_name || product.nama,
@@ -804,6 +835,7 @@ module.exports = {
   parseFlashSalePromoCodes,
   sanitizeProduct,
   getCatalog,
+  previewCheckout,
   createPayment,
   createWalletPayment,
   createQrDownloadToken,

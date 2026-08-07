@@ -99,6 +99,13 @@ function variantKey(variant, index = 0) {
     .replace(/\s+/g, '-');
 }
 
+function normalizeDeliveryMode(value, fallback = '') {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'po') return 'po';
+  if (mode === 'auto') return 'auto';
+  return fallback;
+}
+
 function normalizeVariant(item, index = 0) {
   const name = String(item?.name || item?.nama || `Varian ${index + 1}`).trim();
   const stockValue = item?.stock ?? item?.stok ?? item?.data ?? [];
@@ -110,6 +117,7 @@ function normalizeVariant(item, index = 0) {
     note: String(item?.note || item?.catatan || '').trim(),
     description: String(item?.description || item?.deskripsi || '').trim(),
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
+    delivery_mode: normalizeDeliveryMode(item?.delivery_mode ?? item?.deliveryMode ?? item?.pengiriman, ''),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
@@ -170,14 +178,28 @@ function variantStockCount(product) {
   return variants.reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
 }
 
+function variantDeliveryMode(product, variantOrKey = null) {
+  let variant = variantOrKey;
+  if (typeof variantOrKey === 'string') variant = findVariant(product, variantOrKey).variant;
+  const productMode = normalizeDeliveryMode(product?.delivery_mode, 'auto');
+  return normalizeDeliveryMode(variant?.delivery_mode, productMode);
+}
+
 function productAvailableStock(product, variantKeyValue = '') {
-  if (String(product?.delivery_mode || 'auto').toLowerCase() === 'po') return 0;
-  const variantsTotal = variantStockCount(product);
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
   if (variantKeyValue) {
     const found = findVariant(product, variantKeyValue);
-    return Array.isArray(found.variant?.stock) ? found.variant.stock.length : 0;
+    if (!found.variant) return 0;
+    if (variantDeliveryMode(product, found.variant) === 'po') return 0;
+    return Array.isArray(found.variant.stock) ? found.variant.stock.length : 0;
   }
-  if (variantsTotal > 0) return variantsTotal;
+  if (variants.length) {
+    return variants.reduce((sum, variant) => {
+      if (variantDeliveryMode(product, variant) === 'po') return sum;
+      return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
+    }, 0);
+  }
+  if (normalizeDeliveryMode(product?.delivery_mode, 'auto') === 'po') return 0;
   return Array.isArray(product?.data) ? product.data.length : 0;
 }
 
@@ -805,6 +827,7 @@ async function upsertPendingOrder(input) {
     provider_transaction_id: String(input.provider_transaction_id || '').trim(),
     provider_checkout_url: String(input.provider_checkout_url || '').trim(),
     payment_method: String(input.payment_method || 'gateway').trim().toLowerCase(),
+    delivery_mode: normalizeDeliveryMode(input.delivery_mode, 'auto'),
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('pending_orders').upsert(payload, { onConflict: 'telegram_id' }).select('*').single();
@@ -1121,7 +1144,8 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
     cost_unit: Math.max(0, Number(order.cost_unit || 0)),
     cost_total: Math.max(0, Number(order.cost_total || 0)),
     cost_source: String(order.cost_source || 'unset'),
-    payment_method: String(order.payment_method || 'gateway').trim().toLowerCase()
+    payment_method: String(order.payment_method || 'gateway').trim().toLowerCase(),
+    delivery_mode: normalizeDeliveryMode(order.delivery_mode, '')
   };
 
   const rpcPayload = {
@@ -1133,18 +1157,20 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
       username: buyer?.username || null
     }
   };
-  const isPo = String(product?.delivery_mode || 'auto').toLowerCase() === 'po';
+  const selectedVariant = findVariant(product, payloadOrder.variant_key).variant;
+  const effectiveDeliveryMode = normalizeDeliveryMode(payloadOrder.delivery_mode, variantDeliveryMode(product, selectedVariant));
+  const isPo = effectiveDeliveryMode === 'po';
   const rpcName = isPo
-    ? (payloadOrder.payment_method === 'wallet' ? 'fulfill_po_wallet_order_v68' : 'fulfill_po_paid_order_v68')
+    ? (payloadOrder.payment_method === 'wallet' ? 'fulfill_po_wallet_order_v69' : 'fulfill_po_paid_order_v69')
     : (payloadOrder.payment_method === 'wallet' ? 'fulfill_wallet_order_v65' : 'fulfill_paid_order_v62');
   const rpcResult = await sb().rpc(rpcName, rpcPayload);
   const { data, error } = rpcResult;
   if (error) {
     const message = String(error.message || error);
-    if (isPo && /fulfill_po_(?:wallet|paid)_order_v68|schema cache|could not find the function/i.test(message)) {
-      throw new Error('Fungsi Pre-Order v68 belum tersedia. Jalankan supabase/update-v68-marketplace-po.sql terlebih dahulu.');
+    if (isPo && /fulfill_po_(?:wallet|paid)_order_v69|schema cache|could not find the function/i.test(message)) {
+      throw new Error('Fungsi Pre-Order per varian v69 belum tersedia. Jalankan supabase/update-v69-po-variant-voucher-ui.sql terlebih dahulu.');
     }
-    if (isPo && /PRODUCT_NOT_PO/i.test(message)) throw new Error('Produk bukan produk Pre-Order. Muat ulang produk lalu coba lagi.');
+    if (isPo && /SELECTION_NOT_PO|PRODUCT_NOT_PO/i.test(message)) throw new Error('Pilihan produk/varian ini bukan Pre-Order. Muat ulang produk lalu coba lagi.');
     if (/fulfill_wallet_order_v65|schema cache|could not find the function/i.test(message) && payloadOrder.payment_method === 'wallet') {
       throw new Error('Fungsi pembayaran saldo v65 belum tersedia. Jalankan SQL v65 terlebih dahulu.');
     }
@@ -1994,8 +2020,10 @@ module.exports = {
   completeOrder,
   normalizeBulkPrices,
   normalizeVariants,
+  normalizeDeliveryMode,
   variantKey,
   findVariant,
+  variantDeliveryMode,
   productAvailableStock,
   orderUnitPrice,
   orderUnitCost,

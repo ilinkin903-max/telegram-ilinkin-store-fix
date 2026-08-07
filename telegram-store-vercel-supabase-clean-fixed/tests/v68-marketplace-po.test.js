@@ -51,8 +51,8 @@ test('PO tidak memotong stok dan dicatat menunggu pengiriman secara atomik', () 
   assert.match(migration, /for update/);
   assert.match(migration, /'po', 'waiting_delivery'/);
   assert.doesNotMatch(migration, /set stock\s*=/i);
-  assert.match(db, /fulfill_po_wallet_order_v68/);
-  assert.match(db, /fulfill_po_paid_order_v68/);
+  assert.match(db, /fulfill_po_wallet_order_v(?:68|69)/);
+  assert.match(db, /fulfill_po_paid_order_v(?:68|69)/);
 });
 
 test('pembayaran PO masuk status awaiting_delivery bukan mengirim stok otomatis', () => {
@@ -71,9 +71,9 @@ test('seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir',
 });
 
 test('data PO panjang dikirim sebagai TXT agar tidak terpotong', () => {
-  assert.match(payment, /raw\.length <= 2600/);
+  assert.match(payment, /inlineLimit/);
   assert.match(payment, /sendDocument/);
-  assert.match(payment, /agar tidak terpotong/);
+  assert.match(payment, /agar utuh dan mudah disalin/);
 });
 
 test('notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal', () => {

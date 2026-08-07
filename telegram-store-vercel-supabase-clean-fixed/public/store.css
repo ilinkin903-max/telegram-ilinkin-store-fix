@@ -749,3 +749,52 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
   .product-price { margin-top: 1px; padding-top: 0; }
   .flash-image-wrap { aspect-ratio: 1 / 1; }
 }
+
+/* v69: Flash Sale lebih padat seperti kartu katalog */
+.flash-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px 10px;
+}
+.flash-name {
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  line-height: 1.22;
+}
+.flash-variant {
+  min-height: 0;
+  line-height: 1.2;
+  margin-top: 0;
+  padding: 3px 6px;
+}
+.flash-variant.is-empty { display: none; }
+.flash-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.flash-price {
+  min-height: 0;
+  align-self: auto;
+  margin-top: 1px;
+  line-height: 1.1;
+}
+.flash-stock-track {
+  align-self: auto;
+  width: 100%;
+  height: 7px;
+  margin-top: 4px;
+}
+@media (max-width:720px) {
+  .flash-body { gap: 2px; padding: 8px; }
+  .flash-name { font-size: 12px; }
+  .flash-meta { font-size: 8px; }
+  .flash-price { gap: 4px; }
+}

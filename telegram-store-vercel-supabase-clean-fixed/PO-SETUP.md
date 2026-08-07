@@ -1,31 +1,88 @@
-# Panduan Sistem PRE-ORDER v68
+# Panduan PRE-ORDER v69 — Per Varian
 
-## Kapan memakai PRE-ORDER?
+## Mode pengiriman
 
-Gunakan PRE-ORDER jika akun/produk **baru Anda ambil dari supplier setelah pembeli membayar** atau stok supplier sering berubah sehingga tidak ingin menyimpan akun terlebih dahulu di database bot.
+v69 mendukung pengaturan PRE-ORDER sampai level varian.
 
-## Cara kerja
+Setiap produk mempunyai **Sistem Pengiriman Default**. Setiap varian dapat:
 
-1. Produk diset `PRE-ORDER` dari Tambah/Edit Produk.
-2. Pembeli checkout melalui Marketplace atau bot.
-3. Pembeli membayar menggunakan QRIS atau Saldo Bot.
-4. Pembayaran diverifikasi seperti transaksi normal.
-5. Sistem membuat transaksi dengan status pengiriman `waiting_delivery` dan **tidak mengurangi stock JSON produk**.
-6. Pembeli diberi pesan bahwa pembayaran berhasil dan pesanan menunggu seller.
-7. Seller membuka `Reseller Dashboard → Pesanan PO`.
-8. Seller menempel akun/produk yang akan dikirim.
-9. Seller membaca konfirmasi lalu menekan `Kirim ke Pembeli`.
-10. Bot mengirim data ke chat Telegram pembeli dan menandai PO `delivered`.
+- mengikuti default produk;
+- memaksa AUTO;
+- memaksa PRE-ORDER.
 
-## Keamanan pengiriman
+Contoh:
 
-- Invoice PO memiliki unique key agar tidak dibuat dua kali.
-- Proses pembayaran menggunakan advisory lock database.
-- Pengiriman manual memiliki lock `po_send:<invoice>` agar klik ganda tidak langsung mengirim dua kali.
-- Pesanan CANCELED tidak dapat dikirim dari menu PO.
-- Status database baru diubah menjadi TERKIRIM setelah pengiriman Telegram berhasil.
-- Data panjang dikirim sebagai TXT untuk menghindari batas panjang pesan Telegram.
+```text
+Canva
+├─ 1 Bulan       AUTO
+├─ 1 Tahun       PRE-ORDER
+└─ Lifetime      PRE-ORDER
+```
 
-## Catatan
+Pembeli yang memilih `1 Bulan` mendapat alur stok otomatis. Pembeli yang memilih `1 Tahun` atau `Lifetime` masuk antrean PO setelah pembayaran.
 
-PRE-ORDER bukan reservasi stok supplier. Seller tetap perlu memastikan barang tersedia sebelum atau sesudah menerima pesanan sesuai prosedur bisnisnya.
+## Snapshot saat checkout
+
+Saat checkout dibuat, mode efektif varian disimpan ke `pending_orders.delivery_mode`.
+
+Ini penting karena seller dapat mengubah konfigurasi produk setelah invoice dibuat. Invoice lama tetap menggunakan mode pengiriman yang dipilih ketika checkout.
+
+Untuk PO, SnK juga disimpan dalam `po_orders.terms_snapshot` setelah pembayaran berhasil. Pesan pengiriman menggunakan snapshot tersebut agar ketentuan transaksi lama tidak berubah karena seller mengedit produk kemudian.
+
+## Alur PO
+
+1. Pembeli memilih varian PRE-ORDER.
+2. Voucher/promo dihitung server.
+3. Pembeli membayar melalui QRIS atau Saldo Bot.
+4. Sistem mencatat transaksi `delivery_mode=po` dan `delivery_status=waiting_delivery` tanpa memotong stok.
+5. Pembeli mendapat pesan bahwa pembayaran berhasil dan sedang menunggu seller.
+6. Seller membuka `Reseller Dashboard → Pesanan PO`.
+7. Seller memasukkan akun/produk.
+8. Seller mengonfirmasi data.
+9. Bot mengirim SnK dan akun/produk ke chat pembeli.
+10. Setelah Telegram berhasil mengirim, status menjadi `delivered`.
+
+## Format pengiriman pembeli
+
+Data pendek dikirim seperti:
+
+```text
+📦 PESANAN PO SUDAH DIKIRIM
+Invoice: ...
+Produk: ...
+Jumlah: ...
+
+SYARAT & KETENTUAN
+...
+
+PRODUK / AKUN
+[data akun dalam blok kode]
+```
+
+Blok akun dapat dipilih/disalin dari Telegram. Bila data terlalu panjang, sistem mengirim file TXT yang tetap berisi SnK dan seluruh akun.
+
+## Keamanan
+
+- invoice transaksi unik;
+- fulfillment PO menggunakan PostgreSQL transaction + advisory lock;
+- pembayaran saldo dan QRIS menggunakan RPC v69 yang terpisah;
+- PO tidak memotong stok JSON;
+- pengiriman manual memiliki lock `po_send:<invoice>`;
+- pesanan CANCELED tidak dapat dikirim;
+- database baru ditandai `delivered` setelah pengiriman Telegram berhasil;
+- klik ganda pengiriman dibatasi oleh lock;
+- voucher diproses satu kali melalui alur fulfillment database.
+
+## SQL
+
+Upgrade dari v68:
+
+```text
+supabase/update-v69-po-variant-voucher-ui.sql
+```
+
+Jika rangkaian referral/saldo/PO lama belum sehat:
+
+```text
+supabase/update-v69-referral-wallet-po-all-in-one.sql
+```
