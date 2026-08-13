@@ -1,0 +1,24 @@
+v71 TEST REPORT
+================
+Version: v71-classic-bottom-nav-unified-marketplace
+Base: v69-po-variant-voucher-ui
+
+Checks performed:
+- node --check on project JavaScript: PASS
+- npm test with temporary local dependency stubs for unavailable external npm packages: PASS
+- Total tests: 124
+- Passed: 124
+- Failed: 0
+
+UI assertions added:
+- Reseller Dashboard keeps classic pre-v70 visual style.
+- Reseller main navigation is fixed at the bottom.
+- Floating Edit Product save dock stays above bottom navigation.
+- Marketplace uses the same classic/neo-brutalist visual language.
+- Marketplace bottom navigation is available on desktop, tablet, and mobile.
+- Wallet, wallet payment, Flash Sale, PO, promo/voucher functionality remain present.
+
+Important:
+Temporary dependency stubs were used only for local test execution because the sandbox has no npm registry access. They were removed before packaging and are NOT included in the ZIP. Production Vercel installs the real dependencies from package-lock.json.
+
+No SQL migration is required specifically for v71. Existing migrations through v69 remain applicable.

@@ -1,3 +1,16 @@
+# v71 — Classic Bottom Navigation + Unified Marketplace
+
+Versi ini menggunakan v69 sebagai dasar fungsi, mengembalikan UI klasik sebelum v70, memindahkan menu utama Reseller Dashboard ke bagian bawah, dan menyamakan gaya Marketplace dengan dashboard. Tidak ada SQL tambahan khusus v71.
+
+## Deploy singkat
+
+1. Pastikan migration sampai v69 yang memang Anda gunakan sudah terpasang.
+2. Upload seluruh isi folder ini ke root repository GitHub.
+3. Redeploy Vercel Production tanpa build cache.
+4. Uji `/reseller` dan `/` di desktop, tablet, serta HP/Telegram Mini App.
+
+---
+
 # iLink.in Store v69 — PO per Varian + Voucher Preview + UI Ringkas
 
 v69 menggunakan **v68 sebagai dasar**. Seluruh fitur marketplace, saldo/referral, top up, AutoGoPay, promo/voucher, Flash Sale, broadcast, dashboard reseller, stok AUTO, dan sistem PRE-ORDER tetap dipertahankan.
@@ -226,8 +239,3 @@ Gunakan produk/invoice baru.
 - Stub tersebut **tidak disertakan** dalam ZIP.
 - SQL diperiksa secara statis tetapi belum dijalankan pada Supabase produksi Anda.
 - Telegram, AutoGoPay, Supabase, dan transaksi saldo produksi tetap perlu diuji setelah deployment.
-
-
-## v70 — Premium 3D Reseller Dashboard UI
-
-Versi ini hanya merombak tampilan Reseller Dashboard. Tidak ada SQL baru untuk v70. Semua fitur, ID elemen, endpoint, dan alur bisnis v69 dipertahankan. Setelah upload ke GitHub, cukup Redeploy Production tanpa cache.
