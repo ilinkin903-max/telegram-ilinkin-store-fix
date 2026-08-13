@@ -226,3 +226,8 @@ Gunakan produk/invoice baru.
 - Stub tersebut **tidak disertakan** dalam ZIP.
 - SQL diperiksa secara statis tetapi belum dijalankan pada Supabase produksi Anda.
 - Telegram, AutoGoPay, Supabase, dan transaksi saldo produksi tetap perlu diuji setelah deployment.
+
+
+## v70 — Premium 3D Reseller Dashboard UI
+
+Versi ini hanya merombak tampilan Reseller Dashboard. Tidak ada SQL baru untuk v70. Semua fitur, ID elemen, endpoint, dan alur bisnis v69 dipertahankan. Setelah upload ke GitHub, cukup Redeploy Production tanpa cache.

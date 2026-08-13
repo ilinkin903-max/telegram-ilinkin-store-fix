@@ -1,0 +1,11 @@
+v70 — Premium 3D Reseller UI
+
+Validation performed locally:
+- node --check api/reseller.js: PASS
+- Source-level regression/UI tests: 76/76 PASS
+  (reliability, marketplace UI, v63-v69 features, and v70 UI tests)
+- Full npm test was not used as the final criterion in this environment because runtime npm dependencies such as axios/dotenv are not installed in the sandbox. The package still retains package.json/package-lock.json for normal Vercel npm install.
+
+Database:
+- No SQL migration is required for v70.
+- Business logic and schemas remain from v69.
