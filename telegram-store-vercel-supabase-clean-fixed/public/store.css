@@ -1014,3 +1014,25 @@ main{width:min(1220px,calc(100% - 28px));margin-top:20px}
   .mobile-nav button,.mobile-nav a{min-height:46px}
   .mobile-nav small{font-size:7px}
 }
+
+
+/* v72 — Marketplace spacing, scrolling search, and persistent close button */
+.topbar{position:relative!important;top:auto!important}
+.catalog-section{margin-top:32px!important;scroll-margin-top:18px}
+.modal-sheet{scrollbar-gutter:stable}
+.modal-close{
+  position:sticky!important;
+  top:0!important;
+  right:auto!important;
+  margin-left:auto!important;
+  margin-right:0!important;
+  margin-bottom:-36px!important;
+  display:grid!important;
+  place-items:center!important;
+  z-index:30!important;
+}
+.product-sheet .modal-close{top:0!important}
+@media(max-width:720px){
+  .catalog-section{margin-top:24px!important}
+  .modal-close{margin-bottom:-34px!important}
+}

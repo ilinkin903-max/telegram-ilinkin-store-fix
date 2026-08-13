@@ -1,0 +1,490 @@
+TAP version 13
+# Subtest: v62 memakai RPC atomik untuk fulfillment dan lock baris produk
+ok 1 - v62 memakai RPC atomik untuk fulfillment dan lock baris produk
+  ---
+  duration_ms: 1.323152
+  type: 'test'
+  ...
+# Subtest: lock pekerjaan dipisahkan dari shop_settings dan pembayaran fail-closed
+ok 2 - lock pekerjaan dipisahkan dari shop_settings dan pembayaran fail-closed
+  ---
+  duration_ms: 1.080442
+  type: 'test'
+  ...
+# Subtest: mode developer tidak dapat aktif di production dan hash aman dari beda panjang
+ok 3 - mode developer tidak dapat aktif di production dan hash aman dari beda panjang
+  ---
+  duration_ms: 0.14862
+  type: 'test'
+  ...
+# Subtest: statistik memakai agregasi database dan tidak dibatasi 1000 transaksi
+ok 4 - statistik memakai agregasi database dan tidak dibatasi 1000 transaksi
+  ---
+  duration_ms: 0.277932
+  type: 'test'
+  ...
+# Subtest: invoice gateway dipertahankan case-sensitive
+ok 5 - invoice gateway dipertahankan case-sensitive
+  ---
+  duration_ms: 0.176952
+  type: 'test'
+  ...
+# Subtest: unduh QRIS memakai token singkat, bukan initData di query atau CORS wildcard
+ok 6 - unduh QRIS memakai token singkat, bukan initData di query atau CORS wildcard
+  ---
+  duration_ms: 0.477267
+  type: 'test'
+  ...
+# Subtest: cron pembayaran dan backup wajib memakai CRON_SECRET
+ok 7 - cron pembayaran dan backup wajib memakai CRON_SECRET
+  ---
+  duration_ms: 0.240888
+  type: 'test'
+  ...
+# Subtest: paket tidak lagi membawa stok dan data user produksi
+ok 8 - paket tidak lagi membawa stok dan data user produksi
+  ---
+  duration_ms: 0.83703
+  type: 'test'
+  ...
+# Subtest: versi API memakai satu sumber VERSION
+ok 9 - versi API memakai satu sumber VERSION
+  ---
+  duration_ms: 0.472651
+  type: 'test'
+  ...
+# Subtest: marketplace menyediakan unduh QRIS dan bubble detail pembayaran
+ok 10 - marketplace menyediakan unduh QRIS dan bubble detail pembayaran
+  ---
+  duration_ms: 0.846796
+  type: 'test'
+  ...
+# Subtest: marketplace menyediakan carousel banner dan bubble customer service
+ok 11 - marketplace menyediakan carousel banner dan bubble customer service
+  ---
+  duration_ms: 0.181489
+  type: 'test'
+  ...
+# Subtest: label Produk Pilihan dan mulai sudah dihapus dari kartu produk
+ok 12 - label Produk Pilihan dan mulai sudah dihapus dari kartu produk
+  ---
+  duration_ms: 0.292564
+  type: 'test'
+  ...
+# Subtest: v52 memakai tema biru dan mendukung logo URL
+ok 13 - v52 memakai tema biru dan mendukung logo URL
+  ---
+  duration_ms: 0.299884
+  type: 'test'
+  ...
+# Subtest: dashboard banner memakai baris nama + link dengan tambah dan hapus
+ok 14 - dashboard banner memakai baris nama + link dengan tambah dan hapus
+  ---
+  duration_ms: 0.248368
+  type: 'test'
+  ...
+# Subtest: produk bisa dipilih untuk bot+marketplace atau marketplace saja
+ok 15 - produk bisa dipilih untuk bot+marketplace atau marketplace saja
+  ---
+  duration_ms: 0.114419
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan harga termurah dan harga promo dicoret tanpa blok varian promo di kartu
+ok 16 - marketplace menampilkan harga termurah dan harga promo dicoret tanpa blok varian promo di kartu
+  ---
+  duration_ms: 0.702892
+  type: 'test'
+  ...
+# Subtest: unduh QRIS memakai endpoint server dan Telegram downloadFile
+ok 17 - unduh QRIS memakai endpoint server dan Telegram downloadFile
+  ---
+  duration_ms: 0.172275
+  type: 'test'
+  ...
+# Subtest: v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace
+ok 18 - v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace
+  ---
+  duration_ms: 0.394144
+  type: 'test'
+  ...
+# Subtest: v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otomatis
+ok 19 - v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otomatis
+  ---
+  duration_ms: 0.555333
+  type: 'test'
+  ...
+# Subtest: v53 menempatkan blok benefit setelah katalog
+ok 20 - v53 menempatkan blok benefit setelah katalog
+  ---
+  duration_ms: 0.172897
+  type: 'test'
+  ...
+# Subtest: v53 meminta konfirmasi sebelum membuat pembayaran
+ok 21 - v53 meminta konfirmasi sebelum membuat pembayaran
+  ---
+  duration_ms: 0.093289
+  type: 'test'
+  ...
+# Subtest: Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale
+ok 22 - Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale
+  ---
+  duration_ms: 0.130824
+  type: 'test'
+  ...
+# Subtest: v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia
+ok 23 - v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia
+  ---
+  duration_ms: 0.102732
+  type: 'test'
+  ...
+# Subtest: v63 seluruh submenu Pengaturan membuka halaman terpisah
+ok 24 - v63 seluruh submenu Pengaturan membuka halaman terpisah
+  ---
+  duration_ms: 0.732066
+  type: 'test'
+  ...
+# Subtest: v58 flash sale selalu satu baris horizontal
+ok 25 - v58 flash sale selalu satu baris horizontal
+  ---
+  duration_ms: 0.261097
+  type: 'test'
+  ...
+# Subtest: marketplace memakai invoice_display agar prefix gateway tidak terlihat
+ok 26 - marketplace memakai invoice_display agar prefix gateway tidak terlihat
+  ---
+  duration_ms: 0.196721
+  type: 'test'
+  ...
+# Subtest: promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif
+ok 27 - promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif
+  ---
+  duration_ms: 0.388676
+  type: 'test'
+  ...
+# Subtest: v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang tidak perlu
+ok 28 - v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang tidak perlu
+  ---
+  duration_ms: 0.264942
+  type: 'test'
+  ...
+# Subtest: v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih
+ok 29 - v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih
+  ---
+  duration_ms: 0.194278
+  type: 'test'
+  ...
+# Subtest: v63 merapikan Flash Sale, katalog mobile, footer, dan grup Telegram
+ok 30 - v63 merapikan Flash Sale, katalog mobile, footer, dan grup Telegram
+  ---
+  duration_ms: 0.611546
+  type: 'test'
+  ...
+# Subtest: v63 dashboard mendukung status CANCELED dan kartu user ringkas
+ok 31 - v63 dashboard mendukung status CANCELED dan kartu user ringkas
+  ---
+  duration_ms: 0.450708
+  type: 'test'
+  ...
+# Subtest: pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslash
+ok 32 - pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslash
+  ---
+  duration_ms: 0.284531
+  type: 'test'
+  ...
+# Subtest: v64 menempatkan status penjualan segaris dengan nama produk
+ok 33 - v64 menempatkan status penjualan segaris dengan nama produk
+  ---
+  duration_ms: 0.100008
+  type: 'test'
+  ...
+# Subtest: v64 merapikan kartu users pada layar sedang dan tombol hapus diperkecil
+ok 34 - v64 merapikan kartu users pada layar sedang dan tombol hapus diperkecil
+  ---
+  duration_ms: 0.111205
+  type: 'test'
+  ...
+# Subtest: v64 promo dan voucher memiliki kartu serta submenu ringkas
+ok 35 - v64 promo dan voucher memiliki kartu serta submenu ringkas
+  ---
+  duration_ms: 0.109201
+  type: 'test'
+  ...
+# Subtest: v64 menyediakan pengaturan tombol bot dan tombol Order Sekarang pada broadcast
+ok 36 - v64 menyediakan pengaturan tombol bot dan tombol Order Sekarang pada broadcast
+  ---
+  duration_ms: 0.666518
+  type: 'test'
+  ...
+# Subtest: v65 menambahkan dua saldo, referral, ledger, dan pending top up
+ok 37 - v65 menambahkan dua saldo, referral, ledger, dan pending top up
+  ---
+  duration_ms: 1.243213
+  type: 'test'
+  ...
+# Subtest: registrasi referral hanya memberi satu hadiah dan mendukung mode langsung atau pembelian pertama
+ok 38 - registrasi referral hanya memberi satu hadiah dan mendukung mode langsung atau pembelian pertama
+  ---
+  duration_ms: 0.725185
+  type: 'test'
+  ...
+# Subtest: bonus referral pembelian pertama diproses oleh trigger database
+ok 39 - bonus referral pembelian pertama diproses oleh trigger database
+  ---
+  duration_ms: 0.432542
+  type: 'test'
+  ...
+# Subtest: checkout saldo atomik memakai saldo utama dahulu lalu saldo referral
+ok 40 - checkout saldo atomik memakai saldo utama dahulu lalu saldo referral
+  ---
+  duration_ms: 0.739536
+  type: 'test'
+  ...
+# Subtest: top up divalidasi dan dikreditkan tepat satu kali
+ok 41 - top up divalidasi dan dikreditkan tepat satu kali
+  ---
+  duration_ms: 0.368586
+  type: 'test'
+  ...
+# Subtest: bot menyediakan halaman saldo, top up, referral, dan pilihan pembayaran
+ok 42 - bot menyediakan halaman saldo, top up, referral, dan pilihan pembayaran
+  ---
+  duration_ms: 0.264532
+  type: 'test'
+  ...
+# Subtest: dashboard memiliki pengaturan referral dan editor saldo setiap user
+ok 43 - dashboard memiliki pengaturan referral dan editor saldo setiap user
+  ---
+  duration_ms: 0.475625
+  type: 'test'
+  ...
+# Subtest: API owner dapat mengubah kedua saldo dengan catatan ledger
+ok 44 - API owner dapat mengubah kedua saldo dengan catatan ledger
+  ---
+  duration_ms: 0.420724
+  type: 'test'
+  ...
+# Subtest: schema instalasi baru sudah membundel migrasi v65
+ok 45 - schema instalasi baru sudah membundel migrasi v65
+  ---
+  duration_ms: 0.734879
+  type: 'test'
+  ...
+# Subtest: v66 memperbaiki referral untuk user lama yang belum pernah bertransaksi
+ok 46 - v66 memperbaiki referral untuk user lama yang belum pernah bertransaksi
+  ---
+  duration_ms: 0.94462
+  type: 'test'
+  ...
+# Subtest: bonus signup menggunakan ledger sebagai gerbang idempotensi
+ok 47 - bonus signup menggunakan ledger sebagai gerbang idempotensi
+  ---
+  duration_ms: 0.468906
+  type: 'test'
+  ...
+# Subtest: schema instalasi baru membundel fungsi v66
+ok 48 - schema instalasi baru membundel fungsi v66
+  ---
+  duration_ms: 0.2155
+  type: 'test'
+  ...
+# Subtest: notifikasi referral dikirim ke user dan channel
+ok 49 - notifikasi referral dikirim ke user dan channel
+  ---
+  duration_ms: 1.161572
+  type: 'test'
+  ...
+# Subtest: notifikasi top up dikirim ke channel hanya setelah kredit baru
+ok 50 - notifikasi top up dikirim ke channel hanya setelah kredit baru
+  ---
+  duration_ms: 0.261668
+  type: 'test'
+  ...
+# Subtest: channel saldo dapat memakai WALLET_CHANNEL dengan fallback CHANNEL_LOG
+ok 51 - channel saldo dapat memakai WALLET_CHANNEL dengan fallback CHANNEL_LOG
+  ---
+  duration_ms: 0.152796
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan saldo user segaris dengan header toko
+ok 52 - marketplace menampilkan saldo user segaris dengan header toko
+  ---
+  duration_ms: 0.757453
+  type: 'test'
+  ...
+# Subtest: katalog mengirim saldo aman tanpa ledger ke browser
+ok 53 - katalog mengirim saldo aman tanpa ledger ke browser
+  ---
+  duration_ms: 0.161309
+  type: 'test'
+  ...
+# Subtest: konfirmasi checkout menyediakan pilihan QRIS dan Saldo Bot
+ok 54 - konfirmasi checkout menyediakan pilihan QRIS dan Saldo Bot
+  ---
+  duration_ms: 0.143863
+  type: 'test'
+  ...
+# Subtest: API marketplace mengarahkan pembayaran saldo ke fulfillment atomik v65
+ok 55 - API marketplace mengarahkan pembayaran saldo ke fulfillment atomik v65
+  ---
+  duration_ms: 0.819725
+  type: 'test'
+  ...
+# Subtest: pembayaran saldo memperbarui header dan menampilkan sukses tanpa QRIS
+ok 56 - pembayaran saldo memperbarui header dan menampilkan sukses tanpa QRIS
+  ---
+  duration_ms: 0.203361
+  type: 'test'
+  ...
+# Subtest: banner marketplace menggunakan clone agar loop terus tanpa lompat visual
+ok 57 - banner marketplace menggunakan clone agar loop terus tanpa lompat visual
+  ---
+  duration_ms: 1.762413
+  type: 'test'
+  ...
+# Subtest: gambar produk, flash sale, dan detail dipaksa rasio 1 banding 1 termasuk HP
+ok 58 - gambar produk, flash sale, dan detail dipaksa rasio 1 banding 1 termasuk HP
+  ---
+  duration_ms: 0.288478
+  type: 'test'
+  ...
+# Subtest: deskripsi detail dapat dilipat dan dibuka lengkap
+ok 59 - deskripsi detail dapat dilipat dan dibuka lengkap
+  ---
+  duration_ms: 0.174179
+  type: 'test'
+  ...
+# Subtest: promo memakai persen dan harga promo ditampilkan sebelum harga coret
+ok 60 - promo memakai persen dan harga promo ditampilkan sebelum harga coret
+  ---
+  duration_ms: 0.206396
+  type: 'test'
+  ...
+# Subtest: produk dapat diset AUTO atau PRE-ORDER dari dashboard
+ok 61 - produk dapat diset AUTO atau PRE-ORDER dari dashboard
+  ---
+  duration_ms: 0.131826
+  type: 'test'
+  ...
+# Subtest: PO tidak memotong stok dan dicatat menunggu pengiriman secara atomik
+ok 62 - PO tidak memotong stok dan dicatat menunggu pengiriman secara atomik
+  ---
+  duration_ms: 0.196351
+  type: 'test'
+  ...
+# Subtest: pembayaran PO masuk status awaiting_delivery bukan mengirim stok otomatis
+ok 63 - pembayaran PO masuk status awaiting_delivery bukan mengirim stok otomatis
+  ---
+  duration_ms: 0.110063
+  type: 'test'
+  ...
+# Subtest: seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir
+ok 64 - seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir
+  ---
+  duration_ms: 0.123664
+  type: 'test'
+  ...
+# Subtest: data PO panjang dikirim sebagai TXT agar tidak terpotong
+ok 65 - data PO panjang dikirim sebagai TXT agar tidak terpotong
+  ---
+  duration_ms: 0.255529
+  type: 'test'
+  ...
+# Subtest: notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal
+ok 66 - notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal
+  ---
+  duration_ms: 0.298933
+  type: 'test'
+  ...
+# Subtest: PO dapat diatur per varian dan disimpan di JSON varian
+ok 67 - PO dapat diatur per varian dan disimpan di JSON varian
+  ---
+  duration_ms: 1.233408
+  type: 'test'
+  ...
+# Subtest: checkout menyimpan snapshot mode pengiriman dan PO memakai RPC v69
+ok 68 - checkout menyimpan snapshot mode pengiriman dan PO memakai RPC v69
+  ---
+  duration_ms: 0.186847
+  type: 'test'
+  ...
+# Subtest: bot juga menghormati mode PO per varian
+ok 69 - bot juga menghormati mode PO per varian
+  ---
+  duration_ms: 0.190682
+  type: 'test'
+  ...
+# Subtest: voucher dihitung server sebelum modal konfirmasi dibuka
+ok 70 - voucher dihitung server sebelum modal konfirmasi dibuka
+  ---
+  duration_ms: 0.191404
+  type: 'test'
+  ...
+# Subtest: pesan produk PO tetap memuat SnK snapshot dan data produk mudah disalin
+ok 71 - pesan produk PO tetap memuat SnK snapshot dan data produk mudah disalin
+  ---
+  duration_ms: 0.112917
+  type: 'test'
+  ...
+# Subtest: Flash Sale dipadatkan dan menampilkan rating serta terjual dekat harga
+ok 72 - Flash Sale dipadatkan dan menampilkan rating serta terjual dekat harga
+  ---
+  duration_ms: 0.244233
+  type: 'test'
+  ...
+# Subtest: tombol simpan edit produk menjadi dock mengambang untuk HP dan tablet
+ok 73 - tombol simpan edit produk menjadi dock mengambang untuk HP dan tablet
+  ---
+  duration_ms: 0.183001
+  type: 'test'
+  ...
+# Subtest: reseller kembali ke UI klasik dan navigasi berada di bawah
+ok 74 - reseller kembali ke UI klasik dan navigasi berada di bawah
+  ---
+  duration_ms: 1.071788
+  type: 'test'
+  ...
+# Subtest: marketplace memakai visual klasik yang sama dan bottom navigation
+ok 75 - marketplace memakai visual klasik yang sama dan bottom navigation
+  ---
+  duration_ms: 0.260547
+  type: 'test'
+  ...
+# Subtest: fitur penting marketplace dan PO tetap ada
+ok 76 - fitur penting marketplace dan PO tetap ada
+  ---
+  duration_ms: 0.879114
+  type: 'test'
+  ...
+# Subtest: grafik menaruh omzet tepat di atas batang
+ok 77 - grafik menaruh omzet tepat di atas batang
+  ---
+  duration_ms: 0.721389
+  type: 'test'
+  ...
+# Subtest: menu reseller desktop dipusatkan dan users satu kolom rapi
+ok 78 - menu reseller desktop dipusatkan dan users satu kolom rapi
+  ---
+  duration_ms: 0.340374
+  type: 'test'
+  ...
+# Subtest: promo menaruh edit hapus di header dan diskon tidak mudah overflow
+ok 79 - promo menaruh edit hapus di header dan diskon tidak mudah overflow
+  ---
+  duration_ms: 0.398991
+  type: 'test'
+  ...
+# Subtest: marketplace search ikut scroll, katalog turun, close tetap terlihat
+ok 80 - marketplace search ikut scroll, katalog turun, close tetap terlihat
+  ---
+  duration_ms: 0.700047
+  type: 'test'
+  ...
+1..80
+# tests 80
+# suites 0
+# pass 80
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 161.350181

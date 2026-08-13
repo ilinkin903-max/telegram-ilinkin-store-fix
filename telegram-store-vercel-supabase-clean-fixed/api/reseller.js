@@ -95,6 +95,39 @@ module.exports = async function handler(req, res) {
       #modalEditForm{padding-bottom:150px}
     }
 
+
+    /* v72: polish grafik, desktop nav, users, dan promo */
+    .barBox{overflow:visible;justify-content:flex-end;gap:5px}
+    .barValue{font-size:clamp(8px,1.5vw,10px);line-height:1.05;font-weight:1000;color:#050505;background:#fff;border:2px solid #050505;border-radius:6px;padding:3px 5px;white-space:nowrap;box-shadow:1px 1px 0 #050505;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+    .barDate{font-size:clamp(8px,1.6vw,10px);line-height:1.05;text-align:center;color:#050505;white-space:nowrap}
+    .barLabel{display:none}
+    @media(min-width:1000px){
+      .navTiles{justify-content:center}
+      .userCardGrid{grid-template-columns:1fr}
+      .userCard.walletUserCard{grid-template-columns:minmax(250px,1.2fr) 84px 140px minmax(260px,.9fr) auto;gap:14px;padding:12px 14px}
+      .userTransactions,.userSpending{justify-self:end}
+      .userWallet{min-width:260px}
+      .userActions{min-width:150px}
+    }
+    .promoCompactCard{padding:12px}
+    .promoCompactHead{align-items:flex-start}
+    .promoTitle{font-size:14px;line-height:1.2;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+    .promoHeadTools{display:grid;gap:6px;justify-items:end;flex:0 0 auto}
+    .promoHeadTools .promoCompactActions{margin:0;display:flex;gap:6px;justify-content:flex-end}
+    .promoHeadTools .promoCompactActions .btn{min-width:62px;padding:6px 8px;font-size:9px}
+    .promoDiscountValue{min-width:132px;overflow:hidden}
+    .promoDiscountValue b{font-size:clamp(15px,2vw,19px);line-height:1.1;white-space:normal;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+    .promoCompactBody{grid-template-columns:minmax(132px,150px) minmax(0,1fr)}
+    @media(max-width:700px){
+      .promoCompactHead{gap:7px}
+      .promoTitle{max-width:170px;font-size:12px}
+      .promoHeadTools{gap:4px}
+      .promoHeadTools .promoCompactActions .btn{min-width:54px;padding:5px 6px;font-size:8px}
+      .promoCompactBody{grid-template-columns:minmax(102px,118px) minmax(0,1fr)}
+      .promoDiscountValue{min-width:0}
+      .barValue{padding:2px 3px;border-width:1.5px;box-shadow:none}
+    }
+
 </style>
 </head>
 <body>
@@ -602,7 +635,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function renderLicense(){ var l=state.license||{}; var box=document.getElementById('licenseBox'); if(!box) return; var status=(l.enabled===false)?'Belum diaktifkan':(l.active?'Aktif':(l.status||'Tidak aktif')); var rows=[['Status',status],['Kode Aktivasi',l.license_code||l.code||'-'],['Bot','@'+(l.bot_username||'-')],['Paket',l.plan_name||'-'],['Masa Aktif Sampai',fmtLicenseDate(l.expires_at)],['Sisa Durasi',daysLeftText(l.days_left)],['Catatan',l.reason||'-']]; box.innerHTML=rows.map(function(r){return '<div class="detailItem"><b>'+esc(r[0])+'</b><br><span style="font-size:18px">'+esc(r[1])+'</span></div>';}).join(''); }
 
   function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Order',s.orders||0],['Stok',s.stokTersedia||0]]; document.getElementById('stats').innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
-  function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(150,(chart.clientHeight||300)-128); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barLabel">'+esc(d.label)+'<br>'+esc(rupiahShort(d.revenue))+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } document.getElementById('topProductList').innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
+  function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(118,(chart.clientHeight||300)-96); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="barValue" title="Omzet '+esc(d.label)+'">'+esc(rupiahShort(d.revenue))+'</div><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barDate">'+esc(d.label)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } document.getElementById('topProductList').innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
   function productMatches(p,q){ var vars=productVariants(p).map(function(v){return [v.name||v.nama,v.sku||v.kode,v.description||v.deskripsi,v.snk||v.terms].join(' ');}).join(' '); return textMatch([p.nama,p.kode,p.category,p.deskripsi,p.snk,vars],q); }
   function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
   function productColor(p){ var text=String((p&&p.kode)||(p&&p.nama)||'x'); var h=0; for(var i=0;i<text.length;i++) h=(h*31+text.charCodeAt(i))%360; return 'hsl('+h+' 85% 68%)'; }
@@ -1003,7 +1036,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       if(item.type==='auto'&&x.flash_sale) statusHtml+=' <span class="chip cyan">⚡ FLASH SALE</span>';
       var dateText=(x.start_at||end)?'<div class="promoCompactDate">'+esc(promoDateText(x.start_at)||'Sekarang')+' — '+esc(promoDateText(end)||'Tanpa batas')+'</div>':'';
       var note=esc(x.name||x.description||'Tanpa deskripsi')+(x.description&&x.name?' · '+esc(x.description):'');
-      return '<article class="promoCompactCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="promoCompactHead"><div class="promoIdentity"><span class="promoIcon">'+(item.type==='voucher'?'🎟️':'🏷️')+'</span><div><span class="promoCode">'+esc(x.code)+'</span><small>'+esc(item.label)+'</small></div></div><div class="promoStatusGroup">'+statusHtml+'</div></div><div class="promoCompactBody"><div class="promoDiscountValue"><small>Diskon</small><b>'+esc(unifiedDiscountText(x))+'</b></div><div class="promoFacts"><span title="'+esc(target)+'"><b>Target</b> '+esc(target)+'</span><span><b>Syarat</b> '+esc(minQty)+' item'+(minSpend?' · '+rupiah(minSpend):'')+'</span><span><b>Dipakai</b> '+esc(st.used)+' / '+esc(limit)+'</span></div></div><p class="promoCompactNote">'+note+'</p>'+dateText+'<div class="promoCompactActions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div></article>';
+      var promoTitle=String(x.name||x.code||'Promo');
+      return '<article class="promoCompactCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="promoCompactHead"><div class="promoIdentity"><span class="promoIcon">'+(item.type==='voucher'?'🎟️':'🏷️')+'</span><div><span class="promoTitle">'+esc(promoTitle)+'</span><small>'+esc(item.label)+' · '+esc(x.code)+'</small></div></div><div class="promoHeadTools"><div class="promoCompactActions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div><div class="promoStatusGroup">'+statusHtml+'</div></div></div><div class="promoCompactBody"><div class="promoDiscountValue"><small>Diskon</small><b>'+esc(unifiedDiscountText(x))+'</b></div><div class="promoFacts"><span title="'+esc(target)+'"><b>Target</b> '+esc(target)+'</span><span><b>Syarat</b> '+esc(minQty)+' item'+(minSpend?' · '+rupiah(minSpend):'')+'</span><span><b>Dipakai</b> '+esc(st.used)+' / '+esc(limit)+'</span></div></div><p class="promoCompactNote">'+note+'</p>'+dateText+'</article>';
     }).join('')||'<div class="empty">Belum ada promo atau voucher.</div>';
     document.querySelectorAll('[data-edit-unified]').forEach(function(btn){btn.onclick=function(){ var parts=btn.dataset.editUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); var item=(type==='voucher'?state.vouchers:state.promos).find(function(x){return String(x.code).toUpperCase()===String(code).toUpperCase();}); fillPromoUnified(type,item); };});
     document.querySelectorAll('[data-delete-unified]').forEach(function(btn){btn.onclick=async function(){ var parts=btn.dataset.deleteUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); if(!confirm('Hapus '+(type==='voucher'?'voucher':'promo')+' '+code+'?')) return; await post(type==='voucher'?'delete-voucher':'promo-delete', type==='voucher'?{kode:code}:{code:code}); };});
