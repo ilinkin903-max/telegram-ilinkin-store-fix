@@ -1036,3 +1036,100 @@ main{width:min(1220px,calc(100% - 28px));margin-top:20px}
   .catalog-section{margin-top:24px!important}
   .modal-close{margin-bottom:-34px!important}
 }
+
+
+/* v73 — banner bawaan editable + Cara Order Marketplace */
+.hero-native-slide{
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  background:linear-gradient(120deg,var(--banner-bg1,#1769e0),var(--banner-bg2,#0d47a1));
+  color:var(--banner-text,#fff);
+  padding:clamp(14px,3.2vw,42px);
+}
+.hero-native-slide.pos-left{justify-content:flex-start;text-align:left}
+.hero-native-slide.pos-center{justify-content:center;text-align:center}
+.hero-native-slide.pos-right{justify-content:flex-end;text-align:right}
+.hero-native-slide.vpos-top{align-items:flex-start}
+.hero-native-slide.vpos-center{align-items:center}
+.hero-native-slide.vpos-bottom{align-items:flex-end}
+.native-banner-content{
+  position:relative;z-index:2;width:min(66%,720px);display:flex;flex-direction:column;align-items:flex-start;
+}
+.hero-native-slide.pos-center .native-banner-content{align-items:center}
+.hero-native-slide.pos-right .native-banner-content{align-items:flex-end}
+.native-banner-kicker{
+  display:inline-flex;width:max-content;max-width:100%;padding:6px 9px;border:2px solid #050505;border-radius:7px;
+  background:var(--banner-accent,#ffe15a);color:#050505;font-size:clamp(8px,1.1vw,11px);font-weight:1000;letter-spacing:.07em;
+  box-shadow:2px 2px 0 #050505;
+}
+.native-banner-title{
+  display:block;margin-top:clamp(7px,1.4vw,15px);max-width:100%;
+  font-size:clamp(20px,4.1vw,49px);line-height:1.02;letter-spacing:-.035em;font-weight:1000;color:var(--banner-text,#fff);
+}
+.native-banner-description{
+  margin:clamp(6px,1.2vw,12px) 0 0;max-width:620px;
+  font-size:clamp(9px,1.35vw,15px);line-height:1.45;font-weight:700;color:var(--banner-text,#fff)!important;opacity:.94;
+}
+.native-banner-button{
+  margin-top:clamp(8px,1.5vw,16px);min-height:36px;padding:8px 14px;
+  border:2px solid #050505;border-radius:7px;background:var(--banner-accent,#ffe15a);color:#050505;
+  box-shadow:2px 2px 0 #050505;font-size:clamp(9px,1.15vw,12px);font-weight:1000;cursor:pointer;
+}
+.native-banner-button:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #050505}
+.native-banner-decoration{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.native-banner-decoration i{position:absolute;display:block;border:3px solid rgba(5,5,5,.8);background:rgba(255,255,255,.16);transform:rotate(18deg)}
+.native-banner-decoration i:nth-child(1){width:15%;aspect-ratio:1;right:8%;top:14%;border-radius:28%}
+.native-banner-decoration i:nth-child(2){width:9%;aspect-ratio:1;right:20%;bottom:12%;border-radius:50%;background:var(--banner-accent,#ffe15a)}
+.native-banner-decoration i:nth-child(3){width:7%;aspect-ratio:1;right:3%;bottom:24%;border-radius:24%;transform:rotate(-15deg)}
+.hero-image-slide.image-error{background:linear-gradient(120deg,#e9f3ff,#cfe4ff)}
+.marketplace-guide-row{
+  margin:18px 0 4px;padding:11px 12px;border:3px solid #050505;border-radius:9px;background:#fff;
+  box-shadow:3px 3px 0 #050505;display:flex;align-items:center;justify-content:space-between;gap:14px;
+}
+.marketplace-guide-copy{display:flex;align-items:center;gap:10px;min-width:0}
+.marketplace-guide-copy>span:last-child{display:flex;flex-direction:column;min-width:0}
+.marketplace-guide-copy strong{font-size:12px;color:#050505}
+.marketplace-guide-copy small{font-size:9px;color:#666;margin-top:2px}
+.marketplace-guide-icon{
+  width:34px;height:34px;flex:0 0 auto;display:grid;place-items:center;border:2px solid #050505;border-radius:7px;
+  background:var(--nb-yellow,#ffe15a);font-weight:1000;color:#050505;
+}
+.marketplace-guide-row .button{min-height:38px;padding:7px 13px;white-space:nowrap;font-size:10px}
+.howto-sheet{width:min(560px,100%)}
+.howto-sheet>h2{margin:4px 44px 7px 0}
+.howto-steps{display:grid;gap:8px;margin:14px 0 16px}
+.howto-steps article{
+  display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center;padding:9px;
+  border:2px solid #050505;border-radius:8px;background:#fff;
+}
+.howto-steps article>b{
+  width:32px;height:32px;display:grid;place-items:center;border:2px solid #050505;border-radius:7px;
+  background:#dff6ff;color:#050505;font-weight:1000;
+}
+.howto-steps article:nth-child(2)>b{background:var(--nb-yellow,#ffe15a)}
+.howto-steps article:nth-child(3)>b{background:var(--nb-lime,#8bea00)}
+.howto-steps article:nth-child(4)>b{background:#d9c9ff}
+.howto-steps article:nth-child(5)>b{background:#ffd7e8}
+.howto-steps article>div{display:flex;flex-direction:column}
+.howto-steps strong{font-size:11px;color:#050505}
+.howto-steps small{margin-top:2px;font-size:9px;line-height:1.4;color:#5f5f5f}
+@media(max-width:720px){
+  .hero-native-slide{padding:12px 13px}
+  .native-banner-content{width:72%}
+  .native-banner-title{font-size:clamp(17px,6vw,30px)}
+  .native-banner-description{font-size:9px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .native-banner-kicker{font-size:7px;padding:4px 6px}
+  .native-banner-button{min-height:29px;padding:5px 9px;font-size:8px;margin-top:7px}
+  .marketplace-guide-row{margin-top:13px;padding:9px}
+  .marketplace-guide-copy small{display:none}
+  .marketplace-guide-row .button{min-height:34px;padding:6px 10px}
+  .howto-steps{gap:7px}
+}
+@media(max-width:390px){
+  .native-banner-content{width:77%}
+  .native-banner-title{font-size:18px}
+  .native-banner-description{font-size:8px}
+  .native-banner-decoration i:nth-child(1){width:18%;right:5%}
+  .marketplace-guide-copy strong{font-size:10px}
+}

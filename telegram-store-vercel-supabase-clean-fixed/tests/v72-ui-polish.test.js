@@ -17,8 +17,7 @@ test('menu reseller desktop dipusatkan dan users satu kolom rapi', () => {
   assert.match(reseller, /\.userCardGrid\{grid-template-columns:1fr\}/);
 });
 
-test('promo menaruh edit hapus di header dan diskon tidak mudah overflow', () => {
-  assert.match(reseller, /class=\"promoHeadTools\"/);
+test('promo mempertahankan judul rapi dan diskon tidak mudah overflow', () => {
   assert.match(reseller, /class=\"promoTitle\"/);
   assert.match(reseller, /\.promoDiscountValue b\{[\s\S]*overflow-wrap:anywhere/);
 });

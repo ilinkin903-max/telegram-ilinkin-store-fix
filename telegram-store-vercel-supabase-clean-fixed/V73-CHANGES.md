@@ -1,0 +1,21 @@
+# v73 — Banner Manager + Marketplace Cara Order
+
+- Daftar Promo/Voucher:
+  - nama/judul hanya tampil sekali;
+  - deskripsi hanya tampil bila memang ada dan berbeda dari judul;
+  - tombol Edit dan Hapus dipindahkan kembali ke bagian bawah;
+  - status ON/OFF tetap berada di bagian atas agar cepat dibaca.
+- Banner Promosi:
+  - mendukung Banner Gambar dan Banner Bawaan;
+  - kedua jenis banner dapat dicampur dan looping dalam satu carousel;
+  - Banner Bawaan dapat mengatur teks kecil, judul, deskripsi, warna utama, warna kedua, warna teks, warna aksen, posisi horizontal, posisi vertikal, teks tombol, dan aksi tombol;
+  - Banner Bawaan bisa ditambah lebih dari satu;
+  - urutan banner diatur melalui tombol ↑ dan ↓;
+  - nama internal banner tidak tampil di Marketplace.
+- Cara Order:
+  - ditambahkan pada Marketplace sebagai panel ringkas + popup panduan;
+  - mode `marketplace`: Cara Order hanya di Marketplace;
+  - mode `products`: Cara Order hanya di bot;
+  - mode `both`: Cara Order tersedia di keduanya.
+- Carousel lama tetap kompatibel dengan banner URL v52–v72.
+- Tidak ada SQL baru.

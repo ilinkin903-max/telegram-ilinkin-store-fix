@@ -128,6 +128,40 @@ module.exports = async function handler(req, res) {
       .barValue{padding:2px 3px;border-width:1.5px;box-shadow:none}
     }
 
+
+    /* v73: promo lebih bersih + editor banner gambar/bawaan */
+    .promoHeadTools{display:contents!important}
+    .promoCompactHead{align-items:flex-start}
+    .promoCompactHead>.promoStatusGroup{margin-left:auto;max-width:46%;align-self:flex-start}
+    .promoBottomActions{border-top:2px dashed #111;padding-top:9px;margin-top:10px;justify-content:flex-end}
+    .promoBottomActions .btn{min-width:78px}
+    .bannerManagerHead{align-items:center;gap:10px}
+    .bannerAddActions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+    .bannerEditorList{display:grid;gap:12px}
+    .bannerEditorCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px;display:grid;gap:10px}
+    .bannerEditorCard.nativeBannerEditor{background:#eef7ff}
+    .bannerEditorHead{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:2px dashed #111;padding-bottom:9px}
+    .bannerEditorHead>div:first-child{min-width:0;display:flex;align-items:center;gap:8px}
+    .bannerEditorHead b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bannerOrderTools{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+    .bannerOrderNumber{width:28px;height:28px;border:2px solid #000;border-radius:7px;background:var(--yellow);display:grid;place-items:center;font-size:10px;font-weight:1000}
+    .bannerMove,.bannerDelete{min-width:32px!important;width:32px!important;height:30px!important;padding:3px!important}
+    .bannerMove:disabled{opacity:.35}
+    .bannerColorGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+    .colorField{border:2px solid #000;border-radius:8px;background:#fff;padding:7px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;font-weight:900}
+    .colorField input{width:34px;height:28px;padding:0;border:0;background:transparent}
+    .textarea.compact{min-height:76px}
+    @media(max-width:700px){
+      .bannerManagerHead{align-items:flex-start;flex-direction:column}
+      .bannerAddActions{width:100%;display:grid;grid-template-columns:1fr 1fr}
+      .bannerAddActions .btn{min-width:0}
+      .bannerEditorHead{align-items:flex-start}
+      .bannerEditorHead>div:first-child{display:grid;gap:5px}
+      .bannerColorGrid{grid-template-columns:1fr 1fr}
+      .promoCompactHead>.promoStatusGroup{max-width:52%}
+      .promoBottomActions{display:grid;grid-template-columns:1fr 1fr}
+      .promoBottomActions .btn{width:100%}
+    }
 </style>
 </head>
 <body>
@@ -359,7 +393,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       <h2 class="sectionTitle">Pengaturan Toko</h2>
       <form id="storeSettingsForm" class="form">
         <div class="field"><label class="label">Nama Toko</label><input class="input" name="store_name" placeholder="Contoh: iLink.in Store"></div>
-        <div class="field"><label class="label">Tombol Utama di Bot</label><select class="select" name="bot_menu_mode"><option value="both">Marketplace + Daftar Produk</option><option value="marketplace">Marketplace saja</option><option value="products">Daftar Produk saja</option></select><p class="help">Atur tombol belanja yang tampil pada menu /start. Perintah /produk tetap dapat digunakan oleh pembeli.</p></div>
+        <div class="field"><label class="label">Tombol Belanja & Cara Order</label><select class="select" name="bot_menu_mode"><option value="both">Marketplace + Daftar Produk</option><option value="marketplace">Marketplace saja</option><option value="products">Daftar Produk saja</option></select><p class="help">Marketplace saja: Cara Order tampil di Marketplace. Daftar Produk saja: Cara Order tampil di bot. Jika keduanya aktif, Cara Order tersedia di bot dan Marketplace. Perintah /produk tetap dapat digunakan.</p></div>
         <div class="row"><div class="field"><label class="label">Link Customer Service</label><input class="input" name="customer_service_link" placeholder="https://t.me/username_cs atau @username_cs"></div><div class="field"><label class="label">Link Grup / Channel</label><input class="input" name="group_link" placeholder="https://t.me/grupkamu atau @grupkamu"></div></div>
         <div class="field"><label class="label">Link Logo Marketplace</label><div class="linkFieldBox"><div class="linkFieldTitle">Logo Toko</div><input class="input" name="logo_url" placeholder="https://domain.com/logo.png atau link Google Drive"></div><p class="help">Logo tampil pada bagian kiri atas Marketplace.</p></div>
         <button class="btn lime" type="submit">Simpan Pengaturan Toko</button>
@@ -372,10 +406,10 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     <div class="panel settingsPanel">
       <h2 class="sectionTitle">Banner Promosi</h2>
       <form id="bannerSettingsForm" class="form">
-        <div class="formDivider withAction"><b>Banner Promosi Marketplace</b><button class="btn lime small" id="addBannerRow" type="button">+ Tambah</button></div>
-        <div id="bannerRows" class="linkRows"></div>
+        <div class="formDivider withAction bannerManagerHead"><b>Banner Marketplace</b><div class="bannerAddActions"><button class="btn cyan small" id="addImageBannerRow" type="button">+ Banner Gambar</button><button class="btn lime small" id="addNativeBannerRow" type="button">+ Banner Bawaan</button></div></div>
+        <div id="bannerRows" class="bannerEditorList"></div>
         <input type="hidden" name="banner_items" id="bannerItemsInput"><input type="hidden" name="banner_urls"><input type="hidden" name="banner_url"><input type="hidden" name="store_description" value="">
-        <p class="help">Setiap banner memiliki nama dan link sendiri. Gambar disarankan rasio 2,39:1. Maksimal 10 banner.</p>
+        <p class="help">Banner gambar dan banner bawaan bisa dicampur dalam satu slider. Gunakan tombol ↑ ↓ untuk mengatur urutan. Rasio banner tetap 2,39:1.</p>
         <div class="field"><label class="label">Kecepatan Pergantian Banner</label><input class="input" type="number" name="banner_interval_seconds" min="3" max="15" step="1" value="5"><p class="help">Banner bergeser otomatis ke kiri setiap 3–15 detik.</p></div>
         <button class="btn lime" type="submit">Simpan Banner Promosi</button>
       </form>
@@ -607,17 +641,114 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     renderSettingsForm();
     renderFlashSaleForm();
   }
+  function defaultNativeBanner(index){
+    return {
+      type:'native',
+      name:'Banner Bawaan '+(Number(index||0)+1),
+      kicker:'BELANJA PRODUK DIGITAL',
+      title:'Cepat, aman, langsung terkirim',
+      description:'Bayar dengan QRIS atau saldo. Produk otomatis dikirim ke Telegram setelah pembayaran berhasil.',
+      background_color:'#1769e0',
+      background_color_2:'#0d47a1',
+      text_color:'#ffffff',
+      accent_color:'#ffe15a',
+      text_position:'left',
+      vertical_position:'center',
+      button_text:'Belanja Sekarang',
+      button_target:'catalog'
+    };
+  }
   function parseAdminBannerItems(s){
     var rows=[];
     try{ if(s.banner_items){ var x=typeof s.banner_items==='string'?JSON.parse(s.banner_items):s.banner_items; if(Array.isArray(x)) rows=x; } }catch(e){}
-    if(!rows.length){ var legacy=String(s.banner_urls||s.banner_url||'').split(/\r?\n|;/).map(function(x){return x.trim();}).filter(Boolean); rows=legacy.map(function(url,i){return {name:'Banner '+(i+1),url:url};}); }
-    return rows.slice(0,10).map(function(x,i){ return {name:String((x&&x.name)||('Banner '+(i+1))),url:String((x&&x.url)||x||'')}; });
+    if(!rows.length){
+      var legacy=String(s.banner_urls||s.banner_url||'').split(/\r?\n|;/).map(function(x){return x.trim();}).filter(Boolean);
+      rows=legacy.map(function(url,i){return {type:'image',name:'Banner '+(i+1),url:url};});
+    }
+    return rows.slice(0,12).map(function(x,i){
+      x=(x&&typeof x==='object')?x:{url:String(x||'')};
+      var type=String(x.type||x.kind||(x.url?'image':'native')).toLowerCase()==='native'?'native':'image';
+      if(type==='native'){
+        var base=defaultNativeBanner(i);
+        Object.keys(base).forEach(function(k){ if(x[k]!==undefined&&x[k]!==null&&String(x[k])!=='') base[k]=String(x[k]); });
+        base.type='native';
+        base.name=String(x.name||base.name);
+        return base;
+      }
+      return {type:'image',name:String(x.name||('Banner '+(i+1))),url:String(x.url||x.link||x.image_url||'')};
+    });
   }
-  function bannerRowHtml(item,index){ item=item||{}; return '<div class="linkRow" data-banner-row><input class="input bannerName" data-banner-name placeholder="Nama banner, contoh: Promo Canva" value="'+esc(item.name||('Banner '+(index+1)))+'"><input class="input bannerUrl" data-banner-url placeholder="https://domain.com/banner.jpg" value="'+esc(item.url||'')+'"><button class="btn red linkRemove" type="button" data-remove-banner>×</button></div>'; }
-  function wireBannerRows(){ document.querySelectorAll('[data-remove-banner]').forEach(function(btn){btn.onclick=function(){var rows=document.querySelectorAll('[data-banner-row]');if(rows.length<=1){var row=btn.closest('[data-banner-row]');if(row){row.querySelector('[data-banner-name]').value='Banner 1';row.querySelector('[data-banner-url]').value='';}return;}var row=btn.closest('[data-banner-row]');if(row)row.remove();};}); }
-  function renderBannerRows(items){ var box=document.getElementById('bannerRows'); if(!box)return; var rows=(items&&items.length?items:[{name:'Banner 1',url:''}]).slice(0,10); box.innerHTML=rows.map(bannerRowHtml).join(''); wireBannerRows(); }
-  function addBannerRow(){ var box=document.getElementById('bannerRows'); if(!box)return; var count=box.querySelectorAll('[data-banner-row]').length; if(count>=10)return toast('Maksimal 10 banner.',true); box.insertAdjacentHTML('beforeend',bannerRowHtml({name:'Banner '+(count+1),url:''},count)); wireBannerRows(); }
-  function collectBannerRows(){ return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){return {name:String(row.querySelector('[data-banner-name]').value||('Banner '+(i+1))).trim(),url:String(row.querySelector('[data-banner-url]').value||'').trim()};}).filter(function(x){return x.url;}).slice(0,10); }
+  function bannerRowHtml(item,index){
+    item=item||{};
+    var type=String(item.type||item.kind||(item.url?'image':'native')).toLowerCase()==='native'?'native':'image';
+    if(type==='native') item=Object.assign(defaultNativeBanner(index),item,{type:'native'});
+    var order='<div class="bannerOrderTools"><span class="bannerOrderNumber">'+(index+1)+'</span><button class="btn small bannerMove" type="button" data-banner-up title="Naikkan">↑</button><button class="btn small bannerMove" type="button" data-banner-down title="Turunkan">↓</button><button class="btn small red bannerDelete" type="button" data-remove-banner title="Hapus">×</button></div>';
+    var head='<div class="bannerEditorHead"><div><span class="chip '+(type==='native'?'green':'cyan')+'">'+(type==='native'?'BAWAAN':'GAMBAR')+'</span><b>'+esc(item.name||('Banner '+(index+1)))+'</b></div>'+order+'</div>';
+    var common='<div class="field"><label class="label">Nama Internal Banner</label><input class="input" data-banner-name placeholder="Contoh: Promo Agustus" value="'+esc(item.name||('Banner '+(index+1)))+'"></div><input type="hidden" data-banner-type value="'+type+'">';
+    if(type==='image'){
+      return '<div class="bannerEditorCard imageBannerEditor" data-banner-row>'+head+common+'<div class="field"><label class="label">URL Gambar Banner</label><input class="input bannerUrl" data-banner-url placeholder="https://domain.com/banner.jpg atau link Google Drive" value="'+esc(item.url||'')+'"></div><p class="help">Nama hanya untuk dashboard dan tidak ditampilkan di Marketplace.</p></div>';
+    }
+    return '<div class="bannerEditorCard nativeBannerEditor" data-banner-row>'+head+common+
+      '<div class="row"><div class="field"><label class="label">Teks Kecil</label><input class="input" data-banner-kicker value="'+esc(item.kicker||'')+'" placeholder="BELANJA PRODUK DIGITAL"></div><div class="field"><label class="label">Judul Utama</label><input class="input" data-banner-title value="'+esc(item.title||'')+'" placeholder="Cepat, aman, langsung terkirim"></div></div>'+
+      '<div class="field"><label class="label">Deskripsi</label><textarea class="textarea compact" data-banner-description placeholder="Deskripsi singkat banner">'+esc(item.description||'')+'</textarea></div>'+
+      '<div class="bannerColorGrid"><label class="colorField"><span>Warna 1</span><input type="color" data-banner-bg value="'+esc(item.background_color||'#1769e0')+'"></label><label class="colorField"><span>Warna 2</span><input type="color" data-banner-bg2 value="'+esc(item.background_color_2||'#0d47a1')+'"></label><label class="colorField"><span>Warna Teks</span><input type="color" data-banner-text-color value="'+esc(item.text_color||'#ffffff')+'"></label><label class="colorField"><span>Warna Aksen</span><input type="color" data-banner-accent value="'+esc(item.accent_color||'#ffe15a')+'"></label></div>'+
+      '<div class="row"><div class="field"><label class="label">Posisi Teks</label><select class="select" data-banner-position><option value="left"'+(item.text_position==='left'?' selected':'')+'>Kiri</option><option value="center"'+(item.text_position==='center'?' selected':'')+'>Tengah</option><option value="right"'+(item.text_position==='right'?' selected':'')+'>Kanan</option></select></div><div class="field"><label class="label">Posisi Vertikal</label><select class="select" data-banner-vertical><option value="top"'+(item.vertical_position==='top'?' selected':'')+'>Atas</option><option value="center"'+(item.vertical_position==='center'?' selected':'')+'>Tengah</option><option value="bottom"'+(item.vertical_position==='bottom'?' selected':'')+'>Bawah</option></select></div></div>'+
+      '<div class="row"><div class="field"><label class="label">Teks Tombol</label><input class="input" data-banner-button-text value="'+esc(item.button_text||'Belanja Sekarang')+'" placeholder="Belanja Sekarang"></div><div class="field"><label class="label">Aksi Tombol</label><select class="select" data-banner-button-target><option value="catalog"'+(item.button_target==='catalog'?' selected':'')+'>Buka Katalog</option><option value="cara_order"'+(item.button_target==='cara_order'?' selected':'')+'>Cara Order</option><option value="none"'+(item.button_target==='none'?' selected':'')+'>Tanpa Tombol</option></select></div></div>'+
+      '<p class="help">Banner bawaan dirender langsung oleh Marketplace, jadi tidak perlu gambar. Cocok untuk pengumuman, promo singkat, atau panduan belanja.</p></div>';
+  }
+  function renumberBannerRows(){
+    var rows=Array.from(document.querySelectorAll('[data-banner-row]'));
+    rows.forEach(function(row,i){
+      var n=row.querySelector('.bannerOrderNumber'); if(n)n.textContent=String(i+1);
+      var up=row.querySelector('[data-banner-up]'); var down=row.querySelector('[data-banner-down]');
+      if(up)up.disabled=i===0; if(down)down.disabled=i===rows.length-1;
+    });
+  }
+  function wireBannerRows(){
+    document.querySelectorAll('[data-remove-banner]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row)row.remove();renumberBannerRows();};});
+    document.querySelectorAll('[data-banner-up]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row&&row.previousElementSibling)row.parentNode.insertBefore(row,row.previousElementSibling);renumberBannerRows();};});
+    document.querySelectorAll('[data-banner-down]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row&&row.nextElementSibling)row.parentNode.insertBefore(row.nextElementSibling,row);renumberBannerRows();};});
+    document.querySelectorAll('[data-banner-name]').forEach(function(input){input.oninput=function(){var row=input.closest('[data-banner-row]');var title=row&&row.querySelector('.bannerEditorHead b');if(title)title.textContent=String(input.value||'Banner').trim()||'Banner';};});
+    renumberBannerRows();
+  }
+  function renderBannerRows(items){
+    var box=document.getElementById('bannerRows'); if(!box)return;
+    var rows=(items&&items.length?items:[defaultNativeBanner(0)]).slice(0,12);
+    box.innerHTML=rows.map(bannerRowHtml).join('');
+    wireBannerRows();
+  }
+  function addBannerRow(type){
+    var box=document.getElementById('bannerRows'); if(!box)return;
+    var count=box.querySelectorAll('[data-banner-row]').length;
+    if(count>=12)return toast('Maksimal 12 banner.',true);
+    var empty=document.getElementById('emptyBannerManager'); if(empty)empty.remove();
+    var item=type==='native'?defaultNativeBanner(count):{type:'image',name:'Banner Gambar '+(count+1),url:''};
+    box.insertAdjacentHTML('beforeend',bannerRowHtml(item,count)); wireBannerRows();
+    var rows=box.querySelectorAll('[data-banner-row]'); if(rows.length) rows[rows.length-1].scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  function collectBannerRows(){
+    return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){
+      var type=String((row.querySelector('[data-banner-type]')||{}).value||'image');
+      var name=String((row.querySelector('[data-banner-name]')||{}).value||('Banner '+(i+1))).trim();
+      if(type==='native'){
+        return {
+          type:'native',name:name||('Banner Bawaan '+(i+1)),
+          kicker:String((row.querySelector('[data-banner-kicker]')||{}).value||'').trim(),
+          title:String((row.querySelector('[data-banner-title]')||{}).value||'').trim(),
+          description:String((row.querySelector('[data-banner-description]')||{}).value||'').trim(),
+          background_color:String((row.querySelector('[data-banner-bg]')||{}).value||'#1769e0'),
+          background_color_2:String((row.querySelector('[data-banner-bg2]')||{}).value||'#0d47a1'),
+          text_color:String((row.querySelector('[data-banner-text-color]')||{}).value||'#ffffff'),
+          accent_color:String((row.querySelector('[data-banner-accent]')||{}).value||'#ffe15a'),
+          text_position:String((row.querySelector('[data-banner-position]')||{}).value||'left'),
+          vertical_position:String((row.querySelector('[data-banner-vertical]')||{}).value||'center'),
+          button_text:String((row.querySelector('[data-banner-button-text]')||{}).value||'').trim(),
+          button_target:String((row.querySelector('[data-banner-button-target]')||{}).value||'catalog')
+        };
+      }
+      return {type:'image',name:name||('Banner Gambar '+(i+1)),url:String((row.querySelector('[data-banner-url]')||{}).value||'').trim()};
+    }).filter(function(x){return x.type==='native'?(x.title||x.description||x.kicker):x.url;}).slice(0,12);
+  }
   function datetimeLocalValue(value){ if(!value)return ''; var text=String(value).trim(); var m=text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if(m)return m[1]; try{var d=new Date(text);if(isNaN(d.getTime()))return '';var pad=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}catch(e){return '';} }
   function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','bot_menu_mode'].forEach(function(k){ if(store[k]) store[k].value=s[k]||''; }); } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } }
   function renderFlashSaleForm(){
@@ -1035,9 +1166,9 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       if(!st.on&&st.reason) statusHtml+=' <span class="chip orange">'+esc(st.reason)+'</span>';
       if(item.type==='auto'&&x.flash_sale) statusHtml+=' <span class="chip cyan">⚡ FLASH SALE</span>';
       var dateText=(x.start_at||end)?'<div class="promoCompactDate">'+esc(promoDateText(x.start_at)||'Sekarang')+' — '+esc(promoDateText(end)||'Tanpa batas')+'</div>':'';
-      var note=esc(x.name||x.description||'Tanpa deskripsi')+(x.description&&x.name?' · '+esc(x.description):'');
       var promoTitle=String(x.name||x.code||'Promo');
-      return '<article class="promoCompactCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="promoCompactHead"><div class="promoIdentity"><span class="promoIcon">'+(item.type==='voucher'?'🎟️':'🏷️')+'</span><div><span class="promoTitle">'+esc(promoTitle)+'</span><small>'+esc(item.label)+' · '+esc(x.code)+'</small></div></div><div class="promoHeadTools"><div class="promoCompactActions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div><div class="promoStatusGroup">'+statusHtml+'</div></div></div><div class="promoCompactBody"><div class="promoDiscountValue"><small>Diskon</small><b>'+esc(unifiedDiscountText(x))+'</b></div><div class="promoFacts"><span title="'+esc(target)+'"><b>Target</b> '+esc(target)+'</span><span><b>Syarat</b> '+esc(minQty)+' item'+(minSpend?' · '+rupiah(minSpend):'')+'</span><span><b>Dipakai</b> '+esc(st.used)+' / '+esc(limit)+'</span></div></div><p class="promoCompactNote">'+note+'</p>'+dateText+'</article>';
+      var note=x.description&&String(x.description).trim()!==promoTitle.trim()?'<p class="promoCompactNote">'+esc(x.description)+'</p>':'';
+      return '<article class="promoCompactCard '+(item.type==='voucher'?'voucherManual':'promoAuto')+'"><div class="promoCompactHead"><div class="promoIdentity"><span class="promoIcon">'+(item.type==='voucher'?'🎟️':'🏷️')+'</span><div><span class="promoTitle">'+esc(promoTitle)+'</span><small>'+esc(item.label)+' · '+esc(x.code)+'</small></div></div><div class="promoStatusGroup">'+statusHtml+'</div></div><div class="promoCompactBody"><div class="promoDiscountValue"><small>Diskon</small><b>'+esc(unifiedDiscountText(x))+'</b></div><div class="promoFacts"><span title="'+esc(target)+'"><b>Target</b> '+esc(target)+'</span><span><b>Syarat</b> '+esc(minQty)+' item'+(minSpend?' · '+rupiah(minSpend):'')+'</span><span><b>Dipakai</b> '+esc(st.used)+' / '+esc(limit)+'</span></div></div>'+note+dateText+'<div class="promoCompactActions promoBottomActions"><button class="btn small cyan" data-edit-unified="'+esc(item.type)+'|'+esc(x.code)+'">Edit</button><button class="btn small red" data-delete-unified="'+esc(item.type)+'|'+esc(x.code)+'">Hapus</button></div></article>';
     }).join('')||'<div class="empty">Belum ada promo atau voucher.</div>';
     document.querySelectorAll('[data-edit-unified]').forEach(function(btn){btn.onclick=function(){ var parts=btn.dataset.editUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); var item=(type==='voucher'?state.vouchers:state.promos).find(function(x){return String(x.code).toUpperCase()===String(code).toUpperCase();}); fillPromoUnified(type,item); };});
     document.querySelectorAll('[data-delete-unified]').forEach(function(btn){btn.onclick=async function(){ var parts=btn.dataset.deleteUnified.split('|'); var type=parts[0]; var code=parts.slice(1).join('|'); if(!confirm('Hapus '+(type==='voucher'?'voucher':'promo')+' '+code+'?')) return; await post(type==='voucher'?'delete-voucher':'promo-delete', type==='voucher'?{kode:code}:{code:code}); };});
@@ -1133,9 +1264,9 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   };
   var addVariantToggle=document.getElementById('addVariantToggle'); if(addVariantToggle) addVariantToggle.onchange=toggleAddVariantBuilder;
   var addVariantRowBtn=document.getElementById('addVariantRow'); if(addVariantRowBtn) addVariantRowBtn.onclick=function(){ addVariantRow(); };
-  var addBannerRowBtn=document.getElementById('addBannerRow'); if(addBannerRowBtn) addBannerRowBtn.onclick=addBannerRow;
+  var addImageBannerRow=document.getElementById('addImageBannerRow'); if(addImageBannerRow) addImageBannerRow.onclick=function(){addBannerRow('image');}; var addNativeBannerRow=document.getElementById('addNativeBannerRow'); if(addNativeBannerRow) addNativeBannerRow.onclick=function(){addBannerRow('native');};
   var storeSettingsForm=document.getElementById('storeSettingsForm'); if(storeSettingsForm) storeSettingsForm.onsubmit=async function(e){e.preventDefault(); await post('save-settings',formDataRaw(e.target));};
-  var bannerSettingsForm=document.getElementById('bannerSettingsForm'); if(bannerSettingsForm) bannerSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var banners=collectBannerRows(); d.store_description=''; d.banner_items=JSON.stringify(banners); d.banner_urls=banners.map(function(x){return x.url;}).join('\n'); d.banner_url=banners.length?banners[0].url:''; d.banner_interval_seconds=Math.max(3,Math.min(15,Number(d.banner_interval_seconds||5))); await post('save-settings',d);};
+  var bannerSettingsForm=document.getElementById('bannerSettingsForm'); if(bannerSettingsForm) bannerSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var banners=collectBannerRows(); var imageBanners=banners.filter(function(x){return x.type==='image'&&x.url;}); d.store_description=''; d.banner_items=JSON.stringify(banners); d.banner_urls=imageBanners.map(function(x){return x.url;}).join('\n'); d.banner_url=imageBanners.length?imageBanners[0].url:''; d.banner_interval_seconds=Math.max(3,Math.min(15,Number(d.banner_interval_seconds||5))); await post('save-settings',d);};
   var startMediaForm=document.getElementById('startMediaForm'); if(startMediaForm) startMediaForm.onsubmit=async function(e){e.preventDefault(); await post('save-settings',formDataRaw(e.target));};
   var walletSettingsForm=document.getElementById('walletSettingsForm'); if(walletSettingsForm) walletSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var min=Math.max(1000,Number(d.topup_min_amount||0)); var max=Math.max(min,Number(d.topup_max_amount||0)); d.topup_min_amount=min; d.topup_max_amount=max; d.referral_reward_amount=Math.max(0,Number(d.referral_reward_amount||0)); await post('save-settings',d);};
   var flashSaleForm=document.getElementById('flashSaleForm'); if(flashSaleForm) flashSaleForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var selected=(state.promos||[]).filter(function(p){return p.flash_sale;}); if(String(d.flash_sale_enabled)==='true'){ if(!d.flash_sale_start_at||!d.flash_sale_end_at) return toast('Isi waktu mulai dan berakhir Flash Sale.',true); if(new Date(d.flash_sale_end_at).getTime()<=new Date(d.flash_sale_start_at).getTime()) return toast('Waktu berakhir harus setelah waktu mulai.',true); if(!selected.length) return toast('Aktifkan Flash Sale pada minimal satu Promo Otomatis.',true); } await post('save-settings',d); };

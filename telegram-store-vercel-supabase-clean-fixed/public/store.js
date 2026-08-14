@@ -37,6 +37,7 @@
     walletBalanceChip: $('walletBalanceChip'), walletBalanceValue: $('walletBalanceValue'),
     telegramNotice: $('telegramNotice'), hero: $('hero'), heroTitle: $('heroTitle'), heroDescription: $('heroDescription'),
     heroCarousel: $('heroCarousel'), heroTrack: $('heroTrack'), heroDots: $('heroDots'),
+    marketplaceGuideRow: $('marketplaceGuideRow'), marketplaceHowToButton: $('marketplaceHowToButton'), howToModal: $('howToModal'), howToStartShopping: $('howToStartShopping'),
     flashSaleSection: $('flashSaleSection'), flashSaleTitle: $('flashSaleTitle'), flashSaleGrid: $('flashSaleGrid'),
     flashHours: $('flashHours'), flashMinutes: $('flashMinutes'), flashSeconds: $('flashSeconds'),
     customerServiceBubble: $('customerServiceBubble'), groupFooter: $('groupFooter'),
@@ -120,6 +121,13 @@
     var url = telegramUrl();
     if (!url) return toast('BOT_USERNAME belum diatur di Vercel.', true);
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.location.href = url;
+  }
+  function openMarketplaceHowTo() {
+    if (els.howToModal) openModal(els.howToModal);
+  }
+  function scrollToCatalog() {
+    var catalog = $('catalogSection');
+    if (catalog) catalog.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function setLink(el, value) {
     if (!el) return;
@@ -251,12 +259,35 @@
     if (Number(state.bannerCount || 0) < 2) return;
     state.bannerTimer = setInterval(function () { goToBanner(state.bannerIndex + 1, true); }, state.bannerInterval);
   }
+  function renderNativeBannerSlide(item) {
+    var position = ['left','center','right'].indexOf(String(item.text_position || 'left')) >= 0 ? String(item.text_position) : 'left';
+    var vertical = ['top','center','bottom'].indexOf(String(item.vertical_position || 'center')) >= 0 ? String(item.vertical_position) : 'center';
+    var bg1 = String(item.background_color || '#1769e0');
+    var bg2 = String(item.background_color_2 || '#0d47a1');
+    var textColor = String(item.text_color || '#ffffff');
+    var accent = String(item.accent_color || '#ffe15a');
+    var target = ['catalog','cara_order','none'].indexOf(String(item.button_target || 'catalog')) >= 0 ? String(item.button_target || 'catalog') : 'catalog';
+    var button = target !== 'none' && item.button_text
+      ? '<button class="native-banner-button" type="button" data-banner-action="' + escapeHtml(target) + '" style="--banner-accent:' + escapeHtml(accent) + '">' + escapeHtml(item.button_text) + '</button>'
+      : '';
+    return '<div class="hero-slide hero-native-slide pos-' + position + ' vpos-' + vertical + '" style="--banner-bg1:' + escapeHtml(bg1) + ';--banner-bg2:' + escapeHtml(bg2) + ';--banner-text:' + escapeHtml(textColor) + ';--banner-accent:' + escapeHtml(accent) + '"><div class="native-banner-decoration" aria-hidden="true"><i></i><i></i><i></i></div><div class="native-banner-content">' +
+      (item.kicker ? '<span class="native-banner-kicker">' + escapeHtml(item.kicker) + '</span>' : '') +
+      (item.title ? '<strong class="native-banner-title">' + escapeHtml(item.title) + '</strong>' : '') +
+      (item.description ? '<p class="native-banner-description">' + escapeHtml(item.description) + '</p>' : '') +
+      button + '</div></div>';
+  }
+  function renderHeroSlide(item, index) {
+    if (String(item && item.type || 'image') === 'native') return renderNativeBannerSlide(item || {});
+    return '<div class="hero-slide hero-image-slide"><img src="' + escapeHtml(item.url || '') + '" alt="Banner promosi ' + (index + 1) + '"></div>';
+  }
   function renderHeroBanners(settings) {
-    var items = Array.isArray(settings.banner_items) ? settings.banner_items.filter(function (item) { return item && item.url; }) : [];
+    var items = Array.isArray(settings.banner_items) ? settings.banner_items.filter(function (item) {
+      return item && (String(item.type || 'image') === 'native' || item.url);
+    }) : [];
     if (!items.length) {
       var legacy = Array.isArray(settings.banner_urls) ? settings.banner_urls.filter(Boolean) : [];
       if (!legacy.length && settings.banner_url) legacy = [settings.banner_url];
-      items = legacy.map(function (url, index) { return { name: 'Banner ' + (index + 1), url: url }; });
+      items = legacy.map(function (url, index) { return { type: 'image', name: 'Banner ' + (index + 1), url: url }; });
     }
     clearBannerTimer();
     state.bannerIndex = 0;
@@ -272,9 +303,7 @@
     state.bannerInterval = Math.max(3000, Math.min(15000, Number(settings.banner_interval_ms || 5000)));
     var renderItems = items;
     if (items.length > 1) renderItems = [items[items.length - 1]].concat(items, [items[0]]);
-    els.heroTrack.innerHTML = renderItems.map(function (item, index) {
-      return '<div class="hero-slide"><img src="' + escapeHtml(item.url) + '" alt="Banner promosi ' + (index + 1) + '"></div>';
-    }).join('');
+    els.heroTrack.innerHTML = renderItems.map(function (item, index) { return renderHeroSlide(item, index); }).join('');
     els.heroDots.innerHTML = items.length > 1 ? items.map(function (item, index) {
       return '<button class="hero-dot' + (index === 0 ? ' active' : '') + '" type="button" data-banner-index="' + index + '" aria-label="Tampilkan banner ' + (index + 1) + '"></button>';
     }).join('') : '';
@@ -283,7 +312,15 @@
       dot.addEventListener('click', function () { goToBanner(Number(dot.dataset.bannerIndex), true); startBannerTimer(); });
     });
     els.heroTrack.querySelectorAll('img').forEach(function (img) {
-      img.onerror = function () { img.style.display = 'none'; };
+      img.onerror = function () { img.style.display = 'none'; img.parentElement.classList.add('image-error'); };
+    });
+    els.heroTrack.querySelectorAll('[data-banner-action]').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var action = String(button.dataset.bannerAction || 'catalog');
+        if (action === 'cara_order') openMarketplaceHowTo();
+        else scrollToCatalog();
+      });
     });
     els.heroTrack.ontransitionend = function (event) {
       if (event && event.propertyName !== 'transform') return;
@@ -427,6 +464,8 @@
     }
     renderHeroBanners(settings);
     renderFlashSale(settings);
+    var menuMode = ['marketplace','products','both'].indexOf(String(settings.bot_menu_mode || 'both').toLowerCase()) >= 0 ? String(settings.bot_menu_mode || 'both').toLowerCase() : 'both';
+    if (els.marketplaceGuideRow) els.marketplaceGuideRow.classList.toggle('hidden', menuMode === 'products');
     setLink(els.customerServiceBubble, settings.customer_service_link);
     setLink(els.groupFooter, settings.group_link);
     var viewer = state.catalog.viewer || {};
@@ -971,7 +1010,10 @@
   document.querySelectorAll('[data-close="product"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.productModal); }); });
   document.querySelectorAll('[data-close="history"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.historyModal); }); });
   document.querySelectorAll('[data-close="confirm"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.confirmModal); }); });
-  $('shopNowButton').addEventListener('click', function () { $('catalogSection').scrollIntoView({ behavior: 'smooth' }); });
+  document.querySelectorAll('[data-close="howto"]').forEach(function (el) { el.addEventListener('click', function () { closeModal(els.howToModal); }); });
+  $('shopNowButton').addEventListener('click', scrollToCatalog);
+  if (els.marketplaceHowToButton) els.marketplaceHowToButton.addEventListener('click', openMarketplaceHowTo);
+  if (els.howToStartShopping) els.howToStartShopping.addEventListener('click', function () { closeModal(els.howToModal); scrollToCatalog(); });
   $('openTelegramTop').addEventListener('click', openTelegram);
   $('historyButton').addEventListener('click', openHistory);
   $('mobileOrders').addEventListener('click', openHistory);
@@ -1005,6 +1047,7 @@
   window.addEventListener('keydown', function (event) {
     if (event.key !== 'Escape') return;
     if (els.confirmModal.classList.contains('show')) closeModal(els.confirmModal);
+    else if (els.howToModal && els.howToModal.classList.contains('show')) closeModal(els.howToModal);
     else if (els.productModal.classList.contains('show')) closeModal(els.productModal);
     else if (els.historyModal.classList.contains('show')) closeModal(els.historyModal);
     else if (els.paymentModal.classList.contains('show')) closeModal(els.paymentModal);

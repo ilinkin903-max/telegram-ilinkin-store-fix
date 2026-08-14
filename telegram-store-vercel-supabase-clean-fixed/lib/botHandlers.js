@@ -337,10 +337,9 @@ function homeKeyboard(req, userId, settings = {}) {
     rows.push([{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }]);
   }
   rows.push([{ text: '‹💰› Saldo, Top Up & Referral', callback_data: 'wallet' }]);
-  rows.push([
-    { text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' },
-    { text: '‹❓› Cara Order', callback_data: 'caraorder' }
-  ]);
+  const historyRow = [{ text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' }];
+  if (menuMode !== 'marketplace') historyRow.push({ text: '‹❓› Cara Order', callback_data: 'caraorder' });
+  rows.push(historyRow);
   rows.push([{ text: '‹📊› Stok', callback_data: 'stok' }]);
   const miniAppUrl = getMiniAppUrl(req);
   if (miniAppUrl && isOwner(userId)) rows.push([{ text: '‹🧩› Reseller Dashboard', web_app: { url: miniAppUrl } }]);

@@ -34,10 +34,13 @@ test('v52 memakai tema biru dan mendukung logo URL', () => {
   assert.match(js, /settings\.logo_url/);
 });
 
-test('dashboard banner memakai baris nama + link dengan tambah dan hapus', () => {
-  assert.match(reseller, /id="addBannerRow"/);
+test('dashboard banner memakai manager gambar/bawaan dengan urutan dan hapus', () => {
+  assert.match(reseller, /id="addImageBannerRow"/);
+  assert.match(reseller, /id="addNativeBannerRow"/);
   assert.match(reseller, /data-banner-name/);
   assert.match(reseller, /data-banner-url/);
+  assert.match(reseller, /data-banner-up/);
+  assert.match(reseller, /data-banner-down/);
   assert.match(reseller, /data-remove-banner/);
   assert.match(reseller, /name="banner_items"/);
 });

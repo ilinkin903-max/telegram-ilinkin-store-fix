@@ -65,6 +65,14 @@
         </div>
       </section>
 
+      <section id="marketplaceGuideRow" class="marketplace-guide-row hidden" aria-label="Panduan pemesanan">
+        <div class="marketplace-guide-copy">
+          <span class="marketplace-guide-icon" aria-hidden="true">?</span>
+          <span><strong>Baru pertama belanja?</strong><small>Lihat alur order, pembayaran, dan pengiriman produk.</small></span>
+        </div>
+        <button id="marketplaceHowToButton" class="button button-secondary" type="button">Cara Order</button>
+      </section>
+
       <section id="flashSaleSection" class="flash-sale-section hidden" aria-label="Flash Sale">
         <div class="flash-sale-head">
           <div class="flash-sale-title-wrap">
@@ -263,6 +271,24 @@
       <h2 id="historyTitle">Riwayat Pesanan</h2>
       <p id="historySubtitle" class="payment-subtitle"></p>
       <div id="historyList" class="history-list"></div>
+    </section>
+  </div>
+
+  <div id="howToModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="howto"></div>
+    <section class="modal-sheet howto-sheet" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+      <button class="modal-close" data-close="howto" type="button" aria-label="Tutup">×</button>
+      <p class="eyebrow">PANDUAN MARKETPLACE</p>
+      <h2 id="howToTitle">Cara Order</h2>
+      <p class="payment-subtitle">Belanja dibuat singkat supaya pembayaran dan pengiriman mudah dipahami.</p>
+      <div class="howto-steps">
+        <article><b>1</b><div><strong>Pilih produk</strong><small>Buka produk, pilih varian dan jumlah yang diinginkan.</small></div></article>
+        <article><b>2</b><div><strong>Masukkan voucher bila ada</strong><small>Total pada konfirmasi akan langsung menghitung promo dan voucher yang valid.</small></div></article>
+        <article><b>3</b><div><strong>Periksa pesanan</strong><small>Tekan Beli Sekarang / PO lalu pastikan produk, varian, jumlah, dan total sudah benar.</small></div></article>
+        <article><b>4</b><div><strong>Pilih pembayaran</strong><small>Gunakan Saldo Bot bila mencukupi atau QRIS untuk pembayaran otomatis.</small></div></article>
+        <article><b>5</b><div><strong>Tunggu pengiriman</strong><small>Produk AUTO dikirim otomatis. Produk PRE-ORDER dikirim ke chat setelah reseller menyiapkan akun/produk.</small></div></article>
+      </div>
+      <button id="howToStartShopping" class="button button-primary button-full" type="button">Mulai Belanja</button>
     </section>
   </div>
 

@@ -82,8 +82,18 @@ function normalizePublicImageUrl(url) {
   return '';
 }
 
+function bannerHex(value, fallback) {
+  const text = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(text) ? text.toLowerCase() : fallback;
+}
+
+function bannerChoice(value, allowed, fallback) {
+  const text = String(value || '').trim().toLowerCase();
+  return allowed.includes(text) ? text : fallback;
+}
+
 function parseBannerUrls(value) {
-  return parseBannerItems(value).map((item) => item.url);
+  return parseBannerItems(value).filter((item) => item.type === 'image' && item.url).map((item) => item.url);
 }
 
 function parseBannerItems(value) {
@@ -100,21 +110,46 @@ function parseBannerItems(value) {
     }
     if (!rows.length) rows = text.split(/\r?\n|;/g);
   }
-  const unique = [];
-  const seen = new Set();
+
+  const out = [];
+  const seenImageUrls = new Set();
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
-    const name = typeof row === 'object' && row
-      ? String(row.name || row.nama || row.label || `Banner ${index + 1}`).trim()
-      : `Banner ${index + 1}`;
-    const rawUrl = typeof row === 'object' && row ? (row.url || row.link || row.image_url || '') : row;
-    const url = normalizePublicImageUrl(rawUrl);
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    unique.push({ name: name || `Banner ${index + 1}`, url });
-    if (unique.length >= 10) break;
+    const obj = row && typeof row === 'object' ? row : { url: row };
+    const type = String(obj.type || obj.kind || (obj.url || obj.link || obj.image_url ? 'image' : 'native')).trim().toLowerCase() === 'native'
+      ? 'native'
+      : 'image';
+    const name = String(obj.name || obj.nama || obj.label || `${type === 'native' ? 'Banner Bawaan' : 'Banner'} ${index + 1}`).trim();
+
+    if (type === 'native') {
+      const title = String(obj.title || obj.judul || 'Cepat, aman, langsung terkirim').trim().slice(0, 120);
+      const description = String(obj.description || obj.deskripsi || '').trim().slice(0, 260);
+      const kicker = String(obj.kicker || obj.eyebrow || '').trim().slice(0, 60);
+      if (!title && !description && !kicker) continue;
+      out.push({
+        type: 'native',
+        name: name || `Banner Bawaan ${index + 1}`,
+        kicker,
+        title,
+        description,
+        background_color: bannerHex(obj.background_color || obj.bg || obj.color, '#1769e0'),
+        background_color_2: bannerHex(obj.background_color_2 || obj.bg2 || obj.color_2, '#0d47a1'),
+        text_color: bannerHex(obj.text_color || obj.foreground_color, '#ffffff'),
+        accent_color: bannerHex(obj.accent_color || obj.button_color, '#ffe15a'),
+        text_position: bannerChoice(obj.text_position || obj.position, ['left', 'center', 'right'], 'left'),
+        vertical_position: bannerChoice(obj.vertical_position || obj.vertical, ['top', 'center', 'bottom'], 'center'),
+        button_text: String(obj.button_text || obj.cta_text || '').trim().slice(0, 40),
+        button_target: bannerChoice(obj.button_target || obj.cta_target, ['catalog', 'cara_order', 'none'], 'catalog')
+      });
+    } else {
+      const url = normalizePublicImageUrl(obj.url || obj.link || obj.image_url || '');
+      if (!url || seenImageUrls.has(url)) continue;
+      seenImageUrls.add(url);
+      out.push({ type: 'image', name: name || `Banner ${index + 1}`, url });
+    }
+    if (out.length >= 12) break;
   }
-  return unique;
+  return out;
 }
 
 function parseFlashSaleProductCodes(value) {
@@ -346,7 +381,7 @@ async function getCatalog(viewer = null) {
 
   const categories = [...new Set(publicProducts.map((product) => product.category || 'Lainnya'))].sort((a, b) => a.localeCompare(b, 'id'));
   const bannerItems = parseBannerItems(settings.banner_items || settings.banner_urls || settings.banner_url);
-  const bannerUrls = bannerItems.map((item) => item.url);
+  const bannerUrls = bannerItems.filter((item) => item.type === 'image' && item.url).map((item) => item.url);
   const bannerIntervalSeconds = Math.max(3, Math.min(15, Number(settings.banner_interval_seconds || 5)));
   return {
     settings: {
@@ -365,6 +400,9 @@ async function getCatalog(viewer = null) {
       flash_sale_product_codes: parseFlashSaleProductCodes(settings.flash_sale_products),
       customer_service_link: settings.customer_service_link || config.customerService || '',
       group_link: settings.group_link || config.channelStore || '',
+      bot_menu_mode: ['marketplace', 'products', 'both'].includes(String(settings.bot_menu_mode || '').toLowerCase())
+        ? String(settings.bot_menu_mode).toLowerCase()
+        : 'both',
       wallet_payment_enabled: String(settings.wallet_payment_enabled ?? 'true').toLowerCase() !== 'false'
     },
     bot_username: String(config.botUsername || '').replace(/^@/, ''),

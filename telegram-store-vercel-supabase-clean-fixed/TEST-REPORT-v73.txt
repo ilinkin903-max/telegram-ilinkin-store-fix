@@ -1,0 +1,23 @@
+v73-banner-manager-marketplace-howto — Test Report
+
+Pemeriksaan syntax:
+- node --check api/reseller.js: PASS
+- node --check lib/storeService.js: PASS
+- node --check lib/botHandlers.js: PASS
+- node --check public/store.js: PASS
+
+Static/source-level test suite:
+- 84 tests
+- 84 passed
+- 0 failed
+
+Cakupan utama v73:
+- Promo tidak menduplikasi judul dan tombol Edit/Hapus kembali ke bawah.
+- Dashboard dapat menambah banner gambar dan banner bawaan/native.
+- Banner bawaan mendukung teks, posisi, warna, CTA, tambah/hapus, dan pengurutan.
+- Marketplace merender banner gambar dan banner bawaan dalam satu carousel.
+- Cara Order Marketplace/Bot mengikuti pengaturan mode tombol toko.
+
+Catatan:
+- Pengujian transaksi nyata Telegram, AutoGoPay, Supabase Production, dan Vercel Production tidak dilakukan di lingkungan lokal ini.
+- v73 tidak membutuhkan migrasi SQL baru bila database v69/v72 sebelumnya sudah lengkap.
