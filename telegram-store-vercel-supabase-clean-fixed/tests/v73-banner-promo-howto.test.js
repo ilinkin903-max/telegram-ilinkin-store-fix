@@ -47,5 +47,5 @@ test('Cara Order marketplace mengikuti mode tombol toko', () => {
   assert.match(storeHtml, /id="howToModal"/);
   assert.match(storeJs, /menuMode === 'products'/);
   assert.match(storeService, /bot_menu_mode:/);
-  assert.match(botHandlers, /if \(menuMode !== 'marketplace'\) historyRow\.push/);
+  assert.match(botHandlers, /‹❓› Cara Order/);
 });

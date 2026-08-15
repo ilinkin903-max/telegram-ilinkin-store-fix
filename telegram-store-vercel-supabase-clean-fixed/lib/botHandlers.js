@@ -337,8 +337,10 @@ function homeKeyboard(req, userId, settings = {}) {
     rows.push([{ text: '‹📦› Daftar Produk', callback_data: 'daftarproduk' }]);
   }
   rows.push([{ text: '‹💰› Saldo, Top Up & Referral', callback_data: 'wallet' }]);
-  const historyRow = [{ text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' }];
-  if (menuMode !== 'marketplace') historyRow.push({ text: '‹❓› Cara Order Bot', callback_data: 'caraorder' });
+  const historyRow = [
+    { text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' },
+    { text: '‹❓› Cara Order', callback_data: 'caraorder' }
+  ];
   rows.push(historyRow);
   rows.push([{ text: '‹📊› Stok', callback_data: 'stok' }]);
   const miniAppUrl = getMiniAppUrl(req);
@@ -1763,7 +1765,37 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
   if (cmd === 'caraorder') {
-    return editMessage(query, '❓ *CARA ORDER DARI BOT TELEGRAM*\n=======================\n1. Dari menu utama tekan *Daftar Produk*\n2. Pilih produk lalu pilih varian bila tersedia\n3. Atur jumlah pesanan sesuai kebutuhan\n4. Periksa detail lalu tekan *Konfirmasi*\n5. Scan QRIS dan bayar sesuai nominal yang tampil\n6. Tekan *Cek Pembayaran* bila tombol tersedia\n7. Setelah pembayaran terdeteksi, produk AUTO dikirim ke chat Telegram; produk PRE-ORDER dikirim setelah seller menyiapkannya', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
+    const settings = await db.getShopSettings().catch(() => ({}));
+    const menuModeRaw = String(settings.bot_menu_mode || 'both').trim().toLowerCase();
+    const menuMode = ['marketplace', 'products', 'both'].includes(menuModeRaw) ? menuModeRaw : 'both';
+
+    let guide;
+    if (menuMode === 'products') {
+      guide = '❓ *CARA ORDER*\n=======================\n' +
+        '1. Klik tombol *Daftar Produk* di menu utama\n' +
+        '2. Pilih produk yang ingin dibeli\n' +
+        '3. Pilih varian jika produk memiliki beberapa pilihan\n' +
+        '4. Atur jumlah pesanan sesuai kebutuhan\n' +
+        '5. Periksa detail pesanan lalu klik *Konfirmasi*\n' +
+        '6. Pilih metode pembayaran yang tersedia\n' +
+        '7. Jika menggunakan QRIS, scan QR dan bayar sesuai nominal yang tampil\n' +
+        '8. Tunggu pembayaran terdeteksi atau klik *Cek Pembayaran Sekarang* jika diperlukan\n' +
+        '9. Produk AUTO akan dikirim ke chat Telegram setelah pembayaran berhasil; produk PRE-ORDER dikirim seller setelah disiapkan.';
+    } else {
+      guide = '❓ *CARA ORDER*\n=======================\n' +
+        '1. Klik tombol *Buka Marketplace* di menu utama bot\n' +
+        '2. Pilih produk yang ingin dibeli lalu klik *Beli Sekarang* atau *Lihat Pilihan*\n' +
+        '3. Pilih varian jika tersedia dan tentukan jumlah pesanan\n' +
+        '4. Jika mempunyai voucher, masukkan kode voucher lalu lanjutkan pesanan\n' +
+        '5. Periksa kembali detail dan total pada halaman konfirmasi\n' +
+        '6. Pilih metode pembayaran yang tersedia, lalu lanjutkan pembayaran\n' +
+        '7. Jika menggunakan QRIS, scan QR dan bayar sesuai nominal yang tampil\n' +
+        '8. Sistem akan mengecek pembayaran otomatis; tombol cek pembayaran dapat digunakan jika status belum berubah\n' +
+        '9. Setelah pembayaran berhasil, produk AUTO dikirim ke chat Telegram; produk PRE-ORDER dikirim seller setelah disiapkan.' +
+        (menuMode === 'both' ? '\n\n*Alternatif:* Anda juga bisa order langsung melalui tombol *Daftar Produk* di bot.' : '');
+    }
+
+    return editMessage(query, guide, { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
   }
   if (cmd === 'kembaliawal') {
     const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);

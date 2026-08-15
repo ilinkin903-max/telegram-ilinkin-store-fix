@@ -33,8 +33,9 @@ test('indikator banner lebih transparan', () => {
   assert.match(storeCss, /background: rgba\(255,255,255,\.42\)/);
 });
 
-test('Cara Order bot menjelaskan order dari halaman Telegram', () => {
-  assert.match(botHandlers, /Cara Order Bot/);
-  assert.match(botHandlers, /CARA ORDER DARI BOT TELEGRAM/);
+test('Cara Order bot tetap tersedia dan memberi panduan pembelian', () => {
+  assert.match(botHandlers, /‹❓› Cara Order/);
+  assert.match(botHandlers, /CARA ORDER/);
+  assert.match(botHandlers, /Buka Marketplace/);
   assert.match(botHandlers, /Daftar Produk/);
 });
