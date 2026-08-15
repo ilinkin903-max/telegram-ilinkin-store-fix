@@ -129,7 +129,7 @@ module.exports = async function handler(req, res) {
     }
 
 
-    /* v73: promo lebih bersih + editor banner gambar/bawaan */
+    /* v74: banner manager ringkas — preview + Edit + Posisi Banner */
     .promoHeadTools{display:contents!important}
     .promoCompactHead{align-items:flex-start}
     .promoCompactHead>.promoStatusGroup{margin-left:auto;max-width:46%;align-self:flex-start}
@@ -137,16 +137,34 @@ module.exports = async function handler(req, res) {
     .promoBottomActions .btn{min-width:78px}
     .bannerManagerHead{align-items:center;gap:10px}
     .bannerAddActions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
-    .bannerEditorList{display:grid;gap:12px}
-    .bannerEditorCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px;display:grid;gap:10px}
-    .bannerEditorCard.nativeBannerEditor{background:#eef7ff}
-    .bannerEditorHead{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:2px dashed #111;padding-bottom:9px}
-    .bannerEditorHead>div:first-child{min-width:0;display:flex;align-items:center;gap:8px}
-    .bannerEditorHead b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .bannerOrderTools{display:flex;align-items:center;gap:5px;flex:0 0 auto}
-    .bannerOrderNumber{width:28px;height:28px;border:2px solid #000;border-radius:7px;background:var(--yellow);display:grid;place-items:center;font-size:10px;font-weight:1000}
-    .bannerMove,.bannerDelete{min-width:32px!important;width:32px!important;height:30px!important;padding:3px!important}
-    .bannerMove:disabled{opacity:.35}
+    .bannerEditorList{display:grid;gap:14px}
+    .bannerEditorCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:10px;display:grid;gap:9px;overflow:hidden}
+    .bannerPreviewWrap{width:100%;aspect-ratio:2.39/1;border:2px solid #050505;border-radius:7px;overflow:hidden;background:#eaf2ff;position:relative}
+    .bannerAdminPreview{position:absolute;inset:0;overflow:hidden}
+    .bannerAdminPreview.image img{width:100%;height:100%;display:block;object-fit:cover}
+    .bannerAdminPreview.image .bannerPreviewEmpty{position:absolute;inset:0;display:grid;place-items:center;padding:12px;text-align:center;background:#e9f3ff;color:#58677c;font-size:11px}
+    .bannerAdminPreview.image.hasImage .bannerPreviewEmpty{display:none}
+    .bannerAdminPreview.native{display:flex;padding:clamp(9px,2.4vw,22px);background:linear-gradient(120deg,var(--preview-bg1,#1769e0),var(--preview-bg2,#0d47a1));color:var(--preview-text,#fff)}
+    .bannerAdminPreview.native.pos-left{justify-content:flex-start;text-align:left}.bannerAdminPreview.native.pos-center{justify-content:center;text-align:center}.bannerAdminPreview.native.pos-right{justify-content:flex-end;text-align:right}
+    .bannerAdminPreview.native.vpos-top{align-items:flex-start}.bannerAdminPreview.native.vpos-center{align-items:center}.bannerAdminPreview.native.vpos-bottom{align-items:flex-end}
+    .bannerPreviewContent{position:relative;z-index:2;width:68%;display:flex;flex-direction:column;align-items:flex-start;min-width:0}
+    .bannerAdminPreview.native.pos-center .bannerPreviewContent{align-items:center}.bannerAdminPreview.native.pos-right .bannerPreviewContent{align-items:flex-end}
+    .bannerPreviewKicker{display:inline-flex;max-width:100%;padding:3px 5px;border:1.5px solid #050505;border-radius:4px;background:var(--preview-accent,#ffe15a);color:#050505;font-size:clamp(5px,1vw,8px);font-weight:1000;box-shadow:1px 1px 0 #050505;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bannerPreviewTitle{display:block;max-width:100%;margin-top:5px;color:var(--preview-text,#fff);font-size:clamp(12px,3vw,27px);line-height:1;font-weight:1000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bannerPreviewDescription{max-width:100%;margin:4px 0 0;color:var(--preview-text,#fff);font-size:clamp(6px,1.2vw,10px);line-height:1.25;font-weight:800;opacity:.92;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .bannerPreviewButton{display:inline-flex;margin-top:5px;padding:3px 6px;border:1.5px solid #050505;border-radius:4px;background:var(--preview-accent,#ffe15a);color:#050505;font-size:clamp(5px,1vw,8px);font-weight:1000;box-shadow:1px 1px 0 #050505}
+    .bannerPreviewDecor{position:absolute;inset:0;pointer-events:none}.bannerPreviewDecor:before,.bannerPreviewDecor:after{content:"";position:absolute;border:2px solid rgba(5,5,5,.72);background:rgba(255,255,255,.15);transform:rotate(18deg)}
+    .bannerPreviewDecor:before{width:15%;aspect-ratio:1;right:8%;top:14%;border-radius:24%}.bannerPreviewDecor:after{width:9%;aspect-ratio:1;right:19%;bottom:12%;border-radius:50%;background:var(--preview-accent,#ffe15a)}
+    .bannerCardActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .bannerCardActions .btn{min-width:0;padding:10px 8px}
+    .bannerEditPanel,.bannerPositionPanel{display:none;border-top:2px dashed #111;padding-top:10px}
+    .bannerEditorCard.editing .bannerEditPanel{display:grid;gap:10px}
+    .bannerEditorCard.positioning .bannerPositionPanel{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .bannerPositionInfo{display:flex;align-items:center;gap:8px;font-size:11px}
+    .bannerOrderNumber{width:30px;height:30px;border:2px solid #000;border-radius:7px;background:var(--yellow);display:grid;place-items:center;font-size:11px;font-weight:1000}
+    .bannerOrderTools{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    .bannerMove{min-width:104px!important;padding:8px!important}.bannerMove:disabled{opacity:.35}
+    .bannerDelete{margin-top:2px}
     .bannerColorGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
     .colorField{border:2px solid #000;border-radius:8px;background:#fff;padding:7px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;font-weight:900}
     .colorField input{width:34px;height:28px;padding:0;border:0;background:transparent}
@@ -155,9 +173,11 @@ module.exports = async function handler(req, res) {
       .bannerManagerHead{align-items:flex-start;flex-direction:column}
       .bannerAddActions{width:100%;display:grid;grid-template-columns:1fr 1fr}
       .bannerAddActions .btn{min-width:0}
-      .bannerEditorHead{align-items:flex-start}
-      .bannerEditorHead>div:first-child{display:grid;gap:5px}
       .bannerColorGrid{grid-template-columns:1fr 1fr}
+      .bannerEditorCard{padding:8px}
+      .bannerCardActions{gap:6px}.bannerCardActions .btn{font-size:10px;padding:9px 6px}
+      .bannerEditorCard.positioning .bannerPositionPanel{align-items:stretch;flex-direction:column}
+      .bannerOrderTools{display:grid;grid-template-columns:1fr 1fr;width:100%}.bannerMove{min-width:0!important;width:100%}
       .promoCompactHead>.promoStatusGroup{max-width:52%}
       .promoBottomActions{display:grid;grid-template-columns:1fr 1fr}
       .promoBottomActions .btn{width:100%}
@@ -678,23 +698,57 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       return {type:'image',name:String(x.name||('Banner '+(i+1))),url:String(x.url||x.link||x.image_url||'')};
     });
   }
+  function bannerPreviewContentHtml(item,index){
+    item=item||{};
+    var type=String(item.type||item.kind||(item.url?'image':'native')).toLowerCase()==='native'?'native':'image';
+    if(type==='image'){
+      var url=String(item.url||'').trim();
+      return '<div class="bannerAdminPreview image'+(url?' hasImage':'')+'">'+(url?'<img src="'+esc(url)+'" alt="Preview banner '+(index+1)+'" onerror="this.style.display=\'none\';this.parentNode.classList.remove(\'hasImage\')">':'')+'<span class="bannerPreviewEmpty">Masukkan URL gambar melalui tombol Edit</span></div>';
+    }
+    var position=['left','center','right'].indexOf(String(item.text_position||'left'))>=0?String(item.text_position):'left';
+    var vertical=['top','center','bottom'].indexOf(String(item.vertical_position||'center'))>=0?String(item.vertical_position):'center';
+    var bg1=String(item.background_color||'#1769e0'), bg2=String(item.background_color_2||'#0d47a1'), text=String(item.text_color||'#ffffff'), accent=String(item.accent_color||'#ffe15a');
+    return '<div class="bannerAdminPreview native pos-'+position+' vpos-'+vertical+'" style="--preview-bg1:'+esc(bg1)+';--preview-bg2:'+esc(bg2)+';--preview-text:'+esc(text)+';--preview-accent:'+esc(accent)+'"><span class="bannerPreviewDecor" aria-hidden="true"></span><div class="bannerPreviewContent">'+
+      (item.kicker?'<span class="bannerPreviewKicker">'+esc(item.kicker)+'</span>':'')+
+      (item.title?'<strong class="bannerPreviewTitle">'+esc(item.title)+'</strong>':'')+
+      (item.description?'<span class="bannerPreviewDescription">'+esc(item.description)+'</span>':'')+
+      (item.button_target!=='none'&&item.button_text?'<span class="bannerPreviewButton">'+esc(item.button_text)+'</span>':'')+
+      '</div></div>';
+  }
+  function bannerRowData(row,index){
+    var type=String((row.querySelector('[data-banner-type]')||{}).value||'image');
+    var name=String((row.querySelector('[data-banner-name]')||{}).value||('Banner '+(index+1))).trim();
+    if(type==='native'){
+      return {type:'native',name:name||('Banner Bawaan '+(index+1)),kicker:String((row.querySelector('[data-banner-kicker]')||{}).value||'').trim(),title:String((row.querySelector('[data-banner-title]')||{}).value||'').trim(),description:String((row.querySelector('[data-banner-description]')||{}).value||'').trim(),background_color:String((row.querySelector('[data-banner-bg]')||{}).value||'#1769e0'),background_color_2:String((row.querySelector('[data-banner-bg2]')||{}).value||'#0d47a1'),text_color:String((row.querySelector('[data-banner-text-color]')||{}).value||'#ffffff'),accent_color:String((row.querySelector('[data-banner-accent]')||{}).value||'#ffe15a'),text_position:String((row.querySelector('[data-banner-position]')||{}).value||'left'),vertical_position:String((row.querySelector('[data-banner-vertical]')||{}).value||'center'),button_text:String((row.querySelector('[data-banner-button-text]')||{}).value||'').trim(),button_target:String((row.querySelector('[data-banner-button-target]')||{}).value||'catalog')};
+    }
+    return {type:'image',name:name||('Banner Gambar '+(index+1)),url:String((row.querySelector('[data-banner-url]')||{}).value||'').trim()};
+  }
   function bannerRowHtml(item,index){
     item=item||{};
     var type=String(item.type||item.kind||(item.url?'image':'native')).toLowerCase()==='native'?'native':'image';
     if(type==='native') item=Object.assign(defaultNativeBanner(index),item,{type:'native'});
-    var order='<div class="bannerOrderTools"><span class="bannerOrderNumber">'+(index+1)+'</span><button class="btn small bannerMove" type="button" data-banner-up title="Naikkan">↑</button><button class="btn small bannerMove" type="button" data-banner-down title="Turunkan">↓</button><button class="btn small red bannerDelete" type="button" data-remove-banner title="Hapus">×</button></div>';
-    var head='<div class="bannerEditorHead"><div><span class="chip '+(type==='native'?'green':'cyan')+'">'+(type==='native'?'BAWAAN':'GAMBAR')+'</span><b>'+esc(item.name||('Banner '+(index+1)))+'</b></div>'+order+'</div>';
     var common='<div class="field"><label class="label">Nama Internal Banner</label><input class="input" data-banner-name placeholder="Contoh: Promo Agustus" value="'+esc(item.name||('Banner '+(index+1)))+'"></div><input type="hidden" data-banner-type value="'+type+'">';
+    var editor='';
     if(type==='image'){
-      return '<div class="bannerEditorCard imageBannerEditor" data-banner-row>'+head+common+'<div class="field"><label class="label">URL Gambar Banner</label><input class="input bannerUrl" data-banner-url placeholder="https://domain.com/banner.jpg atau link Google Drive" value="'+esc(item.url||'')+'"></div><p class="help">Nama hanya untuk dashboard dan tidak ditampilkan di Marketplace.</p></div>';
+      editor=common+'<div class="field"><label class="label">URL Gambar Banner</label><input class="input bannerUrl" data-banner-url placeholder="https://domain.com/banner.jpg atau link Google Drive" value="'+esc(item.url||'')+'"></div><p class="help">Nama hanya untuk dashboard dan tidak ditampilkan di Marketplace.</p>';
+    }else{
+      editor=common+
+        '<div class="row"><div class="field"><label class="label">Teks Kecil</label><input class="input" data-banner-kicker value="'+esc(item.kicker||'')+'" placeholder="BELANJA PRODUK DIGITAL"></div><div class="field"><label class="label">Judul Utama</label><input class="input" data-banner-title value="'+esc(item.title||'')+'" placeholder="Cepat, aman, langsung terkirim"></div></div>'+
+        '<div class="field"><label class="label">Deskripsi</label><textarea class="textarea compact" data-banner-description placeholder="Deskripsi singkat banner">'+esc(item.description||'')+'</textarea></div>'+
+        '<div class="bannerColorGrid"><label class="colorField"><span>Warna 1</span><input type="color" data-banner-bg value="'+esc(item.background_color||'#1769e0')+'"></label><label class="colorField"><span>Warna 2</span><input type="color" data-banner-bg2 value="'+esc(item.background_color_2||'#0d47a1')+'"></label><label class="colorField"><span>Warna Teks</span><input type="color" data-banner-text-color value="'+esc(item.text_color||'#ffffff')+'"></label><label class="colorField"><span>Warna Aksen</span><input type="color" data-banner-accent value="'+esc(item.accent_color||'#ffe15a')+'"></label></div>'+
+        '<div class="row"><div class="field"><label class="label">Posisi Teks</label><select class="select" data-banner-position><option value="left"'+(item.text_position==='left'?' selected':'')+'>Kiri</option><option value="center"'+(item.text_position==='center'?' selected':'')+'>Tengah</option><option value="right"'+(item.text_position==='right'?' selected':'')+'>Kanan</option></select></div><div class="field"><label class="label">Posisi Vertikal</label><select class="select" data-banner-vertical><option value="top"'+(item.vertical_position==='top'?' selected':'')+'>Atas</option><option value="center"'+(item.vertical_position==='center'?' selected':'')+'>Tengah</option><option value="bottom"'+(item.vertical_position==='bottom'?' selected':'')+'>Bawah</option></select></div></div>'+
+        '<div class="row"><div class="field"><label class="label">Teks Tombol</label><input class="input" data-banner-button-text value="'+esc(item.button_text||'Belanja Sekarang')+'" placeholder="Belanja Sekarang"></div><div class="field"><label class="label">Aksi Tombol</label><select class="select" data-banner-button-target><option value="catalog"'+(item.button_target==='catalog'?' selected':'')+'>Buka Katalog</option><option value="cara_order"'+(item.button_target==='cara_order'?' selected':'')+'>Cara Order</option><option value="none"'+(item.button_target==='none'?' selected':'')+'>Tanpa Tombol</option></select></div></div>'+
+        '<p class="help">Banner bawaan dirender langsung oleh Marketplace, jadi tidak perlu gambar.</p>';
     }
-    return '<div class="bannerEditorCard nativeBannerEditor" data-banner-row>'+head+common+
-      '<div class="row"><div class="field"><label class="label">Teks Kecil</label><input class="input" data-banner-kicker value="'+esc(item.kicker||'')+'" placeholder="BELANJA PRODUK DIGITAL"></div><div class="field"><label class="label">Judul Utama</label><input class="input" data-banner-title value="'+esc(item.title||'')+'" placeholder="Cepat, aman, langsung terkirim"></div></div>'+
-      '<div class="field"><label class="label">Deskripsi</label><textarea class="textarea compact" data-banner-description placeholder="Deskripsi singkat banner">'+esc(item.description||'')+'</textarea></div>'+
-      '<div class="bannerColorGrid"><label class="colorField"><span>Warna 1</span><input type="color" data-banner-bg value="'+esc(item.background_color||'#1769e0')+'"></label><label class="colorField"><span>Warna 2</span><input type="color" data-banner-bg2 value="'+esc(item.background_color_2||'#0d47a1')+'"></label><label class="colorField"><span>Warna Teks</span><input type="color" data-banner-text-color value="'+esc(item.text_color||'#ffffff')+'"></label><label class="colorField"><span>Warna Aksen</span><input type="color" data-banner-accent value="'+esc(item.accent_color||'#ffe15a')+'"></label></div>'+
-      '<div class="row"><div class="field"><label class="label">Posisi Teks</label><select class="select" data-banner-position><option value="left"'+(item.text_position==='left'?' selected':'')+'>Kiri</option><option value="center"'+(item.text_position==='center'?' selected':'')+'>Tengah</option><option value="right"'+(item.text_position==='right'?' selected':'')+'>Kanan</option></select></div><div class="field"><label class="label">Posisi Vertikal</label><select class="select" data-banner-vertical><option value="top"'+(item.vertical_position==='top'?' selected':'')+'>Atas</option><option value="center"'+(item.vertical_position==='center'?' selected':'')+'>Tengah</option><option value="bottom"'+(item.vertical_position==='bottom'?' selected':'')+'>Bawah</option></select></div></div>'+
-      '<div class="row"><div class="field"><label class="label">Teks Tombol</label><input class="input" data-banner-button-text value="'+esc(item.button_text||'Belanja Sekarang')+'" placeholder="Belanja Sekarang"></div><div class="field"><label class="label">Aksi Tombol</label><select class="select" data-banner-button-target><option value="catalog"'+(item.button_target==='catalog'?' selected':'')+'>Buka Katalog</option><option value="cara_order"'+(item.button_target==='cara_order'?' selected':'')+'>Cara Order</option><option value="none"'+(item.button_target==='none'?' selected':'')+'>Tanpa Tombol</option></select></div></div>'+
-      '<p class="help">Banner bawaan dirender langsung oleh Marketplace, jadi tidak perlu gambar. Cocok untuk pengumuman, promo singkat, atau panduan belanja.</p></div>';
+    editor+='<button class="btn red bannerDelete" type="button" data-remove-banner>Hapus Banner</button>';
+    return '<div class="bannerEditorCard '+(type==='native'?'nativeBannerEditor':'imageBannerEditor')+'" data-banner-row><div class="bannerPreviewWrap" data-banner-preview-wrap>'+bannerPreviewContentHtml(item,index)+'</div><div class="bannerCardActions"><button class="btn cyan small" type="button" data-banner-edit-toggle>✎ Edit</button><button class="btn yellow small bannerPositionButton" type="button" data-banner-position-toggle>↕ Posisi Banner</button></div><div class="bannerEditPanel">'+editor+'</div><div class="bannerPositionPanel"><div class="bannerPositionInfo"><span class="bannerOrderNumber">'+(index+1)+'</span><span>Posisi banner dalam slider</span></div><div class="bannerOrderTools"><button class="btn small bannerMove" type="button" data-banner-up>← Sebelumnya</button><button class="btn small bannerMove" type="button" data-banner-down>Berikutnya →</button></div></div></div>';
+  }
+  function syncBannerPreview(row){
+    if(!row)return;
+    var rows=Array.from(document.querySelectorAll('[data-banner-row]'));
+    var index=Math.max(0,rows.indexOf(row));
+    var wrap=row.querySelector('[data-banner-preview-wrap]');
+    if(wrap)wrap.innerHTML=bannerPreviewContentHtml(bannerRowData(row,index),index);
   }
   function renumberBannerRows(){
     var rows=Array.from(document.querySelectorAll('[data-banner-row]'));
@@ -702,13 +756,16 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var n=row.querySelector('.bannerOrderNumber'); if(n)n.textContent=String(i+1);
       var up=row.querySelector('[data-banner-up]'); var down=row.querySelector('[data-banner-down]');
       if(up)up.disabled=i===0; if(down)down.disabled=i===rows.length-1;
+      syncBannerPreview(row);
     });
   }
   function wireBannerRows(){
-    document.querySelectorAll('[data-remove-banner]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row)row.remove();renumberBannerRows();};});
+    document.querySelectorAll('[data-banner-edit-toggle]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(!row)return;var open=!row.classList.contains('editing');row.classList.toggle('editing',open);row.classList.remove('positioning');btn.textContent=open?'✕ Tutup Edit':'✎ Edit';var pos=row.querySelector('[data-banner-position-toggle]');if(pos)pos.textContent='↕ Posisi Banner';};});
+    document.querySelectorAll('[data-banner-position-toggle]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(!row)return;var open=!row.classList.contains('positioning');row.classList.toggle('positioning',open);row.classList.remove('editing');btn.textContent=open?'✕ Tutup Posisi':'↕ Posisi Banner';var edit=row.querySelector('[data-banner-edit-toggle]');if(edit)edit.textContent='✎ Edit';};});
+    document.querySelectorAll('[data-remove-banner]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row&&confirm('Hapus banner ini?'))row.remove();renumberBannerRows();};});
     document.querySelectorAll('[data-banner-up]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row&&row.previousElementSibling)row.parentNode.insertBefore(row,row.previousElementSibling);renumberBannerRows();};});
     document.querySelectorAll('[data-banner-down]').forEach(function(btn){btn.onclick=function(){var row=btn.closest('[data-banner-row]');if(row&&row.nextElementSibling)row.parentNode.insertBefore(row.nextElementSibling,row);renumberBannerRows();};});
-    document.querySelectorAll('[data-banner-name]').forEach(function(input){input.oninput=function(){var row=input.closest('[data-banner-row]');var title=row&&row.querySelector('.bannerEditorHead b');if(title)title.textContent=String(input.value||'Banner').trim()||'Banner';};});
+    document.querySelectorAll('[data-banner-row] input,[data-banner-row] textarea,[data-banner-row] select').forEach(function(input){var handler=function(){syncBannerPreview(input.closest('[data-banner-row]'));};input.oninput=handler;input.onchange=handler;});
     renumberBannerRows();
   }
   function renderBannerRows(items){
@@ -724,30 +781,10 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var empty=document.getElementById('emptyBannerManager'); if(empty)empty.remove();
     var item=type==='native'?defaultNativeBanner(count):{type:'image',name:'Banner Gambar '+(count+1),url:''};
     box.insertAdjacentHTML('beforeend',bannerRowHtml(item,count)); wireBannerRows();
-    var rows=box.querySelectorAll('[data-banner-row]'); if(rows.length) rows[rows.length-1].scrollIntoView({behavior:'smooth',block:'nearest'});
+    var rows=box.querySelectorAll('[data-banner-row]'); if(rows.length){var last=rows[rows.length-1];last.classList.add('editing');var edit=last.querySelector('[data-banner-edit-toggle]');if(edit)edit.textContent='✕ Tutup Edit';last.scrollIntoView({behavior:'smooth',block:'nearest'});}
   }
   function collectBannerRows(){
-    return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){
-      var type=String((row.querySelector('[data-banner-type]')||{}).value||'image');
-      var name=String((row.querySelector('[data-banner-name]')||{}).value||('Banner '+(i+1))).trim();
-      if(type==='native'){
-        return {
-          type:'native',name:name||('Banner Bawaan '+(i+1)),
-          kicker:String((row.querySelector('[data-banner-kicker]')||{}).value||'').trim(),
-          title:String((row.querySelector('[data-banner-title]')||{}).value||'').trim(),
-          description:String((row.querySelector('[data-banner-description]')||{}).value||'').trim(),
-          background_color:String((row.querySelector('[data-banner-bg]')||{}).value||'#1769e0'),
-          background_color_2:String((row.querySelector('[data-banner-bg2]')||{}).value||'#0d47a1'),
-          text_color:String((row.querySelector('[data-banner-text-color]')||{}).value||'#ffffff'),
-          accent_color:String((row.querySelector('[data-banner-accent]')||{}).value||'#ffe15a'),
-          text_position:String((row.querySelector('[data-banner-position]')||{}).value||'left'),
-          vertical_position:String((row.querySelector('[data-banner-vertical]')||{}).value||'center'),
-          button_text:String((row.querySelector('[data-banner-button-text]')||{}).value||'').trim(),
-          button_target:String((row.querySelector('[data-banner-button-target]')||{}).value||'catalog')
-        };
-      }
-      return {type:'image',name:name||('Banner Gambar '+(i+1)),url:String((row.querySelector('[data-banner-url]')||{}).value||'').trim()};
-    }).filter(function(x){return x.type==='native'?(x.title||x.description||x.kicker):x.url;}).slice(0,12);
+    return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){return bannerRowData(row,i);}).filter(function(x){return x.type==='native'?(x.title||x.description||x.kicker):x.url;}).slice(0,12);
   }
   function datetimeLocalValue(value){ if(!value)return ''; var text=String(value).trim(); var m=text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if(m)return m[1]; try{var d=new Date(text);if(isNaN(d.getTime()))return '';var pad=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}catch(e){return '';} }
   function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','bot_menu_mode'].forEach(function(k){ if(store[k]) store[k].value=s[k]||''; }); } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } }

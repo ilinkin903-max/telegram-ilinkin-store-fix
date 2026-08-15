@@ -1,0 +1,19 @@
+v74-banner-compact-swipe-bot-howto — Test Report
+
+PASS — Syntax source utama:
+- api/reseller.js
+- public/store.js
+- lib/botHandlers.js
+
+PASS — Dashboard HTML render:
+- api/reseller.js berhasil dirender menjadi HTML
+- JavaScript inline hasil render lolos node --check
+
+PASS — Regression + feature tests terkait: 15/15
+- tests/v71-classic-bottom-nav-ui.test.js
+- tests/v72-ui-polish.test.js
+- tests/v73-banner-promo-howto.test.js
+- tests/v74-banner-compact-swipe.test.js
+
+Catatan full test suite:
+Sandbox tidak menyelesaikan npm ci sebelum timeout sehingga dependency pihak ketiga seperti axios/dotenv tidak terpasang lengkap. Ini adalah keterbatasan environment pengujian, bukan kegagalan syntax/perubahan v74. Vercel akan menginstal dependency dari package-lock.json saat build.

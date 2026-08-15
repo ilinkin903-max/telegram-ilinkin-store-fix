@@ -338,7 +338,7 @@ function homeKeyboard(req, userId, settings = {}) {
   }
   rows.push([{ text: '‹💰› Saldo, Top Up & Referral', callback_data: 'wallet' }]);
   const historyRow = [{ text: '‹📋› Riwayat Transaksi', callback_data: 'riwayattransaksi' }];
-  if (menuMode !== 'marketplace') historyRow.push({ text: '‹❓› Cara Order', callback_data: 'caraorder' });
+  if (menuMode !== 'marketplace') historyRow.push({ text: '‹❓› Cara Order Bot', callback_data: 'caraorder' });
   rows.push(historyRow);
   rows.push([{ text: '‹📊› Stok', callback_data: 'stok' }]);
   const miniAppUrl = getMiniAppUrl(req);
@@ -1763,7 +1763,7 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
   if (cmd === 'caraorder') {
-    return editMessage(query, '❓ *CARA ORDER*\n=======================\n1. Klik Daftar Produk\n2. Pilih produk/varian\n3. Atur jumlah pesanan\n4. Klik Konfirmasi\n5. Scan QRIS\n6. Bayar sesuai nominal QRIS\n7. Sistem mendeteksi pembayaran dan mengirim produk otomatis', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
+    return editMessage(query, '❓ *CARA ORDER DARI BOT TELEGRAM*\n=======================\n1. Dari menu utama tekan *Daftar Produk*\n2. Pilih produk lalu pilih varian bila tersedia\n3. Atur jumlah pesanan sesuai kebutuhan\n4. Periksa detail lalu tekan *Konfirmasi*\n5. Scan QRIS dan bayar sesuai nominal yang tampil\n6. Tekan *Cek Pembayaran* bila tombol tersedia\n7. Setelah pembayaran terdeteksi, produk AUTO dikirim ke chat Telegram; produk PRE-ORDER dikirim setelah seller menyiapkannya', { parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } });
   }
   if (cmd === 'kembaliawal') {
     const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);

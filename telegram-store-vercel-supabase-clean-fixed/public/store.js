@@ -259,6 +259,53 @@
     if (Number(state.bannerCount || 0) < 2) return;
     state.bannerTimer = setInterval(function () { goToBanner(state.bannerIndex + 1, true); }, state.bannerInterval);
   }
+  function wireBannerSwipe() {
+    if (!els.heroCarousel || !els.heroTrack) return;
+    var dragging = false, horizontal = false, startX = 0, startY = 0, deltaX = 0, width = 0, pointerId = null;
+    function resetDrag() {
+      dragging = false; horizontal = false; deltaX = 0; pointerId = null;
+      els.heroCarousel.classList.remove('dragging');
+    }
+    function finishDrag(cancelled) {
+      if (!dragging) return;
+      var threshold = Math.max(38, Number(width || els.heroCarousel.clientWidth || 0) * 0.12);
+      var move = deltaX;
+      resetDrag();
+      if (!cancelled && Math.abs(move) >= threshold) goToBanner(state.bannerIndex + (move < 0 ? 1 : -1), true);
+      else setBannerTransform(state.bannerPosition, true);
+      startBannerTimer();
+    }
+    els.heroCarousel.onpointerdown = function (event) {
+      if (Number(state.bannerCount || 0) < 2) return;
+      if (event.button !== undefined && event.button !== 0) return;
+      if (event.target && event.target.closest && event.target.closest('button,a,input,select,textarea')) return;
+      dragging = true; horizontal = false; deltaX = 0; pointerId = event.pointerId;
+      startX = Number(event.clientX || 0); startY = Number(event.clientY || 0); width = els.heroCarousel.clientWidth || 1;
+      clearBannerTimer();
+      els.heroCarousel.classList.add('dragging');
+      try { els.heroCarousel.setPointerCapture(pointerId); } catch (e) {}
+    };
+    els.heroCarousel.onpointermove = function (event) {
+      if (!dragging || (pointerId !== null && event.pointerId !== pointerId)) return;
+      var dx = Number(event.clientX || 0) - startX;
+      var dy = Number(event.clientY || 0) - startY;
+      if (!horizontal) {
+        if (Math.abs(dx) < 7 && Math.abs(dy) < 7) return;
+        if (Math.abs(dy) > Math.abs(dx)) return finishDrag(true);
+        horizontal = true;
+      }
+      deltaX = dx;
+      event.preventDefault();
+      els.heroTrack.style.transition = 'none';
+      els.heroTrack.style.transform = 'translate3d(calc(-' + (Number(state.bannerPosition || 0) * 100) + '% + ' + deltaX + 'px),0,0)';
+    };
+    els.heroCarousel.onpointerup = function (event) {
+      if (pointerId !== null && event.pointerId !== pointerId) return;
+      finishDrag(false);
+    };
+    els.heroCarousel.onpointercancel = function () { finishDrag(true); };
+    els.heroCarousel.onlostpointercapture = function () { if (dragging) finishDrag(false); };
+  }
   function renderNativeBannerSlide(item) {
     var position = ['left','center','right'].indexOf(String(item.text_position || 'left')) >= 0 ? String(item.text_position) : 'left';
     var vertical = ['top','center','bottom'].indexOf(String(item.vertical_position || 'center')) >= 0 ? String(item.vertical_position) : 'center';
@@ -338,6 +385,7 @@
     els.heroCarousel.classList.remove('hidden');
     els.heroCarousel.onmouseenter = clearBannerTimer;
     els.heroCarousel.onmouseleave = startBannerTimer;
+    wireBannerSwipe();
     goToBanner(0, false);
     startBannerTimer();
   }
