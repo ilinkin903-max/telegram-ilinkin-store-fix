@@ -258,14 +258,20 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
 }
 
 function sanitizeProduct(product, promos = [], flashPromos = []) {
+  const isSupplier = String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && Boolean(String(product?.supplier_product_id || '').trim());
   const productDeliveryMode = db.normalizeDeliveryMode(product?.delivery_mode, 'auto');
-  const isPo = productDeliveryMode === 'po';
+  const isPo = !isSupplier && productDeliveryMode === 'po';
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
     .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos, productDeliveryMode))
     .filter((variant) => variant.active);
   const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
-  const stock = variants.length ? variants.reduce((sum, variant) => sum + (variant.effective_delivery_mode === 'po' ? 0 : variant.stock), 0) : (isPo ? 0 : baseStock);
+  const supplierAvailableStock = isSupplier
+    ? Math.max(0, Math.floor(Number(product?._supplier_available_stock ?? product?.supplier_available_stock ?? product?.supplier_stock ?? 0)))
+    : null;
+  const stock = isSupplier
+    ? supplierAvailableStock
+    : (variants.length ? variants.reduce((sum, variant) => sum + (variant.effective_delivery_mode === 'po' ? 0 : variant.stock), 0) : (isPo ? 0 : baseStock));
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
     .filter((price) => price > 0);
@@ -296,9 +302,10 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
-    delivery_mode: productDeliveryMode,
+    delivery_mode: isSupplier ? 'auto' : productDeliveryMode,
     supplier_source: String(product?.supplier_source || '').toLowerCase(),
-    has_po_variants: variants.some((variant) => variant.effective_delivery_mode === 'po'),
+    supplier_stock: isSupplier ? supplierAvailableStock : null,
+    has_po_variants: !isSupplier && variants.some((variant) => variant.effective_delivery_mode === 'po'),
     has_auto_variants: variants.some((variant) => variant.effective_delivery_mode === 'auto'),
     price: Number(product.harga || 0),
     price_min: priceMin,
@@ -315,9 +322,9 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     flash_sale_eligible: Boolean(baseFlashPromo || variants.some((variant) => variant.flash_promo)),
     flash_sale_sold: 0,
     has_promo: hasPromo,
-    available: product.active !== false && (variants.length
-      ? buyableVariants.length > 0
-      : (isPo ? Number(product?.harga || 0) > 0 : stock > 0))
+    available: product.active !== false && (isSupplier
+      ? stock > 0
+      : (variants.length ? buyableVariants.length > 0 : (isPo ? Number(product?.harga || 0) > 0 : stock > 0)))
   };
 }
 
@@ -347,9 +354,36 @@ async function getCatalog(viewer = null) {
   const flashPromos = flashWindow.active
     ? promos.filter((promo) => flashPromoCodeSet.has(String(promo.code || '').trim().toUpperCase()))
     : [];
+  const supplierAvailability = new Map();
+  const supplierProducts = products.filter((product) => String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && String(product?.supplier_product_id || '').trim());
+  if (supplierProducts.length && prodseller.configured()) {
+    const balanceData = await prodseller.getBalance().catch(() => null);
+    const rows = balanceData ? await Promise.allSettled(supplierProducts.map(async (product) => {
+      const liveProduct = await prodseller.getProduct(product.supplier_product_id);
+      const availability = prodseller.availabilityFrom({ balanceData, product: liveProduct });
+      db.updateProductByCode(product.kode, {
+        supplier_price_usdt: availability.unitPrice,
+        supplier_public_price_usdt: availability.publicPrice,
+        supplier_stock: availability.supplierStock,
+        supplier_synced_at: new Date().toISOString()
+      }).catch(() => null);
+      return [String(product.kode || '').toUpperCase(), availability];
+    })) : [];
+    rows.forEach((row) => {
+      if (row.status === 'fulfilled' && row.value) supplierAvailability.set(row.value[0], row.value[1]);
+    });
+  }
+
   const publicProducts = products
     .filter((product) => String(product.display_scope || 'both') !== 'telegram')
-    .map((product) => sanitizeProduct(product, activePromos, flashPromos));
+    .map((product) => {
+      const availability = supplierAvailability.get(String(product.kode || '').toUpperCase());
+      const enriched = availability ? { ...product, _supplier_available_stock: availability.availableStock } : product;
+      if (String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && !availability) {
+        enriched._supplier_available_stock = 0;
+      }
+      return sanitizeProduct(enriched, activePromos, flashPromos);
+    });
 
   const flashStartAt = String(settings.flash_sale_start_at || '').trim();
   const flashEndAt = String(settings.flash_sale_end_at || '').trim();
@@ -482,34 +516,36 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   let liveSupplierCostUnit = null;
   if (isSupplier) {
     if (!prodseller.configured()) {
-      throw httpError('Produk Auto Supplier sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
+      throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
     }
     try {
-      const liveProduct = await prodseller.getProduct(product.supplier_product_id);
-      const liveStock = liveProduct?.stock == null ? null : Number(liveProduct.stock);
-      if (Number.isFinite(liveStock) && liveStock < qty) {
-        throw httpError(`Stok Auto Supplier tidak mencukupi. Stok tersedia: ${Math.max(0, liveStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, liveStock) });
+      const availability = await prodseller.getAvailability(product.supplier_product_id, { force: true });
+      if (availability.availableStock < qty) {
+        throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', {
+          available_stock: Math.max(0, availability.availableStock)
+        });
       }
-      const supplierPrice = Number(liveProduct?.price || 0);
-      if (supplierPrice > 0) {
+      if (availability.unitPrice > 0) {
         const settings = await db.getShopSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-        liveSupplierCostUnit = Math.max(0, Math.round(supplierPrice * rate));
+        liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         db.updateProductByCode(product.kode, {
-          supplier_price_usdt: supplierPrice,
-          supplier_public_price_usdt: Number(liveProduct?.publicPrice || product.supplier_public_price_usdt || 0),
-          supplier_stock: liveStock,
+          supplier_price_usdt: availability.unitPrice,
+          supplier_public_price_usdt: availability.publicPrice,
+          supplier_stock: availability.supplierStock,
           supplier_synced_at: new Date().toISOString(),
           cost_price: liveSupplierCostUnit
         }).catch(() => null);
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      const status = Number(error?.statusCode || 503);
-      if (status === 409 || error?.code === 'PRODSELLER_STOCK') {
-        throw httpError('Stok Auto Supplier sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK');
+      if (error?.code === 'PRODSELLER_BALANCE') {
+        throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
       }
-      throw httpError('Stok Auto Supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
+      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) {
+        throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
+      }
+      throw httpError('Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
     }
   }
   const availableStock = selected.variant

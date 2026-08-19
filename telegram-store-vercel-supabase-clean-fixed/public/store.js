@@ -602,7 +602,7 @@
     var mixedDelivery = Boolean(product.variants && product.variants.length && product.has_po_variants && product.has_auto_variants);
     var allPoVariants = Boolean(product.variants && product.variants.length && product.has_po_variants && !product.has_auto_variants);
     var cardPo = product.variants && product.variants.length ? allPoVariants : isPo;
-    var availability = isSupplier ? 'AUTO SUPPLIER' : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)));
+    var availability = isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)));
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">' + escapeHtml(availability) + '</span></div>' +
       '<div class="product-card-body">' +
@@ -700,13 +700,13 @@
         els.detailPromo.classList.remove('hidden');
       } else els.detailPromo.classList.add('hidden');
     }
-    els.stockHint.textContent = isSupplier ? 'Auto Supplier · stok dan pengiriman diproses otomatis' : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock()));
-    els.detailStockBadge.textContent = isSupplier ? 'AUTO SUPPLIER' : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock()));
+    els.stockHint.textContent = isSupplier ? ('Stok tersedia: ' + selectedStock() + ' · dikirim otomatis setelah pembayaran') : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock()));
+    els.detailStockBadge.textContent = isSupplier ? ('Stok ' + selectedStock()) : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock()));
     els.buyNowButton.disabled = state.catalog.store_active === false || (!isPo && selectedStock() < 1) || (product.variants.length && !variant);
     els.buyNowButton.textContent = isSupplier ? 'Beli Sekarang' : (isPo ? 'Pre-Order Sekarang' : 'Beli Sekarang');
     var checkoutHelp = $('checkoutHelp');
     if (checkoutHelp) checkoutHelp.textContent = isSupplier
-      ? 'Setelah pembayaran berhasil, sistem otomatis membeli produk dari supplier memakai saldo reseller lalu mengirim akun/key ke Telegram.'
+      ? 'Setelah pembayaran berhasil, produk diproses otomatis dan akun/key dikirim ke Telegram.'
       : (isPo ? 'Setelah pembayaran berhasil, pesanan masuk sebagai PRE-ORDER. Produk/akun dikirim seller ke chat Telegram setelah disiapkan.' : 'Pembayaran QRIS berlaku 10 menit. Produk dikirim otomatis ke Telegram.');
   }
 
@@ -788,7 +788,7 @@
         ['Produk', preview.product || product.name],
         ['Varian', preview.variant || 'Tanpa varian'],
         ['Jumlah', Number(preview.quantity || qty) + ' item'],
-        ['Pengiriman', String(preview.supplier_source || product.supplier_source || '').toLowerCase()==='prodseller' ? 'AUTO SUPPLIER · dikirim otomatis' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
+        ['Pengiriman', String(preview.supplier_source || product.supplier_source || '').toLowerCase()==='prodseller' ? 'Otomatis setelah pembayaran' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
         ['Subtotal', rupiah(preview.subtotal || 0)]
       ];
       if (Number(preview.discount || 0) > 0) {

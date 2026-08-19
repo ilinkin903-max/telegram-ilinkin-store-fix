@@ -1,6 +1,16 @@
 const axios = require('axios');
 const { config } = require('./config');
 
+const cache = {
+  balance: { at: 0, value: null },
+  products: new Map()
+};
+const CACHE_MS = 30000;
+
+function cacheFresh(at) {
+  return Number(at || 0) > 0 && (Date.now() - Number(at || 0)) < CACHE_MS;
+}
+
 function configured() {
   return Boolean(String(config.prodsellerApiKey || '').trim());
 }
@@ -53,8 +63,12 @@ async function request(method, path, { data, params, idempotencyKey, timeout = 2
   }
 }
 
-async function getBalance() {
-  return request('GET', '/balance');
+async function getBalance(options = {}) {
+  const force = options && options.force === true;
+  if (!force && cacheFresh(cache.balance.at) && cache.balance.value) return cache.balance.value;
+  const value = await request('GET', '/balance');
+  cache.balance = { at: Date.now(), value };
+  return value;
 }
 
 async function listProducts() {
@@ -62,8 +76,46 @@ async function listProducts() {
   return Array.isArray(data.products) ? data.products : [];
 }
 
-async function getProduct(productId) {
-  return request('GET', `/products/${encodeURIComponent(String(productId || '').trim())}`);
+async function getProduct(productId, options = {}) {
+  const id = String(productId || '').trim();
+  if (!id) throw new Error('Product ID ProdSeller kosong.');
+  const force = options && options.force === true;
+  const cached = cache.products.get(id);
+  if (!force && cached && cacheFresh(cached.at)) return cached.value;
+  const value = await request('GET', `/products/${encodeURIComponent(id)}`);
+  cache.products.set(id, { at: Date.now(), value });
+  return value;
+}
+
+function availabilityFrom({ balanceData = {}, product = {} } = {}) {
+  const balance = Math.max(0, Number(balanceData?.balance || 0));
+  const unitPrice = Math.max(0, Number(product?.price || 0));
+  const supplierStock = product?.stock == null ? null : Math.max(0, Math.floor(Number(product.stock || 0)));
+  const balanceStock = unitPrice > 0 ? Math.max(0, Math.floor((balance + 1e-9) / unitPrice)) : 0;
+  const inStock = product?.inStock !== false && (supplierStock == null || supplierStock > 0);
+  const availableStock = !inStock || unitPrice <= 0
+    ? 0
+    : (supplierStock == null ? balanceStock : Math.max(0, Math.min(balanceStock, supplierStock)));
+  return {
+    balance,
+    membership: String(balanceData?.membership || ''),
+    unitPrice,
+    publicPrice: Math.max(0, Number(product?.publicPrice || 0)),
+    supplierStock,
+    balanceStock,
+    availableStock,
+    inStock,
+    product
+  };
+}
+
+async function getAvailability(productId, options = {}) {
+  const force = options && options.force === true;
+  const [balanceData, product] = await Promise.all([
+    getBalance({ force }),
+    getProduct(productId, { force })
+  ]);
+  return availabilityFrom({ balanceData, product });
 }
 
 async function createOrder({ productId, quantity = 1, idempotencyKey }) {
@@ -92,6 +144,8 @@ module.exports = {
   getBalance,
   listProducts,
   getProduct,
+  getAvailability,
+  availabilityFrom,
   createOrder,
   getOrder,
   deliveredItems,

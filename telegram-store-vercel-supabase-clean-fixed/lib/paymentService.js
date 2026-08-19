@@ -352,79 +352,62 @@ async function sendOrderReceipt(userId, order, product, transaction, delivered) 
 async function sendPoPaidNotice(userId, order, product, transaction) {
   const ctx = receiptContext(order, product, transaction, []);
   const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
-  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
-    `=======================\n` +
-    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
-    `Produk: <b>${escapeHtml(title)}</b>\n` +
-    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
-    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
-    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>\n` +
-    `=======================\n\n` +
-    `📦 <b>PESANAN PRE-ORDER</b>\n` +
-    `Pembayaran sudah diterima. Produk/akun akan dikirim langsung ke chat ini setelah seller menyiapkan dan mengirimkannya.`;
+  const text = `✅ <b>PEMBAYARAN BERHASIL</b>
+` +
+    `=======================
+` +
+    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>
+` +
+    `Produk: <b>${escapeHtml(title)}</b>
+` +
+    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>
+` +
+    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>
+` +
+    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>
+` +
+    `=======================`;
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
-async function sendSupplierPendingNotice(userId, order, product, transaction) {
-  const ctx = receiptContext(order, product, transaction, []);
-  const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
-  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
-    `=======================\n` +
-    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
-    `Produk: <b>${escapeHtml(title)}</b>\n` +
-    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
-    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
-    `=======================\n\n` +
-    `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>\n` +
+async function sendSupplierPendingNotice(userId) {
+  const text = `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>
+` +
     `Pembayaran sudah diterima. Sistem sedang mengambil produk dari supplier. Produk akan dikirim ke chat ini setelah supplier berhasil mengirimkannya.`;
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
 async function sendPoDeliveryReceipt(userId, poOrder, deliveryText, product = null) {
-  const title = `${poOrder?.product_name || poOrder?.product_code || '-'}${poOrder?.variant_name ? ' - ' + poOrder.variant_name : ''}`;
   const raw = String(deliveryText || '').trim();
   if (!raw) throw new Error('Data produk PO kosong.');
   const variant = product ? selectedVariant(product, { variant_key: poOrder?.variant_key || '' }) : null;
   const terms = String(poOrder?.terms_snapshot || variantTerms(product || {}, variant) || '-').trim() || '-';
-  const header = `📦 <b>PESANAN PO SUDAH DIKIRIM</b>
-` +
-    `=======================
-` +
-    `Invoice: <b>${escapeHtml(displayPaymentReference(poOrder?.order_ref || '-'))}</b>
-` +
-    `Produk: <b>${escapeHtml(title)}</b>
-` +
-    `Jumlah: <b>${escapeHtml(Number(poOrder?.quantity || 1))}</b>
-` +
-    `=======================
-
-`;
   const termsBlock = `<b>SYARAT &amp; KETENTUAN</b>
 ${escapeHtml(terms)}
 
 `;
 
-  // Blok <pre> menjaga format akun dan mudah dipilih/disalin dari Telegram.
-  // Sisakan ruang aman dari batas 4096 karakter setelah header + SnK.
-  const inlineLimit = Math.max(500, 3850 - header.length - termsBlock.length);
+  // Pesan pengiriman sengaja tidak mengulang header PO, invoice, produk, atau jumlah.
+  // Pembeli menerima bagian penting saja: S&K dan data produk/akun.
+  const inlineLimit = Math.max(500, 3900 - termsBlock.length);
   if (raw.length <= inlineLimit) {
     return tg.sendMessage(Number(userId),
-      header + termsBlock + `<b>PRODUK / AKUN</b>
+      termsBlock + `<b>PRODUK / AKUN</b>
 <pre>${escapeHtml(raw)}</pre>
 Tekan lama/blok data produk di atas untuk menyalin. Simpan data dengan baik.`,
       { parse_mode: 'HTML' }
     );
   }
 
-  const safeRef = String(displayPaymentReference(poOrder?.order_ref || 'PO')).replace(/[^a-z0-9_-]/gi, '-').slice(0, 50) || 'PO';
+  const safeRef = String(displayPaymentReference(poOrder?.order_ref || 'ORDER')).replace(/[^a-z0-9_-]/gi, '-').slice(0, 50) || 'ORDER';
   const textFile = `SYARAT & KETENTUAN
 ${terms}
 
 PRODUK / AKUN
 ${raw}
 `;
-  const captionTerms = terms.length > 420 ? `${terms.slice(0, 417)}...` : terms;
-  const caption = header + `<b>SYARAT &amp; KETENTUAN</b>
+  const captionTerms = terms.length > 520 ? `${terms.slice(0, 517)}...` : terms;
+  const caption = `<b>SYARAT &amp; KETENTUAN</b>
 ${escapeHtml(captionTerms)}
 
 Data produk panjang dikirim sebagai TXT agar utuh dan mudah disalin.`;
@@ -718,6 +701,17 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     let poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
     let supplierResult = null;
     if (poWaiting && isProdSellerProduct(product)) {
+      const paidNoticeKey = `supplier_paid_notice:${invoice}`;
+      const paidNoticeClaimed = await db.claimOnce(paidNoticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
+      if (paidNoticeClaimed) {
+        try {
+          await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
+          await db.markClaimDone(paidNoticeKey, { invoice, state: 'notified' }).catch(() => null);
+        } catch (noticeError) {
+          await db.releaseClaim(paidNoticeKey).catch(() => null);
+          throw noticeError;
+        }
+      }
       supplierResult = await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
       if (supplierResult && !supplierResult.pending && supplierResult.delivered?.length) {
         poWaiting = false;
@@ -732,7 +726,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (noticeClaimed) {
         try {
-          if (isProdSellerProduct(product)) await sendSupplierPendingNotice(order.telegram_id, order, product, result.transaction);
+          if (isProdSellerProduct(product)) await sendSupplierPendingNotice(order.telegram_id);
           else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
           await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
         } catch (noticeError) {

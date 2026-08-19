@@ -1495,34 +1495,32 @@ async function calculateCheckoutPricing(userId, order, product) {
   let costUnit = db.orderUnitCost(product, order);
   if (isSupplierProduct(product)) {
     if (!prodseller.configured()) {
-      const error = new Error('Produk Auto Supplier sedang tidak tersedia. Silakan coba lagi nanti.');
+      const error = new Error('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.');
       error.code = 'SUPPLIER_NOT_CONFIGURED';
       throw error;
     }
     try {
-      const liveProduct = await prodseller.getProduct(product.supplier_product_id);
-      const liveStock = liveProduct?.stock == null ? null : Number(liveProduct.stock);
-      if (Number.isFinite(liveStock) && liveStock < quantity) {
-        const error = new Error(`Stok Auto Supplier tidak mencukupi. Stok tersedia: ${Math.max(0, liveStock)}.`);
+      const availability = await prodseller.getAvailability(product.supplier_product_id, { force: true });
+      if (availability.availableStock < quantity) {
+        const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
         throw error;
       }
-      const supplierPrice = Number(liveProduct?.price || 0);
-      if (supplierPrice > 0) {
+      if (availability.unitPrice > 0) {
         const settings = await db.getShopSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-        costUnit = Math.max(0, Math.round(supplierPrice * rate));
+        costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         db.updateProductByCode(product.kode, {
-          supplier_price_usdt: supplierPrice,
-          supplier_public_price_usdt: Number(liveProduct?.publicPrice || product.supplier_public_price_usdt || 0),
-          supplier_stock: liveStock,
+          supplier_price_usdt: availability.unitPrice,
+          supplier_public_price_usdt: availability.publicPrice,
+          supplier_stock: availability.supplierStock,
           supplier_synced_at: new Date().toISOString(),
           cost_price: costUnit
         }).catch(() => null);
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      const friendly = new Error(error?.code === 'PRODSELLER_STOCK' ? 'Stok Auto Supplier sedang habis. Silakan pilih produk lain.' : 'Stok Auto Supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.');
+      const friendly = new Error(error?.code === 'PRODSELLER_STOCK' ? 'Stok produk sedang habis. Silakan pilih produk lain.' : 'Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.');
       friendly.code = error?.code === 'PRODSELLER_STOCK' ? 'SUPPLIER_STOCK' : 'SUPPLIER_UNAVAILABLE';
       throw friendly;
     }

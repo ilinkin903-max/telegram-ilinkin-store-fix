@@ -365,7 +365,13 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'stats') return json(res, 200, { ok: true, data: await db.getStats() });
     if (req.method === 'GET' && action === 'products') return json(res, 200, { ok: true, data: await db.listProducts() });
     if (req.method === 'GET' && action === 'orders') return json(res, 200, { ok: true, data: await db.listTransactions(100) });
-    if (req.method === 'GET' && action === 'po-orders') return json(res, 200, { ok: true, data: await db.listPoOrders(150) });
+    if (req.method === 'GET' && action === 'po-orders') {
+      const [orders, products] = await Promise.all([db.listPoOrders(150), db.listProducts()]);
+      const supplierCodes = new Set((products || [])
+        .filter((product) => String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && String(product?.supplier_product_id || '').trim())
+        .map((product) => String(product.kode || '').trim().toUpperCase()));
+      return json(res, 200, { ok: true, data: (orders || []).filter((order) => !supplierCodes.has(String(order.product_code || '').trim().toUpperCase())) });
+    }
     if (req.method === 'GET' && action === 'users') return json(res, 200, { ok: true, data: await db.listUsers(200) });
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
@@ -577,6 +583,10 @@ module.exports = async function handler(req, res) {
       if (!po) return json(res, 404, { ok: false, error: 'Pesanan PO tidak ditemukan.' });
       if (String(po.status || '') === 'delivered') return json(res, 200, { ok: true, data: { already_delivered: true, po_order: po } });
       if (String(po.status || '') !== 'waiting_delivery') return json(res, 409, { ok: false, error: 'Pesanan PO ini tidak sedang menunggu pengiriman.' });
+      const poProduct = await db.getProductByCode(po.product_code).catch(() => null);
+      if (String(poProduct?.supplier_source || '').trim().toLowerCase() === 'prodseller') {
+        return json(res, 409, { ok: false, error: 'Pesanan ProdSeller diproses otomatis melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
+      }
       const transactionBeforeSend = await db.getTransactionByOrderRef(orderRef).catch(() => null);
       if (String(transactionBeforeSend?.status || 'completed').toLowerCase() === 'canceled') {
         return json(res, 409, { ok: false, error: 'Penjualan ini sudah CANCELED. Produk PO tidak dikirim.' });
@@ -588,7 +598,7 @@ module.exports = async function handler(req, res) {
 
       let telegramSent = false;
       try {
-        const product = await db.getProductByCode(po.product_code).catch(() => null);
+        const product = poProduct || await db.getProductByCode(po.product_code).catch(() => null);
         await paymentService.sendPoDeliveryReceipt(po.telegram_id, po, deliveryText, product);
         telegramSent = true;
         const result = await db.markPoDelivered(orderRef, deliveryText, Number(owner?.id || config.ownerId || 0));
