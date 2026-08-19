@@ -1,0 +1,13 @@
+iLink.in Store v75 - Cara Order Marketplace Guide
+
+Perubahan:
+- Tombol Cara Order di bot selalu tampil.
+- Nama tombol tetap "Cara Order", bukan "Cara Order Bot".
+- Panduan utama menggunakan alur Buka Marketplace jika Marketplace aktif.
+- Fallback otomatis ke Daftar Produk jika mode toko hanya Daftar Produk.
+- Mode Marketplace + Daftar Produk menampilkan Marketplace sebagai panduan utama dan Daftar Produk sebagai alternatif.
+- Tidak ada SQL baru.
+
+Verifikasi:
+- node --check lib/botHandlers.js: LULUS
+- tests v73 + v74 + v75: 11/11 LULUS

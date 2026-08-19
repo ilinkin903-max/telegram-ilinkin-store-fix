@@ -1,0 +1,184 @@
+TAP version 13
+# Subtest: reseller kembali ke UI klasik dan navigasi berada di bawah
+ok 1 - reseller kembali ke UI klasik dan navigasi berada di bawah
+  ---
+  duration_ms: 1.235612
+  type: 'test'
+  ...
+# Subtest: marketplace memakai visual klasik yang sama dan bottom navigation
+ok 2 - marketplace memakai visual klasik yang sama dan bottom navigation
+  ---
+  duration_ms: 0.311662
+  type: 'test'
+  ...
+# Subtest: fitur penting marketplace dan PO tetap ada
+ok 3 - fitur penting marketplace dan PO tetap ada
+  ---
+  duration_ms: 0.216882
+  type: 'test'
+  ...
+# Subtest: grafik menaruh omzet tepat di atas batang
+ok 4 - grafik menaruh omzet tepat di atas batang
+  ---
+  duration_ms: 0.705476
+  type: 'test'
+  ...
+# Subtest: menu reseller desktop dipusatkan dan users satu kolom rapi
+ok 5 - menu reseller desktop dipusatkan dan users satu kolom rapi
+  ---
+  duration_ms: 0.348767
+  type: 'test'
+  ...
+# Subtest: promo mempertahankan judul rapi dan diskon tidak mudah overflow
+ok 6 - promo mempertahankan judul rapi dan diskon tidak mudah overflow
+  ---
+  duration_ms: 0.442185
+  type: 'test'
+  ...
+# Subtest: marketplace search ikut scroll, katalog turun, close tetap terlihat
+ok 7 - marketplace search ikut scroll, katalog turun, close tetap terlihat
+  ---
+  duration_ms: 0.784983
+  type: 'test'
+  ...
+# Subtest: promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+ok 8 - promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+  ---
+  duration_ms: 0.744684
+  type: 'test'
+  ...
+# Subtest: dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+ok 9 - dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+  ---
+  duration_ms: 0.607691
+  type: 'test'
+  ...
+# Subtest: marketplace merender banner bawaan dan banner gambar dalam satu carousel
+ok 10 - marketplace merender banner bawaan dan banner gambar dalam satu carousel
+  ---
+  duration_ms: 0.166757
+  type: 'test'
+  ...
+# Subtest: Cara Order marketplace mengikuti mode tombol toko
+ok 11 - Cara Order marketplace mengikuti mode tombol toko
+  ---
+  duration_ms: 0.120919
+  type: 'test'
+  ...
+# Subtest: banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+ok 12 - banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+  ---
+  duration_ms: 0.743872
+  type: 'test'
+  ...
+# Subtest: marketplace banner mendukung swipe pointer dan drag
+ok 13 - marketplace banner mendukung swipe pointer dan drag
+  ---
+  duration_ms: 0.211954
+  type: 'test'
+  ...
+# Subtest: indikator banner lebih transparan
+ok 14 - indikator banner lebih transparan
+  ---
+  duration_ms: 0.104595
+  type: 'test'
+  ...
+# Subtest: Cara Order bot tetap tersedia dan memberi panduan pembelian
+ok 15 - Cara Order bot tetap tersedia dan memberi panduan pembelian
+  ---
+  duration_ms: 0.275268
+  type: 'test'
+  ...
+# Subtest: tombol Cara Order selalu ada di menu bot
+ok 16 - tombol Cara Order selalu ada di menu bot
+  ---
+  duration_ms: 0.718355
+  type: 'test'
+  ...
+# Subtest: panduan Cara Order memakai alur Marketplace saat marketplace aktif
+ok 17 - panduan Cara Order memakai alur Marketplace saat marketplace aktif
+  ---
+  duration_ms: 0.275308
+  type: 'test'
+  ...
+# Subtest: panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+ok 18 - panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+  ---
+  duration_ms: 0.163393
+  type: 'test'
+  ...
+# Subtest: v76 menambahkan konfigurasi ProdSeller hanya di server
+ok 19 - v76 menambahkan konfigurasi ProdSeller hanya di server
+  ---
+  duration_ms: 0.886884
+  type: 'test'
+  ...
+# Subtest: service ProdSeller memakai X-API-Key dan Idempotency-Key
+ok 20 - service ProdSeller memakai X-API-Key dan Idempotency-Key
+  ---
+  duration_ms: 0.187588
+  type: 'test'
+  ...
+# Subtest: produk supplier dipilih satu per satu dari dashboard
+ok 21 - produk supplier dipilih satu per satu dari dashboard
+  ---
+  duration_ms: 0.889298
+  type: 'test'
+  ...
+# Subtest: checkout memverifikasi stok supplier sebelum pelanggan membayar
+ok 22 - checkout memverifikasi stok supplier sebelum pelanggan membayar
+  ---
+  duration_ms: 1.137556
+  type: 'test'
+  ...
+# Subtest: fulfillment supplier hanya setelah order lunas dan aman untuk retry
+ok 23 - fulfillment supplier hanya setelah order lunas dan aman untuk retry
+  ---
+  duration_ms: 0.253186
+  type: 'test'
+  ...
+# Subtest: migration v76 menyimpan metadata produk dan order supplier
+ok 24 - migration v76 menyimpan metadata produk dan order supplier
+  ---
+  duration_ms: 0.197543
+  type: 'test'
+  ...
+# Subtest: pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO
+ok 25 - pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO
+  ---
+  duration_ms: 0.801989
+  type: 'test'
+  ...
+# Subtest: popup dashboard menutup menu bawah dan berada di lapisan teratas
+ok 26 - popup dashboard menutup menu bawah dan berada di lapisan teratas
+  ---
+  duration_ms: 0.792495
+  type: 'test'
+  ...
+# Subtest: stok supplier dihitung dari saldo dan stok aktual supplier
+ok 27 - stok supplier dihitung dari saldo dan stok aktual supplier
+  ---
+  duration_ms: 0.883169
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+ok 28 - marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+  ---
+  duration_ms: 0.409316
+  type: 'test'
+  ...
+# Subtest: produk supplier tidak dicampur ke menu Pesanan PO
+ok 29 - produk supplier tidak dicampur ke menu Pesanan PO
+  ---
+  duration_ms: 0.843851
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 118.905797

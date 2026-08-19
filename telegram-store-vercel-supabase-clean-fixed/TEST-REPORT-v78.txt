@@ -1,0 +1,19 @@
+iLink.in Store v78 - Verification Report
+
+Feature: ProdSeller products as variants of existing iLink products
+
+Checks:
+- JavaScript syntax (api/lib/public/scripts): PASS
+- Reseller dashboard inline JavaScript: PASS
+- v73 tests: 4/4 PASS
+- v74 tests: 4/4 PASS
+- v75 tests: 3/3 PASS
+- v76 tests: 6/6 PASS
+- v77 tests: 5/5 PASS
+- v78 tests: 7/7 PASS
+
+Total regression + feature tests v73-v78: 29/29 PASS
+
+Database:
+- No new v78 SQL migration required.
+- Existing v76 ProdSeller migration remains required.

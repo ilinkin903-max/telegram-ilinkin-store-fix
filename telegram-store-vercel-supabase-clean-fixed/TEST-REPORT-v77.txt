@@ -1,0 +1,24 @@
+iLink.in Store v77 - Test Report
+================================
+Version: v77-po-message-popup-supplier-live-stock
+
+Checks:
+- Syntax seluruh JavaScript project: PASS
+- Syntax inline JavaScript dashboard: PASS
+- Static/regression tests v71-v77: 29 PASS, 0 FAIL
+
+Verified changes:
+- PO payment message without PRE-ORDER explanatory block
+- PO delivery message without repeated PO/invoice/product/quantity header
+- Dashboard modal overlays and hides bottom navigation
+- ProdSeller effective stock = min(balance purchasing power, supplier stock)
+- Marketplace supplier label uses Stok N instead of AUTO SUPPLIER
+- Supplier orders filtered out of manual PO dashboard
+- Supplier checkout validates effective live availability
+
+No v77 SQL migration is required.
+
+Not tested against production credentials:
+- Real ProdSeller API key/balance/product stock
+- Real Telegram delivery
+- Real Supabase production data
