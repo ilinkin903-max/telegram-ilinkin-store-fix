@@ -3,6 +3,7 @@ const { config } = require('./config');
 const db = require('./db');
 const tg = require('./telegram');
 const walletNotifications = require('./walletNotifications');
+const prodseller = require('./prodsellerService');
 const { formatRupiah, formatWIB } = require('./utils');
 
 function getVercelWaitUntil() {
@@ -364,6 +365,21 @@ async function sendPoPaidNotice(userId, order, product, transaction) {
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
+async function sendSupplierPendingNotice(userId, order, product, transaction) {
+  const ctx = receiptContext(order, product, transaction, []);
+  const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
+  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
+    `=======================\n` +
+    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
+    `Produk: <b>${escapeHtml(title)}</b>\n` +
+    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
+    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
+    `=======================\n\n` +
+    `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>\n` +
+    `Pembayaran sudah diterima. Sistem sedang mengambil produk dari supplier. Produk akan dikirim ke chat ini setelah supplier berhasil mengirimkannya.`;
+  return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
+}
+
 async function sendPoDeliveryReceipt(userId, poOrder, deliveryText, product = null) {
   const title = `${poOrder?.product_name || poOrder?.product_code || '-'}${poOrder?.variant_name ? ' - ' + poOrder.variant_name : ''}`;
   const raw = String(deliveryText || '').trim();
@@ -511,6 +527,162 @@ async function notifyFirstPurchaseReferral(inviteeId) {
   }
 }
 
+
+function isProdSellerProduct(product = {}) {
+  return String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && Boolean(String(product?.supplier_product_id || '').trim());
+}
+
+async function notifyOwnerSupplierIssue(order, product, error, supplierRow = null) {
+  if (!config.channelLog) return;
+  try {
+    const ref = displayPaymentReference(order?.invoice_ref || order?.order_ref || '-');
+    const text = `⚠️ ORDER SUPPLIER BELUM TERKIRIM\n` +
+      `=======================\n` +
+      `Invoice: ${ref}\n` +
+      `Produk: ${product?.nama || product?.kode || '-'}\n` +
+      `Supplier: ProdSeller\n` +
+      `Product ID: ${product?.supplier_product_id || '-'}\n` +
+      `Jumlah: ${Number(order?.quantity || 1)}\n` +
+      `Status: ${supplierRow?.status || 'error'}\n` +
+      `Keterangan: ${String(error?.message || error || 'Belum terkirim')}\n\n` +
+      `Buka Reseller Dashboard → Supplier / Reseller untuk cek saldo lalu Retry Supplier.`;
+    await tg.sendMessage(config.channelLog, text);
+  } catch (notifyError) {
+    console.error('Gagal kirim log supplier:', notifyError.message || notifyError);
+  }
+}
+
+
+async function sendSupplierDeliveryOnce({ invoice, userId, poOrder, deliveryText, product }) {
+  const noticeKey = `supplier_delivery_notice:${invoice}`;
+  const claimed = await db.claimOnce(noticeKey, 365 * 24 * 60 * 60, { invoice, telegram_id: Number(userId || 0) }, { failClosed: true });
+  if (!claimed) return false;
+  try {
+    await sendPoDeliveryReceipt(Number(userId), poOrder, deliveryText, product);
+    await db.markClaimDone(noticeKey, { invoice, state: 'sent' }).catch(() => null);
+    return true;
+  } catch (error) {
+    await db.releaseClaim(noticeKey).catch(() => null);
+    throw error;
+  }
+}
+
+async function processProdSellerDelivery({ order, product, transaction, buyer = {}, source = 'supplier-auto' }) {
+  const invoice = String(order?.invoice_ref || transaction?.order_ref || '').trim();
+  if (!invoice) throw new Error('Invoice supplier tidak ditemukan.');
+  if (!isProdSellerProduct(product)) return { handled: false };
+
+  const existingPo = await db.getPoOrder(invoice).catch(() => null);
+  if (existingPo?.status === 'delivered' && existingPo.delivery_text) {
+    const delivered = String(existingPo.delivery_text).split(/\r?\n/).filter(Boolean);
+    try {
+      await sendSupplierDeliveryOnce({ invoice, userId: Number(order?.telegram_id || transaction?.telegram_id), poOrder: existingPo, deliveryText: existingPo.delivery_text, product });
+    } catch (error) {
+      await notifyOwnerSupplierIssue({ ...order, invoice_ref: invoice }, product, error, await db.getSupplierOrder(invoice).catch(() => null));
+      return { handled: true, pending: true, error, delivered, po_order: existingPo, transaction };
+    }
+    return { handled: true, delivered, po_order: existingPo, transaction };
+  }
+
+  let supplierRow = await db.getSupplierOrder(invoice).catch(() => null);
+  let remote = null;
+  try {
+    if (supplierRow?.supplier_order_id && !['delivered', 'failed'].includes(String(supplierRow.status || '').toLowerCase())) {
+      remote = await prodseller.getOrder(supplierRow.supplier_order_id);
+    }
+    if (!remote || !remote.orderId) {
+      remote = await prodseller.createOrder({
+        productId: product.supplier_product_id,
+        quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+        idempotencyKey: `ilink-${invoice}`
+      });
+    }
+
+    const delivered = prodseller.deliveredItems(remote);
+    const remoteStatus = String(remote?.status || (delivered.length ? 'delivered' : 'pending')).trim().toLowerCase();
+    supplierRow = await db.upsertSupplierOrder({
+      order_ref: invoice,
+      supplier: 'prodseller',
+      supplier_order_id: remote?.orderId || supplierRow?.supplier_order_id || '',
+      supplier_product_id: product.supplier_product_id,
+      quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+      amount_usdt: Number(remote?.amount || supplierRow?.amount_usdt || 0),
+      status: delivered.length ? 'delivered' : remoteStatus,
+      delivered_text: delivered.join('\n'),
+      error_code: '',
+      error_message: '',
+      raw_response: remote || {}
+    });
+
+    if (!delivered.length || remoteStatus !== 'delivered') {
+      const pendingError = new Error('Order ProdSeller sudah dibuat tetapi produk belum terkirim. Gunakan Retry Supplier untuk mengecek kembali.');
+      pendingError.code = 'PRODSELLER_PENDING';
+      pendingError.statusCode = 202;
+      throw pendingError;
+    }
+
+    const marked = await db.markPoDelivered(invoice, delivered.join('\n'), config.ownerId || null);
+    const poOrder = marked?.po_order || await db.getPoOrder(invoice);
+    const finalTransaction = marked?.transaction || transaction;
+    await sendSupplierDeliveryOnce({
+      invoice,
+      userId: Number(order?.telegram_id || transaction?.telegram_id),
+      poOrder: poOrder || { ...order, order_ref: invoice },
+      deliveryText: delivered.join('\n'),
+      product
+    });
+    await sendOwnerLog({ ...order, invoice_ref: invoice }, product, finalTransaction, buyer);
+    return { handled: true, delivered, po_order: poOrder, transaction: finalTransaction, supplier_order: supplierRow };
+  } catch (error) {
+    if (error?.code !== 'PRODSELLER_PENDING') {
+      const supplierAlreadyDelivered = Boolean(String(supplierRow?.delivered_text || '').trim());
+      supplierRow = await db.upsertSupplierOrder({
+        order_ref: invoice,
+        supplier: 'prodseller',
+        supplier_order_id: supplierRow?.supplier_order_id || '',
+        supplier_product_id: product.supplier_product_id,
+        quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+        amount_usdt: Number(supplierRow?.amount_usdt || 0),
+        status: supplierAlreadyDelivered ? 'delivery_pending' : 'error',
+        delivered_text: supplierRow?.delivered_text || '',
+        error_code: supplierAlreadyDelivered ? 'TELEGRAM_DELIVERY' : String(error?.code || 'PRODSELLER_ERROR'),
+        error_message: String(error?.message || error || 'ProdSeller error'),
+        raw_response: supplierRow?.raw_response || {}
+      }).catch(() => supplierRow);
+    }
+    await notifyOwnerSupplierIssue({ ...order, invoice_ref: invoice }, product, error, supplierRow);
+    return { handled: true, pending: true, error, supplier_order: supplierRow, transaction };
+  }
+}
+
+async function retrySupplierOrder(orderRef, actor = {}) {
+  const invoice = String(orderRef || '').trim();
+  if (!invoice) throw new Error('Invoice supplier wajib diisi.');
+  const transaction = await db.getTransactionByOrderRef(invoice);
+  if (!transaction) throw new Error('Transaksi pelanggan tidak ditemukan.');
+  const product = await db.getProductByCode(transaction.product_code);
+  if (!isProdSellerProduct(product)) throw new Error('Produk pada invoice ini bukan produk ProdSeller.');
+  const buyer = Object.keys(actor || {}).length ? actor : (await db.getUserByTelegramId(transaction.telegram_id).catch(() => null)) || {};
+  const result = await processProdSellerDelivery({
+    order: {
+      invoice_ref: invoice,
+      telegram_id: Number(transaction.telegram_id || 0),
+      product_code: transaction.product_code,
+      variant_key: transaction.variant_key || '',
+      variant_name: transaction.variant_name || '',
+      quantity: Number(transaction.quantity || 1),
+      amount: Number(transaction.total_price || 0),
+      payment_method: transaction.payment_method || 'gateway'
+    },
+    product,
+    transaction,
+    buyer,
+    source: 'supplier-manual-retry'
+  });
+  if (result.pending) throw result.error || new Error('Produk supplier belum terkirim.');
+  return result;
+}
+
 async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
   if (!order?.invoice_ref) throw new Error('Invoice lokal tidak ditemukan.');
   const invoice = String(order.invoice_ref);
@@ -543,7 +715,16 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
 
     const selected = product ? selectedVariant(product, order) : null;
     const effectiveMode = String(result.transaction?.delivery_mode || order?.delivery_mode || (product ? db.variantDeliveryMode(product, selected) : 'auto')).toLowerCase();
-    const poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
+    let poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
+    let supplierResult = null;
+    if (poWaiting && isProdSellerProduct(product)) {
+      supplierResult = await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
+      if (supplierResult && !supplierResult.pending && supplierResult.delivered?.length) {
+        poWaiting = false;
+        result.transaction = supplierResult.transaction || result.transaction;
+        result.delivered = supplierResult.delivered;
+      }
+    }
     if (poWaiting) {
       // Notifikasi pembayaran PO memakai lock terpisah dari lock fulfillment.
       // Jika transaksi DB sudah sukses tetapi kirim Telegram sempat gagal, webhook/cron berikutnya masih dapat mencoba lagi.
@@ -551,15 +732,16 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (noticeClaimed) {
         try {
-          await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
+          if (isProdSellerProduct(product)) await sendSupplierPendingNotice(order.telegram_id, order, product, result.transaction);
+          else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
           await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
         } catch (noticeError) {
           await db.releaseClaim(noticeKey).catch(() => null);
           throw noticeError;
         }
       }
-      if (!result.already_completed) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
-    } else {
+      if (!result.already_completed && !isProdSellerProduct(product)) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
+    } else if (!(supplierResult && supplierResult.delivered && supplierResult.delivered.length)) {
       await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
       await sendOwnerLog(order, product, result.transaction, currentBuyer);
     }
@@ -569,7 +751,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
 
     return {
       ok: true,
-      state: result.already_completed ? 'already_completed' : (poWaiting ? 'awaiting_delivery' : 'completed'),
+      state: result.already_completed ? 'already_completed' : (poWaiting ? (supplierResult?.pending ? 'supplier_waiting' : 'awaiting_delivery') : 'completed'),
       po_waiting: poWaiting,
       transaction: result.transaction,
       delivered: result.delivered
@@ -786,6 +968,7 @@ module.exports = {
   watchPendingTopup,
   scheduleTopupWatcher,
   fulfillPaidOrder,
+  retrySupplierOrder,
   sendOrderReceipt,
   sendPoPaidNotice,
   sendPoDeliveryReceipt,

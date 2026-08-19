@@ -161,7 +161,13 @@ function normalizeProduct(row) {
     data: Array.isArray(row.stock) ? row.stock.map((x) => String(x).trim()).filter(Boolean) : [],
     terjual: row.sold || 0,
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    supplier_source: String(row.supplier_source || '').trim().toLowerCase(),
+    supplier_product_id: String(row.supplier_product_id || '').trim(),
+    supplier_price_usdt: Number(row.supplier_price_usdt || 0),
+    supplier_public_price_usdt: Number(row.supplier_public_price_usdt || 0),
+    supplier_stock: row.supplier_stock == null ? null : Number(row.supplier_stock),
+    supplier_synced_at: row.supplier_synced_at || null
   };
 }
 
@@ -517,6 +523,12 @@ async function addProduct(input) {
     variants: normalizeVariants(input.variants || []),
     stock: Array.isArray(input.data || input.stock) ? (input.data || input.stock) : splitStock(input.stock_text || ''),
     sold: Number(input.terjual || input.sold || 0),
+    supplier_source: String(input.supplier_source || input.supplierSource || '').trim().toLowerCase(),
+    supplier_product_id: String(input.supplier_product_id || input.supplierProductId || '').trim(),
+    supplier_price_usdt: Number(input.supplier_price_usdt || input.supplierPriceUsdt || 0),
+    supplier_public_price_usdt: Number(input.supplier_public_price_usdt || input.supplierPublicPriceUsdt || 0),
+    supplier_stock: input.supplier_stock === null || input.supplierStock === null ? null : Number(input.supplier_stock ?? input.supplierStock ?? 0),
+    supplier_synced_at: input.supplier_synced_at || input.supplierSyncedAt || null,
     updated_at: new Date().toISOString()
   };
   const { data, error } = await sb().from('products').insert(payload).select('*').single();
@@ -565,6 +577,12 @@ async function updateProductByCode(code, updates = {}) {
     const stockValue = updates.data ?? updates.stock;
     payload.stock = Array.isArray(stockValue) ? stockValue : splitStock(String(stockValue || ''));
   }
+  if (updates.supplier_source !== undefined || updates.supplierSource !== undefined) payload.supplier_source = String(updates.supplier_source ?? updates.supplierSource ?? '').trim().toLowerCase();
+  if (updates.supplier_product_id !== undefined || updates.supplierProductId !== undefined) payload.supplier_product_id = String(updates.supplier_product_id ?? updates.supplierProductId ?? '').trim();
+  if (updates.supplier_price_usdt !== undefined || updates.supplierPriceUsdt !== undefined) payload.supplier_price_usdt = Number(updates.supplier_price_usdt ?? updates.supplierPriceUsdt ?? 0);
+  if (updates.supplier_public_price_usdt !== undefined || updates.supplierPublicPriceUsdt !== undefined) payload.supplier_public_price_usdt = Number(updates.supplier_public_price_usdt ?? updates.supplierPublicPriceUsdt ?? 0);
+  if (updates.supplier_stock !== undefined || updates.supplierStock !== undefined) payload.supplier_stock = (updates.supplier_stock ?? updates.supplierStock) == null ? null : Number(updates.supplier_stock ?? updates.supplierStock);
+  if (updates.supplier_synced_at !== undefined || updates.supplierSyncedAt !== undefined) payload.supplier_synced_at = updates.supplier_synced_at ?? updates.supplierSyncedAt ?? null;
   Object.keys(payload).forEach((key) => {
     if (payload[key] === undefined || payload[key] === null) delete payload[key];
   });
@@ -991,7 +1009,10 @@ async function getShopSettings() {
     topup_enabled: 'true',
     wallet_payment_enabled: 'true',
     topup_min_amount: '10000',
-    topup_max_amount: '1000000'
+    topup_max_amount: '1000000',
+    prodseller_usdt_to_idr: '16500',
+    prodseller_markup_percent: '25',
+    prodseller_default_category: 'Produk Digital'
   };
   const { data, error } = await sb().from('shop_settings').select('key,value');
   if (error) {
@@ -1037,7 +1058,10 @@ async function saveShopSettings(input = {}) {
     'topup_enabled',
     'wallet_payment_enabled',
     'topup_min_amount',
-    'topup_max_amount'
+    'topup_max_amount',
+    'prodseller_usdt_to_idr',
+    'prodseller_markup_percent',
+    'prodseller_default_category'
   ];
   const rows = allowed
     .filter((key) => input[key] !== undefined)
@@ -1678,7 +1702,50 @@ async function cleanupDatabase(input = {}) {
 }
 
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs'];
+
+async function getSupplierOrder(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return null;
+  const { data, error } = await sb().from('supplier_orders').select('*').eq('order_ref', ref).maybeSingle();
+  if (error) {
+    if (String(error.code || '') === '42P01') return null;
+    throw error;
+  }
+  return data;
+}
+
+async function upsertSupplierOrder(input = {}) {
+  const ref = String(input.order_ref || '').trim();
+  if (!ref) throw new Error('Invoice supplier wajib diisi.');
+  const payload = {
+    order_ref: ref,
+    supplier: String(input.supplier || 'prodseller').trim().toLowerCase(),
+    supplier_order_id: String(input.supplier_order_id || '').trim() || null,
+    supplier_product_id: String(input.supplier_product_id || '').trim(),
+    quantity: Math.max(1, Number(input.quantity || 1)),
+    amount_usdt: Math.max(0, Number(input.amount_usdt || 0)),
+    status: String(input.status || 'pending').trim().toLowerCase(),
+    delivered_text: String(input.delivered_text || ''),
+    error_code: String(input.error_code || ''),
+    error_message: String(input.error_message || ''),
+    raw_response: input.raw_response && typeof input.raw_response === 'object' ? input.raw_response : {},
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('supplier_orders').upsert(payload, { onConflict: 'order_ref' }).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function listSupplierOrders(limit = 100) {
+  const { data, error } = await sb().from('supplier_orders').select('*').order('updated_at', { ascending: false }).limit(Math.max(1, Math.min(300, Number(limit || 100))));
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders'];
 
 async function safeSelectAll(table) {
   try {
@@ -2044,6 +2111,9 @@ module.exports = {
   addBackupLog,
   listBackupLogs,
   getDeepStats,
+  listSupplierOrders,
+  upsertSupplierOrder,
+  getSupplierOrder,
   listAutoPromos,
   saveAutoPromo,
   deleteAutoPromo,

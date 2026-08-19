@@ -15,6 +15,8 @@ const config = {
   autogopayApiKey: required('AUTOGOPAY_API_KEY', '').trim(),
   autogopayBaseUrl: required('AUTOGOPAY_BASE_URL', 'https://v1-gateway.autogopay.site').replace(/\/$/, ''),
   autogopayRedirectUrl: required('AUTOGOPAY_REDIRECT_URL', ''),
+  prodsellerApiKey: required('PRODSELLER_API_KEY', '').trim(),
+  prodsellerBaseUrl: required('PRODSELLER_BASE_URL', 'https://prodseller.com/v1').replace(/\/$/, ''),
   pakasirSlug: required('PAKASIR_SLUG', ''),
   pakasirApiKey: required('PAKASIR_API_KEY', ''),
   pakasirWebhookSecret: required('PAKASIR_WEBHOOK_SECRET', ''),

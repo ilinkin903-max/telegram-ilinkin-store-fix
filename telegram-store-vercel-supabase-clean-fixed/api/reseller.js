@@ -182,6 +182,9 @@ module.exports = async function handler(req, res) {
       .promoBottomActions{display:grid;grid-template-columns:1fr 1fr}
       .promoBottomActions .btn{width:100%}
     }
+
+    .supplierPanel{background:#d9fbff}.supplierHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.supplierStat{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:12px;background:#fff}.supplierStat:nth-child(2){background:var(--lime)}.supplierStat:nth-child(3){background:var(--yellow)}.supplierStat:nth-child(4){background:#e6d7ff}.supplierStat small{display:block;font-size:10px;text-transform:uppercase}.supplierStat b{display:block;font-size:20px;margin-top:5px}.supplierToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.supplierToolbar .input{flex:1;min-width:220px}.supplierGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.supplierCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px;display:flex;flex-direction:column;gap:9px}.supplierCard.selected{background:#f3ffe0}.supplierCardTop{display:flex;gap:10px;align-items:flex-start}.supplierThumb{width:64px;height:64px;object-fit:cover;border:2px solid #000;border-radius:8px;background:#eee}.supplierThumbFallback{width:64px;height:64px;border:2px solid #000;border-radius:8px;background:var(--cyan);display:grid;place-items:center;font-size:25px}.supplierCard h3{margin:0;font-size:17px;line-height:1.2}.supplierMeta{font-size:12px;line-height:1.5;color:#333}.supplierPriceRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.supplierOrderList{display:grid;gap:9px}.supplierOrder{border:2px solid #000;border-radius:8px;background:#fff;padding:10px;font-size:12px;line-height:1.5}.supplierOrder.error{background:#ffd8d8}.supplierOrder.delivered{background:#e4ffd1}.supplierConfigWarning{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:14px;background:var(--yellow);margin-bottom:12px}.supplierApiBadge{display:inline-flex;border:2px solid #000;border-radius:999px;padding:4px 8px;font-size:10px;background:var(--lime)}
+    @media(max-width:700px){.supplierHero{grid-template-columns:1fr 1fr}.supplierPriceRow{grid-template-columns:1fr}.supplierToolbar .input{min-width:100%;}}
 </style>
 </head>
 <body>
@@ -399,6 +402,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         <button class="settingsSubBtn" data-tab="bannerSettings" type="button"><span class="ico">🖼️</span><b>Banner Promosi</b><small>Kelola gambar promosi dan kecepatan pergantian.</small></button>
         <button class="settingsSubBtn" data-tab="startSettings" type="button"><span class="ico">▶️</span><b>Media /start</b><small>Atur gambar, stiker, dan caption pembuka bot.</small></button>
         <button class="settingsSubBtn" data-tab="walletSettings" type="button"><span class="ico">💰</span><b>Saldo, Referral & Top Up</b><small>Atur hadiah referral, isi saldo, dan pembayaran memakai saldo.</small></button>
+        <button class="settingsSubBtn" data-tab="supplierSettings" type="button"><span class="ico">🔄</span><b>Supplier / Reseller</b><small>Hubungkan ProdSeller, cek saldo USDT, pilih produk, dan retry order supplier.</small></button>
         <button class="settingsSubBtn" data-tab="license" type="button"><span class="ico">🔐</span><b>Lisensi</b><small>Lihat masa aktif bot dan sisa hari penggunaan.</small></button>
         <button class="settingsSubBtn" data-tab="deepStats" type="button"><span class="ico">📈</span><b>Statistik Lengkap</b><small>Lihat omzet, profit bersih, stok, dan pengguna.</small></button>
         <button class="settingsSubBtn" data-tab="backup" type="button"><span class="ico">💾</span><b>Backup</b><small>Unduh, kirim, atau pulihkan data toko.</small></button>
@@ -480,6 +484,33 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       </form>
     </div>
   </section>
+
+  <section id="supplierSettings" class="section">
+    <button class="btn yellow backButton" data-tab="settings" type="button">← Kembali ke Pengaturan</button>
+    <div class="panel supplierPanel">
+      <div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Supplier / Reseller · ProdSeller</h2><p class="help">Saldo supplier tetap berada di akun ProdSeller. iLink hanya memakai API key server untuk membaca katalog, mengecek saldo, dan membeli produk setelah pelanggan membayar.</p></div><button class="btn cyan" id="refreshSupplier" type="button">Refresh Supplier</button></div>
+      <div id="supplierConfigWarning" class="supplierConfigWarning hidden"></div>
+      <div id="supplierStatus" class="supplierHero"></div>
+      <form id="supplierSettingsForm" class="form">
+        <div class="row3">
+          <div class="field"><label class="label">Kurs 1 USDT → Rupiah</label><input class="input" type="number" min="1" step="1" name="prodseller_usdt_to_idr" placeholder="16500"><p class="help">Dipakai menghitung modal Rupiah dan saran harga jual. Atur manual sesuai kurs yang Anda inginkan.</p></div>
+          <div class="field"><label class="label">Markup Default (%)</label><input class="input" type="number" min="0" step="1" name="prodseller_markup_percent" placeholder="25"><p class="help">Hanya untuk saran harga saat memilih produk. Harga jual tetap bisa Anda ubah per produk.</p></div>
+          <div class="field"><label class="label">Kategori Default</label><input class="input" name="prodseller_default_category" placeholder="Produk Digital"></div>
+        </div>
+        <button class="btn lime" type="submit">Simpan Pengaturan Supplier</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Pilih Produk yang Mau Direseller</h2><p class="help">Klik <b>Resellerkan</b> pada produk yang ingin dimasukkan ke katalog iLink. Produk yang sudah dipilih dapat di-update harga jualnya dari sini.</p></div></div>
+      <div class="supplierToolbar"><input id="supplierSearch" class="input" placeholder="Cari produk ProdSeller..."><span class="chip" id="supplierProductCount">0 produk</span></div>
+      <div id="supplierProductList" class="supplierGrid"></div>
+    </div>
+    <div class="panel">
+      <h2 class="sectionTitle">Order Supplier Terakhir</h2>
+      <p class="help">Jika pelanggan sudah membayar tetapi supplier gagal karena saldo/stok, cek saldo ProdSeller lalu tekan <b>Retry Supplier</b>. Invoice yang sama dipakai kembali sehingga aman dari double-charge.</p>
+      <div id="supplierOrderList" class="supplierOrderList"></div>
+    </div>
+  </section>
 </div>
 <div id="modal" class="modal"><div class="modalBox"><div class="modalHead"><h2 id="modalTitle" class="modalTitle">Modal</h2><button id="modalClose" class="closeBtn">Tutup</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
@@ -488,7 +519,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
   var initData = tg && tg.initData ? tg.initData : '';
-  var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[] };
+  var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[], supplierStatus:{}, supplierProducts:[], supplierOrders:[], supplierLoaded:false };
   function rupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0)); }
   function displayRef(v){ var original=String(v==null?'':v).trim(); var cleaned=original.replace(/^AUTOGOPAY(?:[-_: ]+)?/i,''); return cleaned||original||'-'; }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
@@ -531,7 +562,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function updateSearchCounter(){ var q=searchQuery(); var el=document.getElementById('productCounter'); if(!el) return; if(!q){ el.textContent=''; el.classList.add('hidden'); return; } var pc=state.products.filter(function(p){return productMatches(p,q);}).length; var oc=state.orders.filter(function(o){return orderMatches(o,q);}).length; var uc=state.users.filter(function(u){return userMatches(u,q);}).length; var vc=getUnifiedPromoRows().filter(function(x){return promoMatches(x,q);}).length; el.textContent='Hasil: '+pc+' produk · '+oc+' penjualan · '+uc+' user · '+vc+' promo/voucher'; el.classList.remove('hidden'); }
   function rupiahShort(n){ n=Number(n||0); if(Math.abs(n)>=1000000000) return 'Rp'+(n/1000000000).toFixed(n%1000000000?1:0).replace('.0','')+'M'; if(Math.abs(n)>=1000000) return 'Rp'+(n/1000000).toFixed(n%1000000?1:0).replace('.0','')+'jt'; if(Math.abs(n)>=1000) return 'Rp'+Math.round(n/1000)+'rb'; return 'Rp'+n; }
   function setPromoSub(mode){ mode=mode||'list'; var list=document.getElementById('promoListPanel'); var create=document.getElementById('promoCreatePanel'); var flash=document.getElementById('promoFlashPanel'); if(list) list.classList.toggle('hidden', mode!=='list'); if(create) create.classList.toggle('hidden', mode!=='create'); if(flash) flash.classList.toggle('hidden', mode!=='flash'); document.querySelectorAll('[data-promo-sub]').forEach(function(btn){ btn.classList.toggle('active', btn.dataset.promoSub===mode); }); var target=mode==='create'?create:(mode==='flash'?flash:list); if(target) setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },20); }
-  function switchTab(id, opts){ opts=opts||{}; var settingsToolTabs={storeSettings:1,bannerSettings:1,startSettings:1,walletSettings:1,license:1,maintenance:1,backup:1,deepStats:1}; document.querySelectorAll('.tile[data-tab]').forEach(function(x){x.classList.remove('active'); x.setAttribute('aria-selected','false');}); document.querySelectorAll('.section').forEach(function(x){x.classList.remove('active');}); document.querySelectorAll('.tile[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn').forEach(function(x){x.classList.remove('active');}); if(settingsToolTabs[id]){ document.querySelectorAll('.navTiles .tile[data-tab="settings"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active');}); } var section=document.getElementById(id); if(section) section.classList.add('active'); try{ localStorage.setItem('admin_active_tab', id); }catch(e){} var target=document.getElementById(opts.scrollTarget||id)||section; if(opts.smooth && target){ setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },25); } else { window.scrollTo(0,0); } }
+  function switchTab(id, opts){ opts=opts||{}; var settingsToolTabs={storeSettings:1,bannerSettings:1,startSettings:1,walletSettings:1,supplierSettings:1,license:1,maintenance:1,backup:1,deepStats:1}; document.querySelectorAll('.tile[data-tab]').forEach(function(x){x.classList.remove('active'); x.setAttribute('aria-selected','false');}); document.querySelectorAll('.section').forEach(function(x){x.classList.remove('active');}); document.querySelectorAll('.tile[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn').forEach(function(x){x.classList.remove('active');}); if(settingsToolTabs[id]){ document.querySelectorAll('.navTiles .tile[data-tab="settings"]').forEach(function(x){x.classList.add('active'); x.setAttribute('aria-selected','true');}); document.querySelectorAll('.settingsSubBtn[data-tab="'+id+'"]').forEach(function(x){x.classList.add('active');}); } var section=document.getElementById(id); if(section) section.classList.add('active'); try{ localStorage.setItem('admin_active_tab', id); }catch(e){} var target=document.getElementById(opts.scrollTarget||id)||section; if(opts.smooth && target){ setTimeout(function(){ target.scrollIntoView({behavior:'smooth',block:'start'}); },25); } else { window.scrollTo(0,0); } }
   function openModal(title, html){ document.getElementById('modalTitle').textContent=title; document.getElementById('modalBody').innerHTML=html; document.getElementById('modal').classList.add('show'); }
   function closeModal(){ document.getElementById('modal').classList.remove('show'); document.getElementById('modalBody').innerHTML=''; }
   document.getElementById('modalClose').onclick=closeModal;
@@ -787,7 +818,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){return bannerRowData(row,i);}).filter(function(x){return x.type==='native'?(x.title||x.description||x.kicker):x.url;}).slice(0,12);
   }
   function datetimeLocalValue(value){ if(!value)return ''; var text=String(value).trim(); var m=text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if(m)return m[1]; try{var d=new Date(text);if(isNaN(d.getTime()))return '';var pad=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}catch(e){return '';} }
-  function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','bot_menu_mode'].forEach(function(k){ if(store[k]) store[k].value=s[k]||''; }); } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } }
+  function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); var supplier=document.getElementById('supplierSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','bot_menu_mode'].forEach(function(k){ if(store[k]) store[k].value=s[k]||''; }); } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } if(supplier){ supplier.prodseller_usdt_to_idr.value=Number(s.prodseller_usdt_to_idr||16500); supplier.prodseller_markup_percent.value=Number(s.prodseller_markup_percent||25); supplier.prodseller_default_category.value=String(s.prodseller_default_category||'Produk Digital'); } }
   function renderFlashSaleForm(){
     var s=state.settings||{}; var f=document.getElementById('flashSaleForm'); if(!f) return;
     f.flash_sale_enabled.value=String(s.flash_sale_enabled||'false').toLowerCase()==='true'?'true':'false';
@@ -801,6 +832,64 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function daysLeftText(n){ n=Number(n); if(!isFinite(n)) return '-'; if(n<0) return 'Expired'; if(n===0) return 'Hari ini'; return n+' hari'; }
   function fmtLicenseDate(v){ if(!v) return '-'; try{return new Date(v).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',weekday:'long',day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return String(v);} }
   function renderLicense(){ var l=state.license||{}; var box=document.getElementById('licenseBox'); if(!box) return; var status=(l.enabled===false)?'Belum diaktifkan':(l.active?'Aktif':(l.status||'Tidak aktif')); var rows=[['Status',status],['Kode Aktivasi',l.license_code||l.code||'-'],['Bot','@'+(l.bot_username||'-')],['Paket',l.plan_name||'-'],['Masa Aktif Sampai',fmtLicenseDate(l.expires_at)],['Sisa Durasi',daysLeftText(l.days_left)],['Catatan',l.reason||'-']]; box.innerHTML=rows.map(function(r){return '<div class="detailItem"><b>'+esc(r[0])+'</b><br><span style="font-size:18px">'+esc(r[1])+'</span></div>';}).join(''); }
+
+
+  function usdt(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4}); }
+  function supplierMatches(p,q){ return textMatch([p.id,p.name,p.description,p.local_code,p.local_name,p.price,p.publicPrice],q); }
+  function renderSupplier(){
+    var st=state.supplierStatus||{};
+    var warning=document.getElementById('supplierConfigWarning');
+    if(warning){
+      warning.classList.toggle('hidden',!!st.configured);
+      warning.innerHTML=st.configured?'':'<b>API key belum terhubung.</b><br>Tambahkan <code>PRODSELLER_API_KEY</code> pada Vercel → Project Settings → Environment Variables, lalu Redeploy. API key tidak disimpan di browser atau Supabase.';
+    }
+    var status=document.getElementById('supplierStatus');
+    if(status){ status.innerHTML=[
+      ['API',st.configured?'TERHUBUNG':'BELUM DIATUR'],
+      ['Saldo ProdSeller',st.configured?usdt(st.balance):'-'],
+      ['Membership',st.membership||'-'],
+      ['Produk Dipilih',Number(st.selected_count||0)]
+    ].map(function(x){return '<div class="supplierStat"><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>';}).join(''); }
+
+    var q=String((document.getElementById('supplierSearch')||{}).value||'').trim().toLowerCase();
+    var rows=(state.supplierProducts||[]).filter(function(p){return supplierMatches(p,q);});
+    var count=document.getElementById('supplierProductCount'); if(count) count.textContent=rows.length+' produk';
+    var list=document.getElementById('supplierProductList');
+    if(list){
+      if(!st.configured) list.innerHTML='<div class="empty">Atur PRODSELLER_API_KEY terlebih dahulu untuk memuat katalog supplier.</div>';
+      else list.innerHTML=rows.map(function(p){
+        var image=p.imageUrl?'<img class="supplierThumb" src="'+esc(p.imageUrl)+'" alt="">':'<div class="supplierThumbFallback">📦</div>';
+        var stock=p.inStock===false?'<span class="chip red">STOK HABIS</span>':'<span class="chip green">TERSEDIA</span>';
+        var selected=p.selected?'<span class="supplierApiBadge">SUDAH DIRESELLER</span>':'';
+        var sell=Number(p.local_price||p.suggested_price_idr||0);
+        return '<article class="supplierCard '+(p.selected?'selected':'')+'" data-supplier-card="'+esc(p.id)+'"><div class="supplierCardTop">'+image+'<div><h3>'+esc(p.name||'Produk')+'</h3><div class="supplierMeta">ID '+esc(p.id)+'<br>'+stock+' '+selected+'</div></div></div><div class="supplierMeta">'+esc(p.description||'')+'</div><div class="supplierPriceRow"><div class="detailItem"><b>Modal API</b><br>'+usdt(p.price)+'</div><div class="detailItem"><b>Harga Publik</b><br>'+usdt(p.publicPrice)+'</div></div><div class="field"><label class="label">Harga Jual iLink (Rupiah)</label><input class="input" type="number" min="1000" step="500" data-supplier-price value="'+esc(sell)+'"></div><button class="btn '+(p.selected?'yellow':'lime')+'" type="button" data-supplier-import="'+esc(p.id)+'">'+(p.selected?'Update Produk':'Resellerkan Produk')+'</button>'+(p.selected?'<div class="help">Produk lokal: '+esc(p.local_name||p.name)+' · '+esc(p.local_code||'-')+'</div>':'')+'</article>';
+      }).join('')||'<div class="empty">Produk supplier tidak ditemukan.</div>';
+    }
+    document.querySelectorAll('[data-supplier-import]').forEach(function(btn){btn.onclick=async function(){
+      var card=btn.closest('[data-supplier-card]'); var input=card&&card.querySelector('[data-supplier-price]'); var price=Math.max(1000,Number(input&&input.value||0));
+      if(!price) return toast('Isi harga jual Rupiah terlebih dahulu.',true);
+      btn.disabled=true; var old=btn.textContent; btn.textContent='Memproses...';
+      try{ await api('prodseller-import',{product_id:btn.dataset.supplierImport,selling_price:price}); toast('Produk supplier berhasil disimpan ke katalog iLink.'); await load(); await loadSupplier(true); }
+      catch(e){toast(e.message,true);} finally{btn.disabled=false;btn.textContent=old;}
+    };});
+
+    var orderList=document.getElementById('supplierOrderList');
+    if(orderList){ orderList.innerHTML=(state.supplierOrders||[]).map(function(o){
+      var statusText=String(o.status||'pending').toUpperCase(); var cls=String(o.status||'')==='delivered'?'delivered':(String(o.status||'')==='error'?'error':'');
+      return '<div class="supplierOrder '+cls+'"><b>'+esc(displayRef(o.order_ref||'-'))+'</b> · <span class="chip '+(cls==='delivered'?'green':(cls==='error'?'red':'yellow'))+'">'+esc(statusText)+'</span><br>Supplier Order: '+esc(o.supplier_order_id||'-')+' · Qty '+esc(o.quantity||1)+' · '+usdt(o.amount_usdt||0)+(o.error_message?'<br><b>Error:</b> '+esc(o.error_message):'')+(String(o.status||'')!=='delivered'?'<br><button class="btn small cyan" type="button" data-supplier-retry="'+esc(o.order_ref||'')+'">Retry Supplier</button>':'')+'</div>';
+    }).join('')||'<div class="empty">Belum ada order supplier.</div>'; }
+    document.querySelectorAll('[data-supplier-retry]').forEach(function(btn){btn.onclick=async function(){ btn.disabled=true; var old=btn.textContent; btn.textContent='Retry...'; try{await api('prodseller-retry',{order_ref:btn.dataset.supplierRetry}); toast('Retry supplier berhasil.'); await load(); await loadSupplier(true);}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent=old;} };});
+  }
+
+  async function loadSupplier(force){
+    if(state.supplierLoaded && !force){ renderSupplier(); return; }
+    var st=await apiSafe('prodseller-status',{configured:false});
+    state.supplierStatus=st||{configured:false};
+    state.supplierOrders=await apiSafe('supplier-orders',[]);
+    state.supplierProducts=state.supplierStatus.configured?await apiSafe('prodseller-products',[]):[];
+    state.supplierLoaded=true;
+    renderSupplier();
+  }
 
   function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Order',s.orders||0],['Stok',s.stokTersedia||0]]; document.getElementById('stats').innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
   function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(118,(chart.clientHeight||300)-96); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="barValue" title="Omzet '+esc(d.label)+'">'+esc(rupiahShort(d.revenue))+'</div><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barDate">'+esc(d.label)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } document.getElementById('topProductList').innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
@@ -824,18 +913,19 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     updateSearchCounter();
     document.getElementById('productList').innerHTML=rows.map(function(p){
       var isPo=String(p.delivery_mode||'auto')==='po';
+      var isSupplier=String(p.supplier_source||'').toLowerCase()==='prodseller';
       var varsArr=productVariants(p);
       var visibleVars=varsArr.slice(0,3);
       var vars=visibleVars.map(function(v){
         return '<span class="chip '+(variantActive(v)?'purple':'red')+'">'+esc(v.name||v.nama)+' · '+rupiah(v.price||v.harga||p.harga)+' · '+(isPo?'PO':(variantStock(v).length+' stok'))+' · '+(variantActive(v)?'ON':'OFF')+'</span>';
       }).join('');
       if(varsArr.length>visibleVars.length) vars+='<span class="chip">+'+(varsArr.length-visibleVars.length)+' varian lain</span>';
-      var availability=isPo?'PRE-ORDER':('STOK '+stockCount(p));
+      var availability=isSupplier?'AUTO SUPPLIER':(isPo?'PRE-ORDER':('STOK '+stockCount(p)));
       var actions='<button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button>'+
         (isPo?'':'<button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button>')+
         '<button class="btn small red" data-delete-product="'+esc(p.kode)+'">Hapus</button>';
       return '<article class="product '+(isPo?'poProduct ':'')+(p.active===false?'productOff':'')+'">'+
-        '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - '+availability+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span>'+(isPo?'<br><span class="deliveryModeBadge">PRE-ORDER · KIRIM MANUAL</span>':'')+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
+        '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - '+availability+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span>'+(isSupplier?'<br><span class="deliveryModeBadge">AUTO SUPPLIER · PRODSELLER</span>':(isPo?'<br><span class="deliveryModeBadge">PRE-ORDER · KIRIM MANUAL</span>':''))+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
         '<div class="price">'+productDisplayPrice(p)+'</div>'+(vars?'<div class="chips">'+vars+'</div>':'')+
         '<div class="actions">'+actions+'</div></article>';
     }).join('')||'<div class="empty">Produk belum ada.</div>';
@@ -1270,8 +1360,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     }catch(e){ toast(e.message,true); renderLicense(); renderStats(); renderProducts(); renderMaintenance(); }
   }
   async function post(action,data){ try{ var r=await api(action,data); toast('Berhasil diproses'); await load(); return r; }catch(e){ toast(e.message,true); throw e; } }
-  document.querySelectorAll('[data-tab]').forEach(function(btn){btn.onclick=function(){ switchTab(btn.dataset.tab,{smooth:btn.classList.contains('settingsSubBtn'),scrollTarget:btn.dataset.scrollTarget}); };});
-  var refreshLicense=document.getElementById('refreshLicense'); if(refreshLicense) refreshLicense.onclick=async function(){ state.license=await apiSafe('license-status',{}); renderLicense(); toast('Status lisensi diperbarui'); }; try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)) switchTab(lastTab); }catch(e){}
+  document.querySelectorAll('[data-tab]').forEach(function(btn){btn.onclick=function(){ switchTab(btn.dataset.tab,{smooth:btn.classList.contains('settingsSubBtn'),scrollTarget:btn.dataset.scrollTarget}); if(btn.dataset.tab==='supplierSettings') loadSupplier(false); };});
+  var refreshLicense=document.getElementById('refreshLicense'); if(refreshLicense) refreshLicense.onclick=async function(){ state.license=await apiSafe('license-status',{}); renderLicense(); toast('Status lisensi diperbarui'); }; try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)){ switchTab(lastTab); if(lastTab==='supplierSettings') loadSupplier(false); } }catch(e){}
   document.getElementById('search').oninput=function(){ renderProducts(); renderOrders(); renderPoOrders(); renderUsers(); renderUnifiedPromos(); };
   document.querySelectorAll('[data-promo-sub]').forEach(function(btn){btn.onclick=function(){ if(btn.dataset.promoSub==='create') promoUnifiedReset(); else setPromoSub(btn.dataset.promoSub||'list'); };});
   document.getElementById('addForm').onsubmit=async function(e){
@@ -1306,6 +1396,9 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var bannerSettingsForm=document.getElementById('bannerSettingsForm'); if(bannerSettingsForm) bannerSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var banners=collectBannerRows(); var imageBanners=banners.filter(function(x){return x.type==='image'&&x.url;}); d.store_description=''; d.banner_items=JSON.stringify(banners); d.banner_urls=imageBanners.map(function(x){return x.url;}).join('\n'); d.banner_url=imageBanners.length?imageBanners[0].url:''; d.banner_interval_seconds=Math.max(3,Math.min(15,Number(d.banner_interval_seconds||5))); await post('save-settings',d);};
   var startMediaForm=document.getElementById('startMediaForm'); if(startMediaForm) startMediaForm.onsubmit=async function(e){e.preventDefault(); await post('save-settings',formDataRaw(e.target));};
   var walletSettingsForm=document.getElementById('walletSettingsForm'); if(walletSettingsForm) walletSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var min=Math.max(1000,Number(d.topup_min_amount||0)); var max=Math.max(min,Number(d.topup_max_amount||0)); d.topup_min_amount=min; d.topup_max_amount=max; d.referral_reward_amount=Math.max(0,Number(d.referral_reward_amount||0)); await post('save-settings',d);};
+  var supplierSettingsForm=document.getElementById('supplierSettingsForm'); if(supplierSettingsForm) supplierSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.prodseller_usdt_to_idr=Math.max(1,Number(d.prodseller_usdt_to_idr||16500)); d.prodseller_markup_percent=Math.max(0,Number(d.prodseller_markup_percent||25)); await post('save-settings',d); state.supplierLoaded=false; await loadSupplier(true);};
+  var refreshSupplier=document.getElementById('refreshSupplier'); if(refreshSupplier) refreshSupplier.onclick=async function(){ refreshSupplier.disabled=true; var old=refreshSupplier.textContent; refreshSupplier.textContent='Memuat...'; try{ state.supplierLoaded=false; await loadSupplier(true); toast('Data ProdSeller diperbarui.'); }finally{ refreshSupplier.disabled=false; refreshSupplier.textContent=old; } };
+  var supplierSearch=document.getElementById('supplierSearch'); if(supplierSearch) supplierSearch.oninput=renderSupplier;
   var flashSaleForm=document.getElementById('flashSaleForm'); if(flashSaleForm) flashSaleForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var selected=(state.promos||[]).filter(function(p){return p.flash_sale;}); if(String(d.flash_sale_enabled)==='true'){ if(!d.flash_sale_start_at||!d.flash_sale_end_at) return toast('Isi waktu mulai dan berakhir Flash Sale.',true); if(new Date(d.flash_sale_end_at).getTime()<=new Date(d.flash_sale_start_at).getTime()) return toast('Waktu berakhir harus setelah waktu mulai.',true); if(!selected.length) return toast('Aktifkan Flash Sale pada minimal satu Promo Otomatis.',true); } await post('save-settings',d); };
   var broadcastOrderEnabled=document.getElementById('broadcastOrderEnabled');
   function syncBroadcastOrderTarget(){ var box=document.getElementById('broadcastOrderTargetBox'); if(box) box.classList.toggle('hidden',!(broadcastOrderEnabled&&broadcastOrderEnabled.checked)); }

@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const db = require('./db');
 const paymentService = require('./paymentService');
+const prodseller = require('./prodsellerService');
 const { config } = require('./config');
 const { randomFee, randomRef } = require('./utils');
 
@@ -296,6 +297,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     image_url: normalizePublicImageUrl(product.image_url),
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
     delivery_mode: productDeliveryMode,
+    supplier_source: String(product?.supplier_source || '').toLowerCase(),
     has_po_variants: variants.some((variant) => variant.effective_delivery_mode === 'po'),
     has_auto_variants: variants.some((variant) => variant.effective_delivery_mode === 'auto'),
     price: Number(product.harga || 0),
@@ -476,6 +478,40 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   const selected = selectedProductVariant(product, variantKey);
   const deliveryMode = db.variantDeliveryMode(product, selected.variant);
   const isPo = deliveryMode === 'po';
+  const isSupplier = String(product.supplier_source || '').trim().toLowerCase() === 'prodseller' && Boolean(String(product.supplier_product_id || '').trim());
+  let liveSupplierCostUnit = null;
+  if (isSupplier) {
+    if (!prodseller.configured()) {
+      throw httpError('Produk Auto Supplier sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
+    }
+    try {
+      const liveProduct = await prodseller.getProduct(product.supplier_product_id);
+      const liveStock = liveProduct?.stock == null ? null : Number(liveProduct.stock);
+      if (Number.isFinite(liveStock) && liveStock < qty) {
+        throw httpError(`Stok Auto Supplier tidak mencukupi. Stok tersedia: ${Math.max(0, liveStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, liveStock) });
+      }
+      const supplierPrice = Number(liveProduct?.price || 0);
+      if (supplierPrice > 0) {
+        const settings = await db.getShopSettings();
+        const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+        liveSupplierCostUnit = Math.max(0, Math.round(supplierPrice * rate));
+        db.updateProductByCode(product.kode, {
+          supplier_price_usdt: supplierPrice,
+          supplier_public_price_usdt: Number(liveProduct?.publicPrice || product.supplier_public_price_usdt || 0),
+          supplier_stock: liveStock,
+          supplier_synced_at: new Date().toISOString(),
+          cost_price: liveSupplierCostUnit
+        }).catch(() => null);
+      }
+    } catch (error) {
+      if (error?.code === 'SUPPLIER_STOCK') throw error;
+      const status = Number(error?.statusCode || 503);
+      if (status === 409 || error?.code === 'PRODSELLER_STOCK') {
+        throw httpError('Stok Auto Supplier sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK');
+      }
+      throw httpError('Stok Auto Supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
+    }
+  }
   const availableStock = selected.variant
     ? variantStock(selected.variant)
     : (Array.isArray(product.data) ? product.data.length : 0);
@@ -494,7 +530,7 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
     status: 'draft'
   };
   const unitPrice = db.orderUnitPrice(product, draftOrder);
-  const costUnit = db.orderUnitCost(product, draftOrder);
+  const costUnit = liveSupplierCostUnit == null ? db.orderUnitCost(product, draftOrder) : liveSupplierCostUnit;
   const costTotal = costUnit * qty;
   const subtotal = unitPrice * qty;
   let voucherApplied = null;
@@ -553,7 +589,8 @@ async function previewCheckout({ user, productCode, variantKey, quantity, vouche
     after_discount: checkout.afterDiscount,
     voucher_code: checkout.voucherApplied?.code || '',
     promo_code: checkout.promoApplied?.code || '',
-    delivery_mode: checkout.deliveryMode
+    delivery_mode: checkout.deliveryMode,
+    supplier_source: String(checkout.product?.supplier_source || '').toLowerCase()
   };
 }
 
@@ -644,7 +681,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     checkout_url: gatewayPayment.checkout_url || '',
     payment_provider: gatewayPayment.provider,
     watcher_scheduled,
-    delivery_mode: deliveryMode
+    delivery_mode: deliveryMode,
+    supplier_source: String(product?.supplier_source || '').toLowerCase()
   };
 }
 
@@ -704,6 +742,7 @@ async function createWalletPayment({ user, productCode, variantKey, quantity, vo
       payment_method: 'wallet',
       status: result.po_waiting ? 'awaiting_delivery' : 'completed',
       delivery_mode: result.po_waiting ? 'po' : deliveryMode,
+      supplier_source: String(product?.supplier_source || '').toLowerCase(),
       invoice,
       invoice_display: paymentService.displayPaymentReference(invoice),
       product: transaction.product_name || product.nama,
@@ -777,10 +816,12 @@ async function getOrderStatus(user, invoice) {
   const transaction = await db.getTransactionByOrderRef(ref);
   if (transaction) {
     if (Number(transaction.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
+    const statusProduct = await db.getProductByCode(transaction.product_code).catch(() => null);
     const waitingDelivery = String(transaction.delivery_mode || 'auto') === 'po' && String(transaction.delivery_status || '') !== 'delivered';
     return {
       status: waitingDelivery ? 'awaiting_delivery' : 'completed',
       delivery_mode: String(transaction.delivery_mode || 'auto'),
+      supplier_source: String(statusProduct?.supplier_source || '').toLowerCase(),
       delivery_status: String(transaction.delivery_status || 'delivered'),
       invoice: ref,
       invoice_display: paymentService.displayPaymentReference(ref),
@@ -803,10 +844,12 @@ async function getOrderStatus(user, invoice) {
       if (verified.status === 'completed') {
         const result = await paymentService.fulfillPaidOrder({ order, buyer: user, source: 'marketplace-status-check' });
         const completed = result.transaction || await db.getTransactionByOrderRef(ref).catch(() => null);
+        const statusProduct = await db.getProductByCode(completed?.product_code || order.product_code).catch(() => null);
         const waitingDelivery = String(completed?.delivery_mode || '') === 'po' && String(completed?.delivery_status || '') !== 'delivered';
         return {
           status: waitingDelivery ? 'awaiting_delivery' : 'completed',
           delivery_mode: completed?.delivery_mode || (result.po_waiting ? 'po' : 'auto'),
+          supplier_source: String(statusProduct?.supplier_source || '').toLowerCase(),
           delivery_status: completed?.delivery_status || (result.po_waiting ? 'waiting_delivery' : 'delivered'),
           invoice: ref,
           invoice_display: paymentService.displayPaymentReference(ref),

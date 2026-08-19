@@ -2,6 +2,7 @@ const { assertOwnerMiniApp } = require('../lib/miniappAuth');
 const db = require('../lib/db');
 const tg = require('../lib/telegram');
 const paymentService = require('../lib/paymentService');
+const prodseller = require('../lib/prodsellerService');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
@@ -184,6 +185,114 @@ function shortHash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
 }
 
+
+function prodsellerPriceIdr(priceUsdt, settings = {}) {
+  const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+  const markup = Math.max(0, Number(settings.prodseller_markup_percent || 25));
+  const raw = Math.max(0, Number(priceUsdt || 0)) * rate * (1 + markup / 100);
+  return Math.max(1000, Math.ceil(raw / 500) * 500);
+}
+
+function prodsellerCode(productId) {
+  return `PS${shortHash(String(productId || '')).slice(0, 8).toUpperCase()}`;
+}
+
+async function getProdSellerStatus() {
+  const localProducts = await db.listProducts().catch(() => []);
+  const selected = localProducts.filter((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller');
+  if (!prodseller.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length };
+  const balance = await prodseller.getBalance();
+  return {
+    configured: true,
+    balance: Number(balance.balance || 0),
+    membership: String(balance.membership || ''),
+    username: String(balance.username || ''),
+    telegramId: balance.telegramId || null,
+    selected_count: selected.length
+  };
+}
+
+async function getProdSellerCatalog() {
+  const [remoteProducts, localProducts, settings] = await Promise.all([
+    prodseller.listProducts(),
+    db.listProducts(),
+    db.getShopSettings()
+  ]);
+  const localBySupplierId = new Map(localProducts
+    .filter((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller' && p.supplier_product_id)
+    .map((p) => [String(p.supplier_product_id), p]));
+  return remoteProducts.map((item) => {
+    const local = localBySupplierId.get(String(item.id || '')) || null;
+    return {
+      id: String(item.id || ''),
+      name: String(item.name || ''),
+      description: String(item.description || ''),
+      price: Number(item.price || 0),
+      publicPrice: Number(item.publicPrice || 0),
+      imageUrl: String(item.imageUrl || ''),
+      delivery: item.delivery || {},
+      sold: Number(item.sold || 0),
+      inStock: item.inStock !== false,
+      suggested_price_idr: prodsellerPriceIdr(item.price, settings),
+      selected: Boolean(local),
+      local_code: local?.kode || '',
+      local_name: local?.nama || '',
+      local_price: Number(local?.harga || 0),
+      local_active: local ? local.active !== false : false,
+      local_synced_at: local?.supplier_synced_at || null
+    };
+  });
+}
+
+async function importProdSellerProduct(body = {}) {
+  const productId = String(body.product_id || body.productId || '').trim();
+  if (!productId) throw new Error('Pilih produk ProdSeller terlebih dahulu.');
+  const [detailRaw, catalog, settings, localProducts] = await Promise.all([
+    prodseller.getProduct(productId),
+    prodseller.listProducts(),
+    db.getShopSettings(),
+    db.listProducts()
+  ]);
+  const listItem = (Array.isArray(catalog) ? catalog : []).find((item) => String(item.id || '') === productId) || {};
+  const detail = { ...listItem, ...(detailRaw || {}) };
+  const supplierPrice = Number(detail.price || 0);
+  const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+  const defaultPrice = prodsellerPriceIdr(supplierPrice, settings);
+  const sellingPrice = Math.max(1000, Number(body.selling_price || body.harga || defaultPrice));
+  const costIdr = Math.max(0, Math.round(supplierPrice * rate));
+  const existing = localProducts.find((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller' && String(p.supplier_product_id || '') === productId) || null;
+  const base = {
+    harga: sellingPrice,
+    cost_price: costIdr,
+    supplier_source: 'prodseller',
+    supplier_product_id: productId,
+    supplier_price_usdt: supplierPrice,
+    supplier_public_price_usdt: Number(detail.publicPrice || 0),
+    supplier_stock: detail.stock == null ? null : Number(detail.stock),
+    supplier_synced_at: new Date().toISOString(),
+    delivery_mode: 'po',
+    display_scope: String(body.display_scope || existing?.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
+    active: body.active === undefined ? (existing ? existing.active !== false : true) : boolOf(body.active)
+  };
+  if (existing) {
+    return db.updateProductByCode(existing.kode, {
+      ...base,
+      image_url: existing.image_url || String(detail.imageUrl || ''),
+      category: String(body.category || existing.category || settings.prodseller_default_category || 'Produk Digital')
+    });
+  }
+  return db.addProduct({
+    ...base,
+    nama: String(body.name || detail.name || 'Produk ProdSeller').trim(),
+    kode: prodsellerCode(productId),
+    deskripsi: String(detail.description || 'Produk digital dikirim otomatis setelah pembayaran berhasil.'),
+    snk: 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.',
+    image_url: String(detail.imageUrl || ''),
+    category: String(body.category || settings.prodseller_default_category || 'Produk Digital'),
+    stock: []
+  });
+}
+
 async function broadcast(payload = {}, req = null) {
   const typeForLock = String(payload.type || 'text').toLowerCase();
   const requestId = String(payload.request_id || payload.requestId || '').trim();
@@ -261,6 +370,9 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
+    if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
+    if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
+    if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
     if (req.method === 'GET' && action === 'maintenance-stats') return json(res, 200, { ok: true, data: await db.getMaintenanceStats() });
@@ -283,6 +395,18 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method tidak didukung.' });
+
+    if (action === 'prodseller-import') {
+      const body = bodyOf(req);
+      const data = await importProdSellerProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'prodseller-retry') {
+      const body = bodyOf(req);
+      const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' });
+      return json(res, 200, { ok: true, data });
+    }
 
     const body = bodyOf(req);
 
@@ -356,7 +480,10 @@ module.exports = async function handler(req, res) {
         topup_enabled: body.topup_enabled,
         wallet_payment_enabled: body.wallet_payment_enabled,
         topup_min_amount: body.topup_min_amount,
-        topup_max_amount: body.topup_max_amount
+        topup_max_amount: body.topup_max_amount,
+        prodseller_usdt_to_idr: body.prodseller_usdt_to_idr,
+        prodseller_markup_percent: body.prodseller_markup_percent,
+        prodseller_default_category: body.prodseller_default_category
       });
       return json(res, 200, { ok: true, data });
     }
@@ -431,6 +558,11 @@ module.exports = async function handler(req, res) {
       if (body.variants_text !== undefined || body.variant_text !== undefined || body.variants !== undefined) updates.variants = parseVariantPayload(body);
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
       if (body.field && body.value !== undefined) updates[body.field] = ['harga','cost_price','modal','harga_modal'].includes(body.field) ? numberOf(body.value) : String(body.value || '').trim();
+      const currentProduct = await db.getProductByCode(code);
+      if (String(currentProduct?.supplier_source || '').toLowerCase() === 'prodseller') {
+        updates.delivery_mode = 'po';
+        updates.stock = [];
+      }
       const product = await db.updateProductByCode(code, updates);
       if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
       return json(res, 200, { ok: true, data: product });
