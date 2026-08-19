@@ -603,7 +603,8 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
       var el=document.querySelector('[data-stock-field="'+sku.replace(/"/g,'&quot;')+'"]');
       var input=el?cleanListText(el.value):[];
-      var stock=mode==='append' ? variantStock(v).concat(input) : input;
+      var isSupplierVariant=String(v.supplier_source||'').toLowerCase()==='prodseller' && String(v.supplier_product_id||'').trim();
+      var stock=isSupplierVariant ? [] : (mode==='append' ? variantStock(v).concat(input) : input);
       return {
         name:v.name||v.nama||'',
         price:v.price||v.harga||0,
@@ -613,7 +614,14 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         bulk_prices:Array.isArray(v.bulk_prices)?v.bulk_prices:parseBulkArray(variantBulkText(v)),
         description:v.description||v.deskripsi||'',
         snk:v.snk||v.terms||'',
-        active:variantActive(v)
+        delivery_mode:isSupplierVariant?'po':(v.delivery_mode||''),
+        active:variantActive(v),
+        supplier_source:v.supplier_source||'',
+        supplier_product_id:v.supplier_product_id||'',
+        supplier_price_usdt:v.supplier_price_usdt||0,
+        supplier_public_price_usdt:v.supplier_public_price_usdt||0,
+        supplier_stock:v.supplier_stock==null?null:v.supplier_stock,
+        supplier_synced_at:v.supplier_synced_at||null
       };
     });
   }
@@ -837,7 +845,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
 
   function usdt(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4}); }
-  function supplierMatches(p,q){ return textMatch([p.id,p.name,p.description,p.local_code,p.local_name,p.price,p.publicPrice],q); }
+  function supplierMatches(p,q){ return textMatch([p.id,p.name,p.description,p.local_code,p.local_name,p.local_variant_name,p.price,p.publicPrice],q); }
   function renderSupplier(){
     var st=state.supplierStatus||{};
     var warning=document.getElementById('supplierConfigWarning');
@@ -850,7 +858,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       ['API',st.configured?'TERHUBUNG':'BELUM DIATUR'],
       ['Saldo ProdSeller',st.configured?usdt(st.balance):'-'],
       ['Membership',st.membership||'-'],
-      ['Produk Dipilih',Number(st.selected_count||0)]
+      ['Produk / Varian Dipilih',Number(st.selected_count||0)]
     ].map(function(x){return '<div class="supplierStat"><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>';}).join(''); }
 
     var q=String((document.getElementById('supplierSearch')||{}).value||'').trim().toLowerCase();
@@ -864,14 +872,23 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
         var stock=p.inStock===false?'<span class="chip red">STOK HABIS</span>':'<span class="chip green">TERSEDIA</span>';
         var selected=p.selected?'<span class="supplierApiBadge">SUDAH DIRESELLER</span>':'';
         var sell=Number(p.local_price||p.suggested_price_idr||0);
-        return '<article class="supplierCard '+(p.selected?'selected':'')+'" data-supplier-card="'+esc(p.id)+'"><div class="supplierCardTop">'+image+'<div><h3>'+esc(p.name||'Produk')+'</h3><div class="supplierMeta">ID '+esc(p.id)+'<br>'+stock+' '+selected+'</div></div></div><div class="supplierMeta">'+esc(p.description||'')+'</div><div class="supplierPriceRow"><div class="detailItem"><b>Modal API</b><br>'+usdt(p.price)+'</div><div class="detailItem"><b>Harga Publik</b><br>'+usdt(p.publicPrice)+'</div></div><div class="field"><label class="label">Harga Jual iLink (Rupiah)</label><input class="input" type="number" min="1000" step="500" data-supplier-price value="'+esc(sell)+'"></div><button class="btn '+(p.selected?'yellow':'lime')+'" type="button" data-supplier-import="'+esc(p.id)+'">'+(p.selected?'Update Produk':'Resellerkan Produk')+'</button>'+(p.selected?'<div class="help">Produk lokal: '+esc(p.local_name||p.name)+' · '+esc(p.local_code||'-')+'</div>':'')+'</article>';
+        var mode=p.link_type==='variant'?'variant':'product';
+        var normalProducts=(state.products||[]).filter(function(x){return String(x.supplier_source||'').toLowerCase()!=='prodseller';});
+        var targetOptions='<option value="">Pilih produk induk...</option>'+normalProducts.map(function(x){return '<option value="'+esc(x.kode)+'" '+(mode==='variant'&&String(p.local_code||'')===String(x.kode||'')?'selected':'')+'>'+esc(x.nama)+' · '+esc(x.kode)+'</option>';}).join('');
+        var linked=p.selected?('<div class="help"><b>Terhubung:</b> '+esc(p.local_name||p.name)+(p.link_type==='variant'?' → varian <b>'+esc(p.local_variant_name||'-')+'</b>':' · produk mandiri')+' · '+esc(p.local_code||'-')+'</div>'):'';
+        return '<article class="supplierCard '+(p.selected?'selected':'')+'" data-supplier-card="'+esc(p.id)+'"><div class="supplierCardTop">'+image+'<div><h3>'+esc(p.name||'Produk')+'</h3><div class="supplierMeta">ID '+esc(p.id)+'<br>'+stock+' '+selected+'</div></div></div><div class="supplierMeta">'+esc(p.description||'')+'</div><div class="supplierPriceRow"><div class="detailItem"><b>Modal API</b><br>'+usdt(p.price)+'</div><div class="detailItem"><b>Harga Publik</b><br>'+usdt(p.publicPrice)+'</div></div><div class="field"><label class="label">Harga Jual iLink (Rupiah)</label><input class="input" type="number" min="1000" step="500" data-supplier-price value="'+esc(sell)+'"></div><div class="field"><label class="label">Masukkan Sebagai</label><select class="select" data-supplier-mode><option value="product" '+(mode==='product'?'selected':'')+'>Produk baru / produk mandiri</option><option value="variant" '+(mode==='variant'?'selected':'')+'>Varian produk yang sudah ada</option></select></div><div data-supplier-variant-target class="'+(mode==='variant'?'':'hidden')+'"><div class="field"><label class="label">Produk Induk iLink</label><select class="select" data-supplier-target-product>'+targetOptions+'</select></div><div class="field"><label class="label">Nama Varian</label><input class="input" data-supplier-variant-name value="'+esc(p.local_variant_name||p.name||'')+'" placeholder="Contoh: Gemini 18B Pro"></div><p class="help">Jika produk induk belum memiliki varian, pilihan lama otomatis dipertahankan sebagai varian <b>Utama</b>. Varian supplier memakai stok dan saldo ProdSeller secara otomatis.</p></div><button class="btn '+(p.selected?'yellow':'lime')+'" type="button" data-supplier-import="'+esc(p.id)+'">'+(p.selected?'Update Reseller':'Resellerkan Produk')+'</button>'+linked+'</article>';
       }).join('')||'<div class="empty">Produk supplier tidak ditemukan.</div>';
     }
+    document.querySelectorAll('[data-supplier-mode]').forEach(function(sel){ sel.onchange=function(){ var card=sel.closest('[data-supplier-card]'); var box=card&&card.querySelector('[data-supplier-variant-target]'); if(box) box.classList.toggle('hidden',sel.value!=='variant'); }; });
     document.querySelectorAll('[data-supplier-import]').forEach(function(btn){btn.onclick=async function(){
       var card=btn.closest('[data-supplier-card]'); var input=card&&card.querySelector('[data-supplier-price]'); var price=Math.max(1000,Number(input&&input.value||0));
+      var modeEl=card&&card.querySelector('[data-supplier-mode]'); var mode=modeEl?modeEl.value:'product';
+      var targetEl=card&&card.querySelector('[data-supplier-target-product]'); var nameEl=card&&card.querySelector('[data-supplier-variant-name]');
       if(!price) return toast('Isi harga jual Rupiah terlebih dahulu.',true);
+      if(mode==='variant' && !(targetEl&&targetEl.value)) return toast('Pilih produk induk untuk varian supplier.',true);
+      if(mode==='variant' && !String(nameEl&&nameEl.value||'').trim()) return toast('Isi nama varian supplier.',true);
       btn.disabled=true; var old=btn.textContent; btn.textContent='Memproses...';
-      try{ await api('prodseller-import',{product_id:btn.dataset.supplierImport,selling_price:price}); toast('Produk supplier berhasil disimpan ke katalog iLink.'); await load(); await loadSupplier(true); }
+      try{ await api('prodseller-import',{product_id:btn.dataset.supplierImport,selling_price:price,target_mode:mode,target_product_code:targetEl&&targetEl.value||'',variant_name:nameEl&&nameEl.value||''}); toast(mode==='variant'?'Produk supplier berhasil dimasukkan sebagai varian.':'Produk supplier berhasil disimpan ke katalog iLink.'); await load(); await loadSupplier(true); }
       catch(e){toast(e.message,true);} finally{btn.disabled=false;btn.textContent=old;}
     };});
 
@@ -883,20 +900,6 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     document.querySelectorAll('[data-supplier-retry]').forEach(function(btn){btn.onclick=async function(){ btn.disabled=true; var old=btn.textContent; btn.textContent='Retry...'; try{await api('prodseller-retry',{order_ref:btn.dataset.supplierRetry}); toast('Retry supplier berhasil.'); await load(); await loadSupplier(true);}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent=old;} };});
   }
 
-  async function loadSupplier(force){
-    if(state.supplierLoaded && !force){ renderSupplier(); return; }
-    var st=await apiSafe('prodseller-status',{configured:false});
-    state.supplierStatus=st||{configured:false};
-    state.supplierOrders=await apiSafe('supplier-orders',[]);
-    state.supplierProducts=state.supplierStatus.configured?await apiSafe('prodseller-products',[]):[];
-    state.supplierLoaded=true;
-    renderSupplier();
-  }
-
-  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Order',s.orders||0],['Stok',s.stokTersedia||0]]; document.getElementById('stats').innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
-  function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(118,(chart.clientHeight||300)-96); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="barValue" title="Omzet '+esc(d.label)+'">'+esc(rupiahShort(d.revenue))+'</div><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barDate">'+esc(d.label)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } document.getElementById('topProductList').innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
-  function productMatches(p,q){ var vars=productVariants(p).map(function(v){return [v.name||v.nama,v.sku||v.kode,v.description||v.deskripsi,v.snk||v.terms].join(' ');}).join(' '); return textMatch([p.nama,p.kode,p.category,p.deskripsi,p.snk,vars],q); }
-  function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
   function productColor(p){ var text=String((p&&p.kode)||(p&&p.nama)||'x'); var h=0; for(var i=0;i<text.length;i++) h=(h*31+text.charCodeAt(i))%360; return 'hsl('+h+' 85% 68%)'; }
   function productMediaHtml(p){ if(p.image_url) return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
   function productVariants(p){ return Array.isArray(p&&p.variants) ? p.variants.filter(function(v){ return (v.name||v.nama||v.sku||v.kode) && Number(v.price||v.harga||0)>0; }) : []; }
@@ -917,17 +920,21 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var isSupplier=String(p.supplier_source||'').toLowerCase()==='prodseller';
       var isPo=!isSupplier && String(p.delivery_mode||'auto')==='po';
       var varsArr=productVariants(p);
+      var hasSupplierVariants=varsArr.some(function(v){return String(v.supplier_source||'').toLowerCase()==='prodseller' && String(v.supplier_product_id||'').trim();});
       var visibleVars=varsArr.slice(0,3);
       var vars=visibleVars.map(function(v){
-        return '<span class="chip '+(variantActive(v)?'purple':'red')+'">'+esc(v.name||v.nama)+' · '+rupiah(v.price||v.harga||p.harga)+' · '+(isPo?'PO':(variantStock(v).length+' stok'))+' · '+(variantActive(v)?'ON':'OFF')+'</span>';
+        var supplierVariant=String(v.supplier_source||'').toLowerCase()==='prodseller' && String(v.supplier_product_id||'').trim();
+        var mode=supplierVariant?('SUPPLIER · stok '+Math.max(0,Number(v.supplier_stock||0))):(String(v.delivery_mode||p.delivery_mode||'auto')==='po'?'PO':(variantStock(v).length+' stok'));
+        return '<span class="chip '+(variantActive(v)?'purple':'red')+'">'+esc(v.name||v.nama)+' · '+rupiah(v.price||v.harga||p.harga)+' · '+mode+' · '+(variantActive(v)?'ON':'OFF')+'</span>';
       }).join('');
       if(varsArr.length>visibleVars.length) vars+='<span class="chip">+'+(varsArr.length-visibleVars.length)+' varian lain</span>';
-      var availability=isSupplier?'SUPPLIER OTOMATIS':(isPo?'PRE-ORDER':('STOK '+stockCount(p)));
-      var actions='<button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button>'+
-        ((isPo||isSupplier)?'':'<button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button>')+
+      var availability=isSupplier?'SUPPLIER OTOMATIS':(hasSupplierVariants?(isPo?'PRE-ORDER + SUPPLIER':'AUTO + SUPPLIER'):(isPo?'PRE-ORDER':('STOK '+stockCount(p))));
+      var hasLocalStock=!isSupplier && (!varsArr.length ? !isPo : varsArr.some(function(v){return !(String(v.supplier_source||'').toLowerCase()==='prodseller' && String(v.supplier_product_id||'').trim()) && String(v.delivery_mode||p.delivery_mode||'auto')!=='po';}));
+      var actions='<button class="btn small cyan" data-edit-product="'+esc(p.kode)+'">Edit</button>'+ 
+        (hasLocalStock?'<button class="btn small lime" data-stock-product="'+esc(p.kode)+'">Stok</button><button class="btn small yellow" data-manage-product="'+esc(p.kode)+'">Kelola</button>':'')+
         '<button class="btn small red" data-delete-product="'+esc(p.kode)+'">Hapus</button>';
       return '<article class="product '+(isPo?'poProduct ':'')+(p.active===false?'productOff':'')+'">'+
-        '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - '+availability+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span>'+(isSupplier?'<br><span class="deliveryModeBadge">SUPPLIER OTOMATIS · PRODSELLER</span>':(isPo?'<br><span class="deliveryModeBadge">PRE-ORDER · KIRIM MANUAL</span>':''))+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
+        '<div class="productTop">'+productMediaHtml(p)+'<div class="productInfo"><h3>'+esc(p.nama)+'</h3><div class="subtle">'+esc(p.category||'Produk')+' - '+availability+(varsArr.length?' - '+varsArr.length+' varian':'')+'<br><span class="scopeBadge '+(p.display_scope==='marketplace'?'market':'')+'">'+(p.display_scope==='marketplace'?'MARKETPLACE SAJA':'BOT + MARKETPLACE')+'</span>'+(isSupplier?'<br><span class="deliveryModeBadge">SUPPLIER OTOMATIS · PRODSELLER</span>':(hasSupplierVariants?'<br><span class="deliveryModeBadge">MEMILIKI VARIAN SUPPLIER · PRODSELLER</span>':(isPo?'<br><span class="deliveryModeBadge">PRE-ORDER · KIRIM MANUAL</span>':'')))+'</div></div><button class="statusToggle '+(p.active===false?'off':'')+'" data-toggle-product="'+esc(p.kode)+'">'+(p.active===false?'OFF':'ON')+'</button></div>'+ 
         '<div class="price">'+productDisplayPrice(p)+'</div>'+(vars?'<div class="chips">'+vars+'</div>':'')+
         '<div class="actions">'+actions+'</div></article>';
     }).join('')||'<div class="empty">Produk belum ada.</div>';
@@ -938,14 +945,18 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function editVariantCardHtml(v,i, allowRemove){
     v=v||{};
     var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+    var supplierVariant=String(v.supplier_source||'').toLowerCase()==='prodseller' && String(v.supplier_product_id||'').trim();
+    var deliveryField=supplierVariant
+      ? '<div class="field"><label class="label">Sistem Pengiriman Varian</label><div class="variantMainCompact">SUPPLIER OTOMATIS · PRODSELLER · stok mengikuti saldo dan stok supplier.</div><p class="help">Link supplier tetap dipertahankan saat nama, harga, deskripsi, atau SnK varian diedit.</p></div>'
+      : '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-evfield="delivery"><option value="" '+(!v.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(v.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(v.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Gunakan PRE-ORDER hanya pada varian yang ingin Anda kirim manual setelah pembayaran.</p></div>';
     return '<div class="addVariantCard" data-edit-variant-card data-old-sku="'+esc(sku)+'">'+
-      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> <span class="chip yellow">Stok diatur dari Stok/Kelola</span> '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
-      '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-evfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(v.name||v.nama||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-evfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(v.price||v.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-evfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(v.cost_price||v.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-evfield="sku" placeholder="Contoh: BULAN1" value="'+esc(sku)+'"></div></div>'+
-      '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-evfield="delivery"><option value="" '+(!v.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(v.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(v.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Gunakan PRE-ORDER hanya pada varian yang ingin Anda kirim manual setelah pembayaran.</p></div>'+ 
+      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> '+(supplierVariant?'<span class="chip green">SUPPLIER</span>':'<span class="chip yellow">Stok diatur dari Stok/Kelola</span>')+' '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
+      '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-evfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(v.name||v.nama||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-evfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(v.price||v.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-evfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(v.cost_price||v.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-evfield="sku" placeholder="Contoh: BULAN1" value="'+esc(sku)+'"></div></div>'+deliveryField+
       '<div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-evfield="bulk" placeholder="Contoh:\n5:9000\n10:8000">'+esc(variantBulkText(v)||'')+'</textarea></div>'+ 
       '<div class="row"><div class="field"><label class="label">Deskripsi Varian</label><textarea class="textarea tall" data-evfield="description" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin menggunakan email pembeli.">'+esc(v.description||v.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan Varian</label><textarea class="textarea tall" data-evfield="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(v.snk||v.terms||'')+'</textarea></div></div>'+ 
       '</div>';
   }
+
   function refreshEditVariantTitles(){ document.querySelectorAll('#editVariantCards [data-edit-variant-card]').forEach(function(card,i){ var b=card.querySelector('.addVariantCardTitle b'); if(b) b.textContent='Varian '+(i+1); }); }
   function addEditVariantRow(data){
     var wrap=document.getElementById('editVariantCards'); if(!wrap) return;
@@ -965,17 +976,23 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       var sku=String(val('sku')||oldSku).toUpperCase();
       var old=bySku[oldSku]||bySku[sku]||existing[i]||{};
       var name=val('name');
-      if(name){ rows.push({
+      if(name){ var isSupplierVariant=String(old.supplier_source||'').toLowerCase()==='prodseller' && String(old.supplier_product_id||'').trim(); rows.push({
         name:name,
         price:val('price'),
         cost_price:val('cost'),
         sku:sku,
-        stock:variantStock(old),
+        stock:isSupplierVariant?[]:variantStock(old),
         bulk_prices:parseBulkArray(val('bulk')),
         description:val('description'),
         snk:val('snk'),
-        delivery_mode:val('delivery'),
-        active:(function(){ var el=card.querySelector('[data-evfield="active"]'); return !el || el.checked; })()
+        delivery_mode:isSupplierVariant?'po':val('delivery'),
+        active:(function(){ var el=card.querySelector('[data-evfield="active"]'); return !el || el.checked; })(),
+        supplier_source:old.supplier_source||'',
+        supplier_product_id:old.supplier_product_id||'',
+        supplier_price_usdt:old.supplier_price_usdt||0,
+        supplier_public_price_usdt:old.supplier_public_price_usdt||0,
+        supplier_stock:old.supplier_stock==null?null:old.supplier_stock,
+        supplier_synced_at:old.supplier_synced_at||null
       }); }
     });
     return rows;
@@ -1055,7 +1072,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var hasVar=(p.variants||[]).length>0;
     var html='<form id="modalAppendStockForm" class="form"><p class="help">Tombol Stok dipakai untuk <b>menambahkan stok</b>. Stok lama tidak akan hilang.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      html += '<div class="variantList">'+(p.variants||[]).map(function(v,i){ var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip '+(variantActive(v)?'green':'red')+'">'+(variantActive(v)?'ON':'OFF')+'</span></h3><p class="help">Stok sekarang: '+variantStock(v).length+'</p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris atau pisahkan koma\nakun1:pass1\nakun2:pass2"></textarea></div>'; }).join('')+'</div>';
+      html += '<div class="variantList">'+(p.variants||[]).map(function(v,i){ var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); var supplierVariant=String(v.supplier_source||'').toLowerCase()==='prodseller'&&String(v.supplier_product_id||'').trim(); if(supplierVariant) return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">SUPPLIER</span></h3><p class="help">Stok varian ini mengikuti saldo + stok ProdSeller dan tidak diisi manual.</p></div>'; return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip '+(variantActive(v)?'green':'red')+'">'+(variantActive(v)?'ON':'OFF')+'</span></h3><p class="help">Stok sekarang: '+variantStock(v).length+'</p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris atau pisahkan koma\nakun1:pass1\nakun2:pass2"></textarea></div>'; }).join('')+'</div>';
     } else {
       html += '<label class="label">Tambah Stok Produk</label><textarea class="textarea tall" id="appendDefaultStock" placeholder="Satu stok per baris\nemail1:password1\nemail2:password2"></textarea><p class="help">Stok sekarang: '+((p.data||[]).length)+'</p>';
     }
@@ -1068,7 +1085,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     var hasVar=(p.variants||[]).length>0;
     var html='<form id="modalManageStockForm" class="form"><p class="help">Kelola dipakai untuk <b>mengganti/mengatur stok</b>. Hapus baris stok yang sudah tidak dipakai, lalu simpan.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      html += '<div class="variantList">'+(p.variants||[]).map(function(v,i){ var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip '+(variantActive(v)?'green':'red')+'">'+(variantActive(v)?'ON':'OFF')+'</span></h3><p class="help">Harga: '+rupiah(v.price||v.harga||p.harga)+' | Grosir: '+esc(variantBulkText(v)||'-')+'</p><label class="label">Stok Varian</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v).join('\n'))+'</textarea></div>'; }).join('')+'</div>';
+      html += '<div class="variantList">'+(p.variants||[]).map(function(v,i){ var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); var supplierVariant=String(v.supplier_source||'').toLowerCase()==='prodseller'&&String(v.supplier_product_id||'').trim(); if(supplierVariant) return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">SUPPLIER</span></h3><p class="help">Harga: '+rupiah(v.price||v.harga||p.harga)+' · stok otomatis dari ProdSeller. Tidak dapat diubah dari Kelola Stok.</p></div>'; return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip '+(variantActive(v)?'green':'red')+'">'+(variantActive(v)?'ON':'OFF')+'</span></h3><p class="help">Harga: '+rupiah(v.price||v.harga||p.harga)+' | Grosir: '+esc(variantBulkText(v)||'-')+'</p><label class="label">Stok Varian</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v).join('\n'))+'</textarea></div>'; }).join('')+'</div>';
     } else {
       html += '<label class="label">Stok Produk</label><textarea class="textarea tall" id="manageDefaultStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea>';
     }

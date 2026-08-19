@@ -32,8 +32,13 @@ Katalog ProdSeller akan tampil di halaman Supplier / Reseller.
 
 Untuk setiap produk yang ingin dijual:
 1. Isi/ubah **Harga Jual iLink (Rupiah)**.
-2. Klik **Resellerkan Produk**.
-3. Produk masuk ke katalog iLink sebagai **AUTO SUPPLIER**.
+2. Pada **Masukkan Sebagai**, pilih salah satu:
+   - **Produk baru / produk mandiri** untuk membuat kartu produk sendiri; atau
+   - **Varian produk yang sudah ada** agar lebih ringkas di satu produk induk.
+3. Jika memilih varian, pilih **Produk Induk iLink** dan isi **Nama Varian**.
+4. Klik **Resellerkan Produk**.
+
+Jika produk induk belum memiliki varian, data produk lama otomatis dipindahkan menjadi varian **Utama**, lalu varian ProdSeller ditambahkan tanpa menghapus stok/harga lama. Setiap varian ProdSeller tetap memiliki Product ID, harga modal, stok live, dan fulfillment otomatisnya sendiri.
 
 Produk yang tidak Anda klik tidak ikut dijual.
 

@@ -38,9 +38,9 @@ test('produk supplier dipilih satu per satu dari dashboard', () => {
 test('checkout memverifikasi stok supplier sebelum pelanggan membayar', () => {
   const store = read('lib/storeService.js');
   const bot = read('lib/botHandlers.js');
-  assert.match(store, /prodseller\.(?:getAvailability|getProduct)\(product\.supplier_product_id/);
+  assert.match(store, /prodseller\.(?:getAvailability|getProduct)\((?:product\.supplier_product_id|supplier\.productId)/);
   assert.match(store, /SUPPLIER_STOCK/);
-  assert.match(bot, /prodseller\.(?:getAvailability|getProduct)\(product\.supplier_product_id/);
+  assert.match(bot, /prodseller\.(?:getAvailability|getProduct)\((?:product\.supplier_product_id|supplier\.productId)/);
   assert.match(bot, /AUTO SUPPLIER/);
 });
 

@@ -120,7 +120,13 @@ function normalizeVariant(item, index = 0) {
     delivery_mode: normalizeDeliveryMode(item?.delivery_mode ?? item?.deliveryMode ?? item?.pengiriman, ''),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
-    bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || [])
+    bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || []),
+    supplier_source: String(item?.supplier_source || item?.supplierSource || '').trim().toLowerCase(),
+    supplier_product_id: String(item?.supplier_product_id || item?.supplierProductId || '').trim(),
+    supplier_price_usdt: Number(item?.supplier_price_usdt || item?.supplierPriceUsdt || 0),
+    supplier_public_price_usdt: Number(item?.supplier_public_price_usdt || item?.supplierPublicPriceUsdt || 0),
+    supplier_stock: (item?.supplier_stock ?? item?.supplierStock) == null ? null : Number(item?.supplier_stock ?? item?.supplierStock),
+    supplier_synced_at: item?.supplier_synced_at || item?.supplierSyncedAt || null
   };
 }
 

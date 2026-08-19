@@ -122,7 +122,13 @@ function parseVariants(value) {
         : '',
       active: item.active === undefined ? true : boolOf(item.active),
       stock: parseStockList(item.stock || item.stok || item.data || []),
-      bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || [])
+      bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || []),
+      supplier_source: String(item.supplier_source || item.supplierSource || '').trim().toLowerCase(),
+      supplier_product_id: String(item.supplier_product_id || item.supplierProductId || '').trim(),
+      supplier_price_usdt: Number(item.supplier_price_usdt || item.supplierPriceUsdt || 0),
+      supplier_public_price_usdt: Number(item.supplier_public_price_usdt || item.supplierPublicPriceUsdt || 0),
+      supplier_stock: (item.supplier_stock ?? item.supplierStock) == null ? null : Number(item.supplier_stock ?? item.supplierStock),
+      supplier_synced_at: item.supplier_synced_at || item.supplierSyncedAt || null
     })).forEach((item, index) => {
       if (!item.name || Number(item.price || 0) <= 0) return;
       // Prevent old broken rows from multiline description/SnK becoming variants.
@@ -197,9 +203,36 @@ function prodsellerCode(productId) {
   return `PS${shortHash(String(productId || '')).slice(0, 8).toUpperCase()}`;
 }
 
+function supplierLinkOf(product, variant = null) {
+  const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
+  const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
+  if (source !== 'prodseller' || !productId) return null;
+  return {
+    source,
+    productId,
+    priceUsdt: Number(variant?.supplier_price_usdt ?? product?.supplier_price_usdt ?? 0),
+    publicPriceUsdt: Number(variant?.supplier_public_price_usdt ?? product?.supplier_public_price_usdt ?? 0),
+    stock: (variant?.supplier_stock ?? product?.supplier_stock) == null ? null : Number(variant?.supplier_stock ?? product?.supplier_stock),
+    syncedAt: variant?.supplier_synced_at || product?.supplier_synced_at || null
+  };
+}
+
+function localSupplierLinks(products = []) {
+  const links = [];
+  for (const product of products || []) {
+    const direct = supplierLinkOf(product, null);
+    if (direct) links.push({ ...direct, product, variant: null, variantIndex: -1, link_type: 'product' });
+    (Array.isArray(product?.variants) ? product.variants : []).forEach((variant, index) => {
+      const link = supplierLinkOf(product, variant);
+      if (link) links.push({ ...link, product, variant, variantIndex: index, link_type: 'variant' });
+    });
+  }
+  return links;
+}
+
 async function getProdSellerStatus() {
   const localProducts = await db.listProducts().catch(() => []);
-  const selected = localProducts.filter((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller');
+  const selected = localSupplierLinks(localProducts);
   if (!prodseller.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length };
   const balance = await prodseller.getBalance();
   return {
@@ -218,11 +251,14 @@ async function getProdSellerCatalog() {
     db.listProducts(),
     db.getShopSettings()
   ]);
-  const localBySupplierId = new Map(localProducts
-    .filter((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller' && p.supplier_product_id)
-    .map((p) => [String(p.supplier_product_id), p]));
+  const localBySupplierId = new Map();
+  localSupplierLinks(localProducts).forEach((link) => {
+    const id = String(link.productId || '');
+    if (id && !localBySupplierId.has(id)) localBySupplierId.set(id, link);
+  });
   return remoteProducts.map((item) => {
-    const local = localBySupplierId.get(String(item.id || '')) || null;
+    const link = localBySupplierId.get(String(item.id || '')) || null;
+    const local = link?.product || null;
     return {
       id: String(item.id || ''),
       name: String(item.name || ''),
@@ -235,11 +271,14 @@ async function getProdSellerCatalog() {
       inStock: item.inStock !== false,
       suggested_price_idr: prodsellerPriceIdr(item.price, settings),
       selected: Boolean(local),
+      link_type: link?.link_type || '',
       local_code: local?.kode || '',
       local_name: local?.nama || '',
-      local_price: Number(local?.harga || 0),
-      local_active: local ? local.active !== false : false,
-      local_synced_at: local?.supplier_synced_at || null
+      local_variant_name: link?.variant?.name || '',
+      local_variant_key: link?.variant ? String(link.variant.sku || '') : '',
+      local_price: Number(link?.variant?.price || local?.harga || 0),
+      local_active: link?.variant ? link.variant.active !== false : (local ? local.active !== false : false),
+      local_synced_at: link?.syncedAt || local?.supplier_synced_at || null
     };
   });
 }
@@ -260,7 +299,76 @@ async function importProdSellerProduct(body = {}) {
   const defaultPrice = prodsellerPriceIdr(supplierPrice, settings);
   const sellingPrice = Math.max(1000, Number(body.selling_price || body.harga || defaultPrice));
   const costIdr = Math.max(0, Math.round(supplierPrice * rate));
-  const existing = localProducts.find((p) => String(p.supplier_source || '').toLowerCase() === 'prodseller' && String(p.supplier_product_id || '') === productId) || null;
+  const syncedAt = new Date().toISOString();
+  const targetMode = String(body.target_mode || body.targetMode || 'product').trim().toLowerCase() === 'variant' ? 'variant' : 'product';
+
+  if (targetMode === 'variant') {
+    const targetCode = String(body.target_product_code || body.targetProductCode || '').trim().toUpperCase();
+    if (!targetCode) throw new Error('Pilih produk iLink yang akan dijadikan produk induk varian.');
+    const target = localProducts.find((p) => String(p.kode || '').trim().toUpperCase() === targetCode);
+    if (!target) throw new Error('Produk induk iLink tidak ditemukan. Muat ulang dashboard lalu coba lagi.');
+    if (supplierLinkOf(target, null)) throw new Error('Produk supplier mandiri tidak dapat dijadikan produk induk. Pilih produk iLink biasa.');
+
+    let variants = Array.isArray(target.variants) ? target.variants.map((v) => ({ ...v })) : [];
+    let clearBaseStock = false;
+    if (!variants.length) {
+      variants.push({
+        name: String(body.base_variant_name || 'Utama').trim() || 'Utama',
+        price: Number(target.harga || 0),
+        cost_price: Number(target.cost_price || 0),
+        sku: `${String(target.kode || 'PROD').trim().toUpperCase()}-UTAMA`,
+        note: '',
+        description: String(target.deskripsi || ''),
+        snk: String(target.snk || ''),
+        delivery_mode: String(target.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
+        active: true,
+        stock: Array.isArray(target.data) ? target.data : [],
+        bulk_prices: Array.isArray(target.bulk_prices) ? target.bulk_prices : []
+      });
+      clearBaseStock = true;
+    }
+
+    const linkedIndex = variants.findIndex((variant) => {
+      const link = supplierLinkOf(target, variant);
+      return link && String(link.productId) === productId;
+    });
+    const variantName = String(body.variant_name || body.variantName || detail.name || 'Varian Supplier').trim();
+    const supplierVariant = {
+      ...(linkedIndex >= 0 ? variants[linkedIndex] : {}),
+      name: variantName,
+      price: sellingPrice,
+      cost_price: costIdr,
+      sku: linkedIndex >= 0
+        ? String(variants[linkedIndex].sku || prodsellerCode(productId)).trim().toUpperCase()
+        : `${prodsellerCode(productId)}-V`,
+      note: 'Supplier otomatis ProdSeller',
+      description: String(body.description || detail.description || target.deskripsi || 'Produk digital dikirim otomatis setelah pembayaran berhasil.'),
+      snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
+      delivery_mode: 'po',
+      active: body.active === undefined ? (linkedIndex >= 0 ? variants[linkedIndex].active !== false : true) : boolOf(body.active),
+      stock: [],
+      bulk_prices: linkedIndex >= 0 && Array.isArray(variants[linkedIndex].bulk_prices) ? variants[linkedIndex].bulk_prices : [],
+      supplier_source: 'prodseller',
+      supplier_product_id: productId,
+      supplier_price_usdt: supplierPrice,
+      supplier_public_price_usdt: Number(detail.publicPrice || 0),
+      supplier_stock: detail.stock == null ? null : Number(detail.stock),
+      supplier_synced_at: syncedAt
+    };
+    if (linkedIndex >= 0) variants[linkedIndex] = supplierVariant;
+    else variants.push(supplierVariant);
+
+    const updated = await db.updateProductByCode(target.kode, {
+      variants,
+      ...(clearBaseStock ? { data: [] } : {})
+    });
+    return { ...updated, reseller_target: 'variant', reseller_variant: supplierVariant };
+  }
+
+  const existing = localProducts.find((p) => {
+    const link = supplierLinkOf(p, null);
+    return link && String(link.productId) === productId;
+  }) || null;
   const base = {
     harga: sellingPrice,
     cost_price: costIdr,
@@ -269,7 +377,7 @@ async function importProdSellerProduct(body = {}) {
     supplier_price_usdt: supplierPrice,
     supplier_public_price_usdt: Number(detail.publicPrice || 0),
     supplier_stock: detail.stock == null ? null : Number(detail.stock),
-    supplier_synced_at: new Date().toISOString(),
+    supplier_synced_at: syncedAt,
     delivery_mode: 'po',
     display_scope: String(body.display_scope || existing?.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
     active: body.active === undefined ? (existing ? existing.active !== false : true) : boolOf(body.active)
@@ -367,10 +475,14 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'orders') return json(res, 200, { ok: true, data: await db.listTransactions(100) });
     if (req.method === 'GET' && action === 'po-orders') {
       const [orders, products] = await Promise.all([db.listPoOrders(150), db.listProducts()]);
-      const supplierCodes = new Set((products || [])
-        .filter((product) => String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && String(product?.supplier_product_id || '').trim())
-        .map((product) => String(product.kode || '').trim().toUpperCase()));
-      return json(res, 200, { ok: true, data: (orders || []).filter((order) => !supplierCodes.has(String(order.product_code || '').trim().toUpperCase())) });
+      const productMap = new Map((products || []).map((product) => [String(product.kode || '').trim().toUpperCase(), product]));
+      const visibleOrders = (orders || []).filter((order) => {
+        const product = productMap.get(String(order.product_code || '').trim().toUpperCase());
+        if (!product) return true;
+        const variant = db.findVariant(product, String(order.variant_key || '')).variant;
+        return !supplierLinkOf(product, variant || null);
+      });
+      return json(res, 200, { ok: true, data: visibleOrders });
     }
     if (req.method === 'GET' && action === 'users') return json(res, 200, { ok: true, data: await db.listUsers(200) });
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
@@ -584,8 +696,9 @@ module.exports = async function handler(req, res) {
       if (String(po.status || '') === 'delivered') return json(res, 200, { ok: true, data: { already_delivered: true, po_order: po } });
       if (String(po.status || '') !== 'waiting_delivery') return json(res, 409, { ok: false, error: 'Pesanan PO ini tidak sedang menunggu pengiriman.' });
       const poProduct = await db.getProductByCode(po.product_code).catch(() => null);
-      if (String(poProduct?.supplier_source || '').trim().toLowerCase() === 'prodseller') {
-        return json(res, 409, { ok: false, error: 'Pesanan ProdSeller diproses otomatis melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
+      const poVariant = poProduct ? db.findVariant(poProduct, po.variant_key || '').variant : null;
+      if (supplierLinkOf(poProduct, poVariant || null)) {
+        return json(res, 409, { ok: false, error: 'Pesanan varian ProdSeller diproses otomatis melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
       }
       const transactionBeforeSend = await db.getTransactionByOrderRef(orderRef).catch(() => null);
       if (String(transactionBeforeSend?.status || 'completed').toLowerCase() === 'canceled') {

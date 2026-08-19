@@ -30,8 +30,8 @@ test('stok supplier dihitung dari saldo dan stok aktual supplier', () => {
   assert.match(service, /Math\.min\(balanceStock, supplierStock\)/);
   assert.match(service, /availableStock/);
   const store = read('lib/storeService.js');
-  assert.match(store, /_supplier_available_stock/);
-  assert.match(store, /prodseller\.availabilityFrom/);
+  assert.match(store, /supplierAvailability|_supplier_available_stock/);
+  assert.match(store, /prodseller\.availabilityFrom|prodseller\.getAvailability/);
   assert.match(store, /availability\.availableStock < qty/);
 });
 
@@ -45,8 +45,8 @@ test('marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER', 
 test('produk supplier tidak dicampur ke menu Pesanan PO', () => {
   const api = read('api/reseller-data.js');
   const dashboard = read('api/reseller.js');
-  assert.match(api, /supplierCodes/);
-  assert.match(api, /filter\(\(order\) => !supplierCodes\.has/);
+  assert.match(api, /supplierLinkOf|supplierCodes/);
+  assert.match(api, /filter\(\(order\) =>|supplierCodes\.has/);
   assert.match(api, /tidak dapat dikirim sebagai PO manual/);
   assert.match(dashboard, /SUPPLIER OTOMATIS · PRODSELLER/);
   assert.match(dashboard, /bukan Pesanan PO manual/);

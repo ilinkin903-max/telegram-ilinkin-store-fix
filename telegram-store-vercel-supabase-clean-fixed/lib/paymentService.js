@@ -511,8 +511,19 @@ async function notifyFirstPurchaseReferral(inviteeId) {
 }
 
 
-function isProdSellerProduct(product = {}) {
-  return String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && Boolean(String(product?.supplier_product_id || '').trim());
+function prodSellerSelection(product = {}, order = {}) {
+  const variant = selectedVariant(product, order);
+  const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
+  const variantProductId = String(variant?.supplier_product_id || '').trim();
+  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
+  const source = String(product?.supplier_source || '').trim().toLowerCase();
+  const productId = String(product?.supplier_product_id || '').trim();
+  if (source === 'prodseller' && productId) return { productId, variant: null };
+  return null;
+}
+
+function isProdSellerProduct(product = {}, order = {}) {
+  return Boolean(prodSellerSelection(product, order));
 }
 
 async function notifyOwnerSupplierIssue(order, product, error, supplierRow = null) {
@@ -524,7 +535,7 @@ async function notifyOwnerSupplierIssue(order, product, error, supplierRow = nul
       `Invoice: ${ref}\n` +
       `Produk: ${product?.nama || product?.kode || '-'}\n` +
       `Supplier: ProdSeller\n` +
-      `Product ID: ${product?.supplier_product_id || '-'}\n` +
+      `Product ID: ${prodSellerSelection(product, order)?.productId || '-'}\n` +
       `Jumlah: ${Number(order?.quantity || 1)}\n` +
       `Status: ${supplierRow?.status || 'error'}\n` +
       `Keterangan: ${String(error?.message || error || 'Belum terkirim')}\n\n` +
@@ -553,7 +564,9 @@ async function sendSupplierDeliveryOnce({ invoice, userId, poOrder, deliveryText
 async function processProdSellerDelivery({ order, product, transaction, buyer = {}, source = 'supplier-auto' }) {
   const invoice = String(order?.invoice_ref || transaction?.order_ref || '').trim();
   if (!invoice) throw new Error('Invoice supplier tidak ditemukan.');
-  if (!isProdSellerProduct(product)) return { handled: false };
+  const supplier = prodSellerSelection(product, transaction || order);
+  if (!supplier) return { handled: false };
+  const supplierProductId = supplier.productId;
 
   const existingPo = await db.getPoOrder(invoice).catch(() => null);
   if (existingPo?.status === 'delivered' && existingPo.delivery_text) {
@@ -575,7 +588,7 @@ async function processProdSellerDelivery({ order, product, transaction, buyer = 
     }
     if (!remote || !remote.orderId) {
       remote = await prodseller.createOrder({
-        productId: product.supplier_product_id,
+        productId: supplierProductId,
         quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
         idempotencyKey: `ilink-${invoice}`
       });
@@ -587,7 +600,7 @@ async function processProdSellerDelivery({ order, product, transaction, buyer = 
       order_ref: invoice,
       supplier: 'prodseller',
       supplier_order_id: remote?.orderId || supplierRow?.supplier_order_id || '',
-      supplier_product_id: product.supplier_product_id,
+      supplier_product_id: supplierProductId,
       quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
       amount_usdt: Number(remote?.amount || supplierRow?.amount_usdt || 0),
       status: delivered.length ? 'delivered' : remoteStatus,
@@ -623,7 +636,7 @@ async function processProdSellerDelivery({ order, product, transaction, buyer = 
         order_ref: invoice,
         supplier: 'prodseller',
         supplier_order_id: supplierRow?.supplier_order_id || '',
-        supplier_product_id: product.supplier_product_id,
+        supplier_product_id: supplierProductId,
         quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
         amount_usdt: Number(supplierRow?.amount_usdt || 0),
         status: supplierAlreadyDelivered ? 'delivery_pending' : 'error',
@@ -644,7 +657,7 @@ async function retrySupplierOrder(orderRef, actor = {}) {
   const transaction = await db.getTransactionByOrderRef(invoice);
   if (!transaction) throw new Error('Transaksi pelanggan tidak ditemukan.');
   const product = await db.getProductByCode(transaction.product_code);
-  if (!isProdSellerProduct(product)) throw new Error('Produk pada invoice ini bukan produk ProdSeller.');
+  if (!isProdSellerProduct(product, transaction)) throw new Error('Produk/varian pada invoice ini bukan produk ProdSeller.');
   const buyer = Object.keys(actor || {}).length ? actor : (await db.getUserByTelegramId(transaction.telegram_id).catch(() => null)) || {};
   const result = await processProdSellerDelivery({
     order: {
@@ -700,7 +713,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     const effectiveMode = String(result.transaction?.delivery_mode || order?.delivery_mode || (product ? db.variantDeliveryMode(product, selected) : 'auto')).toLowerCase();
     let poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
     let supplierResult = null;
-    if (poWaiting && isProdSellerProduct(product)) {
+    if (poWaiting && isProdSellerProduct(product, result.transaction || order)) {
       const paidNoticeKey = `supplier_paid_notice:${invoice}`;
       const paidNoticeClaimed = await db.claimOnce(paidNoticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (paidNoticeClaimed) {
@@ -726,7 +739,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (noticeClaimed) {
         try {
-          if (isProdSellerProduct(product)) await sendSupplierPendingNotice(order.telegram_id);
+          if (isProdSellerProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
           else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
           await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
         } catch (noticeError) {
@@ -734,7 +747,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
           throw noticeError;
         }
       }
-      if (!result.already_completed && !isProdSellerProduct(product)) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
+      if (!result.already_completed && !isProdSellerProduct(product, result.transaction || order)) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
     } else if (!(supplierResult && supplierResult.delivered && supplierResult.delivered.length)) {
       await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
       await sendOwnerLog(order, product, result.transaction, currentBuyer);

@@ -599,10 +599,11 @@
       : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
     var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
     var isSupplier = String(product.supplier_source || '').toLowerCase() === 'prodseller';
+    var hasSupplierVariants = Boolean(product.has_supplier_variants);
     var mixedDelivery = Boolean(product.variants && product.variants.length && product.has_po_variants && product.has_auto_variants);
     var allPoVariants = Boolean(product.variants && product.variants.length && product.has_po_variants && !product.has_auto_variants);
     var cardPo = product.variants && product.variants.length ? allPoVariants : isPo;
-    var availability = isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)));
+    var availability = isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (hasSupplierVariants ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock))));
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">' + escapeHtml(availability) + '</span></div>' +
       '<div class="product-card-body">' +
@@ -610,7 +611,7 @@
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
         '<div class="product-price">' + priceHtml + '</div>' +
-        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? (isSupplier ? 'Beli Sekarang' : (mixedDelivery ? 'Lihat Pilihan' : (cardPo ? 'Pre-Order' : 'Beli Sekarang'))) : 'Stok Habis') + '</button></div>' +
+        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? ((isSupplier || !product.variants.length) ? 'Beli Sekarang' : 'Lihat Pilihan') : 'Stok Habis') + '</button></div>' +
       '</div></article>';
   }
 
@@ -631,7 +632,7 @@
     if (!state.selectedProduct) return null;
     return state.selectedProduct.variants.find(function (variant) { return variant.key === state.selectedVariantKey; }) || null;
   }
-  function selectedIsSupplier(){ return Boolean(state.selectedProduct && String(state.selectedProduct.supplier_source || '').toLowerCase()==='prodseller'); }
+  function selectedIsSupplier(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='prodseller' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='prodseller'))); }
   function selectedDeliveryMode() {
     if (!state.selectedProduct) return 'auto';
     var variant = activeVariant();

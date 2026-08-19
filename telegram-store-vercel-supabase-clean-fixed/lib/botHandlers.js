@@ -691,8 +691,21 @@ function isPoProduct(product, variant = null) {
   return deliveryModeForVariant(product, variant) === 'po';
 }
 
-function isSupplierProduct(product) {
-  return String(product?.supplier_source || '').trim().toLowerCase() === 'prodseller' && Boolean(String(product?.supplier_product_id || '').trim());
+function supplierSelection(product, selection = null) {
+  let variant = null;
+  if (selection && typeof selection === 'object' && (selection.supplier_source !== undefined || selection.supplier_product_id !== undefined) && selection.variant_key === undefined) variant = selection;
+  else if (selection && typeof selection === 'object') variant = selectedVariant(product, selection);
+  const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
+  const variantProductId = String(variant?.supplier_product_id || '').trim();
+  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
+  const source = String(product?.supplier_source || '').trim().toLowerCase();
+  const productId = String(product?.supplier_product_id || '').trim();
+  if (source === 'prodseller' && productId) return { productId, variant: null };
+  return null;
+}
+
+function isSupplierProduct(product, selection = null) {
+  return Boolean(supplierSelection(product, selection));
 }
 
 function isPoOrder(product, order = {}) {
@@ -714,8 +727,11 @@ function productDeliverySummary(product) {
   if (isSupplierProduct(product)) return 'supplier';
   const variants = activeVariantsWithIndex(product).map((item) => item.variant);
   if (!variants.length) return isPoProduct(product) ? 'po' : 'auto';
-  const hasPo = variants.some((variant) => isPoProduct(product, variant));
-  const hasAuto = variants.some((variant) => !isPoProduct(product, variant));
+  const hasSupplier = variants.some((variant) => isSupplierProduct(product, variant));
+  const hasPo = variants.some((variant) => !isSupplierProduct(product, variant) && isPoProduct(product, variant));
+  const hasAuto = variants.some((variant) => !isSupplierProduct(product, variant) && !isPoProduct(product, variant));
+  if (hasSupplier && !hasPo && !hasAuto) return 'supplier';
+  if (hasSupplier) return 'mixed_supplier';
   if (hasPo && hasAuto) return 'mixed';
   return hasPo ? 'po' : 'auto';
 }
@@ -783,7 +799,7 @@ function productButtons(products) {
     const minPrice = prices.length ? Math.min(...prices) : Number(p.harga || 0);
     const suffix = variants.length ? ` | ${variants.length} varian` : '';
     const deliverySummary = productDeliverySummary(p);
-    const availability = deliverySummary === 'supplier' ? 'AUTO SUPPLIER' : (deliverySummary === 'mixed' ? 'AUTO + PO' : (deliverySummary === 'po' ? 'PRE-ORDER' : `Stok ${productStockTotal(p)}`));
+    const availability = deliverySummary === 'supplier' ? 'AUTO SUPPLIER' : (deliverySummary === 'mixed_supplier' ? 'AUTO + SUPPLIER' : (deliverySummary === 'mixed' ? 'AUTO + PO' : (deliverySummary === 'po' ? 'PRE-ORDER' : `Stok ${productStockTotal(p)}`)));
     return [{
       text: `${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`,
       callback_data: `item:${p.kode}`
@@ -815,8 +831,8 @@ async function sendStock(chatId, query = null) {
   }
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const summary = productDeliverySummary(p);
-    const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => `   - ${escapeMarkdownText(v.name)}: ${isSupplierProduct(p) ? '*AUTO SUPPLIER*' : (isPoProduct(p, v) ? '*PRE-ORDER*' : `*${stockOfVariant(v).length}* stok`)} | ${formatRupiah(variantPrice(p, v))}`).join('\n');
-    const mainState = summary === 'supplier' ? 'Status: *AUTO SUPPLIER*' : (summary === 'mixed' ? `Mode: *AUTO + PO* · Stok AUTO: *${productStockTotal(p)}*` : (summary === 'po' ? 'Status: *PRE-ORDER*' : `Total Stok: *${productStockTotal(p)}*`));
+    const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => `   - ${escapeMarkdownText(v.name)}: ${isSupplierProduct(p, v) ? '*AUTO SUPPLIER*' : (isPoProduct(p, v) ? '*PRE-ORDER*' : `*${stockOfVariant(v).length}* stok`)} | ${formatRupiah(variantPrice(p, v))}`).join('\n');
+    const mainState = summary === 'supplier' ? 'Status: *AUTO SUPPLIER*' : (summary === 'mixed_supplier' ? `Mode: *AUTO + SUPPLIER* · Stok lokal: *${productStockTotal(p)}*` : (summary === 'mixed' ? `Mode: *AUTO + PO* · Stok AUTO: *${productStockTotal(p)}*` : (summary === 'po' ? 'Status: *PRE-ORDER*' : `Total Stok: *${productStockTotal(p)}*`)));
     return `${i + 1}. *${escapeMarkdownText(p.nama)}*\n   ${mainState} | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[ { text:'🔙 Kembali', callback_data:'kembaliawal' } ]] } };
@@ -944,7 +960,7 @@ ${bulk}
 ` +
     `-----------------------
 ` +
-    (isSupplierProduct(product) ? `Sistem Pengiriman: *AUTO SUPPLIER*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`)) +
+    (isSupplierProduct(product, order) ? `Sistem Pengiriman: *AUTO SUPPLIER*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`)) +
     `Jumlah Pesanan: *${quantity}*
 ` +
     `Subtotal: *${formatRupiah(subtotal)}*${promoLine}
@@ -1406,7 +1422,7 @@ async function handleProductSelection(query, code) {
   const variants = activeVariantsWithIndex(product);
   if (variants.length) {
     const rows = variants.map(({ variant, index }) => ([{
-      text: `${variant.name} | ${formatRupiah(variantPrice(product, variant))} | ${isPoProduct(product, variant) ? 'PRE-ORDER' : `Stok ${stockOfVariant(variant).length}`}`,
+      text: `${variant.name} | ${formatRupiah(variantPrice(product, variant))} | ${isSupplierProduct(product, variant) ? 'AUTO SUPPLIER' : (isPoProduct(product, variant) ? 'PRE-ORDER' : `Stok ${stockOfVariant(variant).length}`)}`,
       callback_data: `variant:${product.kode}:${index}`
     }]));
     rows.push([{ text: '🔙 Kembali', callback_data: 'daftarproduk' }]);
@@ -1480,7 +1496,7 @@ async function changeQuantity(query, delta, reset = false) {
   let quantity = reset ? 1 : Number(order.quantity || 1) + Number(delta || 0);
   if (quantity < 1) quantity = 1;
   if (isPoOrder(product, order)) {
-    if (quantity > 100) return tg.answerCallbackQuery(query.id, { text: isSupplierProduct(product) ? 'Maksimal 100 item per pesanan AUTO SUPPLIER.' : 'Maksimal 100 item per pesanan PRE-ORDER.', show_alert: true });
+    if (quantity > 100) return tg.answerCallbackQuery(query.id, { text: isSupplierProduct(product, order) ? 'Maksimal 100 item per pesanan AUTO SUPPLIER.' : 'Maksimal 100 item per pesanan PRE-ORDER.', show_alert: true });
   } else if (quantity > availableStockForOrder(product, order)) {
     return tg.answerCallbackQuery(query.id, { text: '⚠️ Stok produk/varian tidak mencukupi', show_alert: true });
   }
@@ -1493,14 +1509,15 @@ async function calculateCheckoutPricing(userId, order, product) {
   const unit = orderUnitPrice(product, order);
   const quantity = Math.max(1, Number(order.quantity || 1));
   let costUnit = db.orderUnitCost(product, order);
-  if (isSupplierProduct(product)) {
+  if (isSupplierProduct(product, order)) {
     if (!prodseller.configured()) {
       const error = new Error('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.');
       error.code = 'SUPPLIER_NOT_CONFIGURED';
       throw error;
     }
     try {
-      const availability = await prodseller.getAvailability(product.supplier_product_id, { force: true });
+      const supplier = supplierSelection(product, order);
+      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
       if (availability.availableStock < quantity) {
         const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
@@ -1510,13 +1527,26 @@ async function calculateCheckoutPricing(userId, order, product) {
         const settings = await db.getShopSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
         costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
-        db.updateProductByCode(product.kode, {
-          supplier_price_usdt: availability.unitPrice,
-          supplier_public_price_usdt: availability.publicPrice,
-          supplier_stock: availability.supplierStock,
-          supplier_synced_at: new Date().toISOString(),
-          cost_price: costUnit
-        }).catch(() => null);
+        const found = db.findVariant(product, order.variant_key || '');
+        if (found.variant && isSupplierProduct(product, found.variant)) {
+          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === found.index ? {
+            ...variant,
+            cost_price: costUnit,
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString()
+          } : variant);
+          db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
+        } else {
+          db.updateProductByCode(product.kode, {
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString(),
+            cost_price: costUnit
+          }).catch(() => null);
+        }
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
@@ -1690,7 +1720,7 @@ async function createPayment(query) {
     `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
     `Expired: *${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))} menit*\n` +
     `=======================\n` +
-    `Pembayaran akan terdeteksi otomatis melalui ${paymentService.paymentProviderLabel({ payment_provider: gatewayPayment.provider })}. ${isSupplierProduct(product) ? 'Pesanan AUTO SUPPLIER diproses otomatis setelah pembayaran dan akun/key dikirim ke chat Telegram setelah supplier selesai.' : (isPoOrder(product, order) ? 'Pesanan PRE-ORDER masuk setelah pembayaran dan produk akan dikirim seller melalui chat setelah disiapkan.' : 'Produk langsung dikirim setelah pembayaran berhasil.')} Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
+    `Pembayaran akan terdeteksi otomatis melalui ${paymentService.paymentProviderLabel({ payment_provider: gatewayPayment.provider })}. ${isSupplierProduct(product, order) ? 'Pesanan AUTO SUPPLIER diproses otomatis setelah pembayaran dan akun/key dikirim ke chat Telegram setelah supplier selesai.' : (isPoOrder(product, order) ? 'Pesanan PRE-ORDER masuk setelah pembayaran dan produk akan dikirim seller melalui chat setelah disiapkan.' : 'Produk langsung dikirim setelah pembayaran berhasil.')} Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   const paymentMessage = await tg.sendPhoto(userId, buffer, {
