@@ -1,6 +1,6 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.11.0",
+  "version": "4.12.0",
   "private": true,
   "description": "Telegram auto-order marketplace with wallet/referrals, QRIS, ProdSeller reseller API, supplier otomatis fulfillment, per-variant automatic/PRE-ORDER delivery, vouchers, and reseller dashboard.",
   "scripts": {

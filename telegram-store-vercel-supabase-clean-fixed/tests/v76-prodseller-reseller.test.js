@@ -41,7 +41,8 @@ test('checkout memverifikasi stok supplier sebelum pelanggan membayar', () => {
   assert.match(store, /prodseller\.(?:getAvailability|getProduct)\((?:product\.supplier_product_id|supplier\.productId)/);
   assert.match(store, /SUPPLIER_STOCK/);
   assert.match(bot, /prodseller\.(?:getAvailability|getProduct)\((?:product\.supplier_product_id|supplier\.productId)/);
-  assert.match(bot, /AUTO SUPPLIER/);
+  assert.match(bot, /supplierAvailabilityForProducts|prodseller\.(?:getAvailability|getProduct)/);
+  assert.doesNotMatch(bot, /AUTO SUPPLIER/);
 });
 
 test('fulfillment supplier hanya setelah order lunas dan aman untuk retry', () => {

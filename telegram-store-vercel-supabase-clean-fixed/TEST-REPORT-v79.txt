@@ -1,0 +1,26 @@
+iLink.in Store v79
+==================
+
+Syntax checks:
+- JavaScript application files: PASS
+
+Focused regression/features v71-v79:
+- 46 tests
+- 46 passed
+- 0 failed
+
+New v79 coverage:
+- Telegram product pagination: PASS
+- 10 products per page: PASS
+- Previous/Next navigation: PASS
+- ProdSeller live/effective stock in Telegram: PASS
+- AUTO SUPPLIER label removed from botHandlers: PASS
+- Supplier variant stock validation: PASS
+- Telegram inline button styles primary/success/danger: PASS
+- Bot short read cache: PASS
+- Duplicate /start upsert reduced: PASS
+
+Note:
+The full npm test suite contains runtime tests that require installed npm dependencies.
+The isolated environment used during packaging did not finish npm dependency installation,
+so those dependency-based tests were not counted as executed.

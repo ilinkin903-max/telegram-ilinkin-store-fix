@@ -6,7 +6,7 @@ const path = require('node:path');
 const botHandlers = fs.readFileSync(path.join(__dirname, '..', 'lib', 'botHandlers.js'), 'utf8');
 
 test('tombol Cara Order selalu ada di menu bot', () => {
-  assert.match(botHandlers, /\{ text: '‹❓› Cara Order', callback_data: 'caraorder' \}/);
+  assert.match(botHandlers, /Cara Order'.*callback_data: 'caraorder'/);
   assert.doesNotMatch(botHandlers, /Cara Order Bot/);
 });
 
