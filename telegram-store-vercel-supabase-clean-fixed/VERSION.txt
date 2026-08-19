@@ -1,1 +1,1 @@
-v78-prodseller-existing-product-variants
+v78.1-prodseller-variants-dashboard-fix

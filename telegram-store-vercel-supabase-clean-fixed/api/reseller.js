@@ -900,6 +900,22 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
     document.querySelectorAll('[data-supplier-retry]').forEach(function(btn){btn.onclick=async function(){ btn.disabled=true; var old=btn.textContent; btn.textContent='Retry...'; try{await api('prodseller-retry',{order_ref:btn.dataset.supplierRetry}); toast('Retry supplier berhasil.'); await load(); await loadSupplier(true);}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent=old;} };});
   }
 
+
+  async function loadSupplier(force){
+    if(state.supplierLoaded && !force){ renderSupplier(); return; }
+    var st=await apiSafe('prodseller-status',{configured:false});
+    state.supplierStatus=st||{configured:false};
+    state.supplierOrders=await apiSafe('supplier-orders',[]);
+    state.supplierProducts=state.supplierStatus.configured?await apiSafe('prodseller-products',[]):[];
+    state.supplierLoaded=true;
+    renderSupplier();
+  }
+
+  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Order',s.orders||0],['Stok',s.stokTersedia||0]]; var box=document.getElementById('stats'); if(box) box.innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
+  function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(118,(chart.clientHeight||300)-96); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="barValue" title="Omzet '+esc(d.label)+'">'+esc(rupiahShort(d.revenue))+'</div><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barDate">'+esc(d.label)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } var top=document.getElementById('topProductList'); if(top) top.innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
+  function productMatches(p,q){ var vars=productVariants(p).map(function(v){return [v.name||v.nama,v.sku||v.kode,v.description||v.deskripsi,v.snk||v.terms].join(' ');}).join(' '); return textMatch([p.nama,p.kode,p.category,p.deskripsi,p.snk,vars],q); }
+  function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
+
   function productColor(p){ var text=String((p&&p.kode)||(p&&p.nama)||'x'); var h=0; for(var i=0;i<text.length;i++) h=(h*31+text.charCodeAt(i))%360; return 'hsl('+h+' 85% 68%)'; }
   function productMediaHtml(p){ if(p.image_url) return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
   function productVariants(p){ return Array.isArray(p&&p.variants) ? p.variants.filter(function(v){ return (v.name||v.nama||v.sku||v.kode) && Number(v.price||v.harga||0)>0; }) : []; }
