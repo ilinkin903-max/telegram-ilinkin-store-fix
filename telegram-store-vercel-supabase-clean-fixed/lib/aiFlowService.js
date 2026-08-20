@@ -52,8 +52,8 @@ async function getPublicConfig() {
   try { apiKey = row.api_key_enc ? decrypt(row.api_key_enc) : ''; } catch (_) {}
   return {
     enabled: row.enabled !== false,
-    base_url: String(row.base_url || 'https://api.x.ai/v1'),
-    model: String(row.model || 'grok-4.5'),
+    base_url: String(row.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
+    model: String(row.model || 'gemini-2.5-flash'),
     backend: String(row.backend || 'chat_completions'),
     configured: Boolean(apiKey),
     api_key_masked: maskKey(apiKey),
@@ -66,8 +66,8 @@ async function getPrivateConfig() {
   if (!apiKey) throw new Error('API Key AI belum disimpan.');
   return {
     enabled: row.enabled !== false,
-    base_url: cleanBaseUrl(row.base_url || 'https://api.x.ai/v1'),
-    model: String(row.model || 'grok-4.5').trim(),
+    base_url: cleanBaseUrl(row.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
+    model: String(row.model || 'gemini-2.5-flash').trim(),
     backend: String(row.backend || 'chat_completions').trim().toLowerCase(),
     api_key: apiKey
   };
@@ -77,8 +77,8 @@ async function saveConfig(input = {}) {
   const apiKeyInput = String(input.api_key || '').trim();
   const next = {
     enabled: input.enabled === false || String(input.enabled).toLowerCase() === 'false' ? false : true,
-    base_url: cleanBaseUrl(input.base_url || prev.base_url || 'https://api.x.ai/v1'),
-    model: String(input.model || prev.model || 'grok-4.5').trim(),
+    base_url: cleanBaseUrl(input.base_url || prev.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
+    model: String(input.model || prev.model || 'gemini-2.5-flash').trim(),
     backend: ['responses','chat_completions'].includes(String(input.backend || prev.backend || 'chat_completions').toLowerCase()) ? String(input.backend || prev.backend || 'chat_completions').toLowerCase() : 'chat_completions',
     api_key_enc: apiKeyInput ? encrypt(apiKeyInput) : String(prev.api_key_enc || ''),
     updated_at: new Date().toISOString()
