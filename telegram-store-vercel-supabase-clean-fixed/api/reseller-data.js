@@ -3,6 +3,7 @@ const db = require('../lib/db');
 const tg = require('../lib/telegram');
 const paymentService = require('../lib/paymentService');
 const prodseller = require('../lib/prodsellerService');
+const telegramSupplier = require('../lib/telegramSupplierService');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
@@ -206,7 +207,7 @@ function prodsellerCode(productId) {
 function supplierLinkOf(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (source !== 'prodseller' || !productId) return null;
+  if (!['prodseller','telegram_userbot'].includes(source) || !productId) return null;
   return {
     source,
     productId,
@@ -232,7 +233,7 @@ function localSupplierLinks(products = []) {
 
 async function getProdSellerStatus() {
   const localProducts = await db.listProducts().catch(() => []);
-  const selected = localSupplierLinks(localProducts);
+  const selected = localSupplierLinks(localProducts).filter((link) => link.source === 'prodseller');
   if (!prodseller.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length };
   const balance = await prodseller.getBalance();
   return {
@@ -252,7 +253,7 @@ async function getProdSellerCatalog() {
     db.getShopSettings()
   ]);
   const localBySupplierId = new Map();
-  localSupplierLinks(localProducts).forEach((link) => {
+  localSupplierLinks(localProducts).filter((link) => link.source === 'prodseller').forEach((link) => {
     const id = String(link.productId || '');
     if (id && !localBySupplierId.has(id)) localBySupplierId.set(id, link);
   });
@@ -330,7 +331,7 @@ async function importProdSellerProduct(body = {}) {
 
     const linkedIndex = variants.findIndex((variant) => {
       const link = supplierLinkOf(target, variant);
-      return link && String(link.productId) === productId;
+      return link && link.source === 'prodseller' && String(link.productId) === productId;
     });
     const variantName = String(body.variant_name || body.variantName || detail.name || 'Varian Supplier').trim();
     const supplierVariant = {
@@ -398,6 +399,111 @@ async function importProdSellerProduct(body = {}) {
     image_url: String(detail.imageUrl || ''),
     category: String(body.category || settings.prodseller_default_category || 'Produk Digital'),
     stock: []
+  });
+}
+
+
+function telegramSupplierCode(productRef) {
+  return `TG${shortHash(String(productRef || '')).slice(0, 8).toUpperCase()}`;
+}
+
+async function getTelegramSuppliersDashboard() {
+  const [connectors, products, localProducts] = await Promise.all([
+    db.listTelegramSupplierConnectors(),
+    db.listTelegramSupplierProducts(),
+    db.listProducts()
+  ]);
+  const localLinks = localSupplierLinks(localProducts).filter((link) => link.source === 'telegram_userbot');
+  const localByRef = new Map();
+  localLinks.forEach((link) => { if (!localByRef.has(String(link.productId))) localByRef.set(String(link.productId), link); });
+  const connectorMap = new Map(connectors.map((c) => [String(c.id), c]));
+  return {
+    connectors,
+    products: products.map((row) => {
+      const connector = connectorMap.get(String(row.connector_id)) || null;
+      const link = localByRef.get(String(row.id)) || null;
+      return {
+        ...row,
+        connector_name: connector?.name || '',
+        connector_code: connector?.code || '',
+        bot_username: connector?.bot_username || '',
+        connector_status: connector?.status || 'offline',
+        connector_balance: connector?.balance ?? null,
+        selected: Boolean(link),
+        link_type: link?.link_type || '',
+        local_code: link?.product?.kode || '',
+        local_name: link?.product?.nama || '',
+        local_variant_name: link?.variant?.name || '',
+        local_price: Number(link?.variant?.price || link?.product?.harga || 0)
+      };
+    })
+  };
+}
+
+async function importTelegramSupplierProduct(body = {}) {
+  const ref = String(body.supplier_product_ref || body.product_id || '').trim();
+  if (!ref) throw new Error('Pilih produk Telegram supplier terlebih dahulu.');
+  const [supplierProduct, localProducts] = await Promise.all([db.getTelegramSupplierProduct(ref), db.listProducts()]);
+  if (!supplierProduct || supplierProduct.active === false) throw new Error('Produk Telegram supplier tidak ditemukan atau nonaktif.');
+  const connector = await db.getTelegramSupplierConnector(supplierProduct.connector_id);
+  if (!connector) throw new Error('Connector Telegram supplier tidak ditemukan.');
+  const sellingPrice = Math.max(1000, Number(body.selling_price || body.harga || 0));
+  if (!sellingPrice) throw new Error('Harga jual iLink wajib diisi.');
+  const costIdr = String(supplierProduct.currency || connector.currency || '').toUpperCase() === 'IDR' ? Math.max(0, Math.round(Number(supplierProduct.cost_amount || 0))) : Math.max(0, Number(body.cost_price_idr || 0));
+  const targetMode = String(body.target_mode || 'product').toLowerCase() === 'variant' ? 'variant' : 'product';
+  const supplierLabel = `Supplier otomatis Telegram · ${connector.name || connector.bot_username}`;
+
+  if (targetMode === 'variant') {
+    const targetCode = String(body.target_product_code || '').trim().toUpperCase();
+    if (!targetCode) throw new Error('Pilih produk induk iLink.');
+    const target = localProducts.find((p) => String(p.kode || '').trim().toUpperCase() === targetCode);
+    if (!target) throw new Error('Produk induk iLink tidak ditemukan.');
+    if (supplierLinkOf(target, null)) throw new Error('Produk supplier mandiri tidak dapat dijadikan produk induk. Pilih produk iLink biasa.');
+    let variants = Array.isArray(target.variants) ? target.variants.map((v) => ({ ...v })) : [];
+    let clearBaseStock = false;
+    if (!variants.length) {
+      variants.push({
+        name: 'Utama', price: Number(target.harga || 0), cost_price: Number(target.cost_price || 0),
+        sku: `${String(target.kode || 'PROD').trim().toUpperCase()}-UTAMA`, note: '', description: String(target.deskripsi || ''), snk: String(target.snk || ''),
+        delivery_mode: String(target.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto', active: true,
+        stock: Array.isArray(target.data) ? target.data : [], bulk_prices: Array.isArray(target.bulk_prices) ? target.bulk_prices : []
+      });
+      clearBaseStock = true;
+    }
+    const linkedIndex = variants.findIndex((variant) => {
+      const link = supplierLinkOf(target, variant);
+      return link && link.source === 'telegram_userbot' && String(link.productId) === ref;
+    });
+    const supplierVariant = {
+      ...(linkedIndex >= 0 ? variants[linkedIndex] : {}),
+      name: String(body.variant_name || supplierProduct.name || 'Varian Supplier').trim(),
+      price: sellingPrice,
+      cost_price: costIdr,
+      sku: linkedIndex >= 0 ? String(variants[linkedIndex].sku || telegramSupplierCode(ref)).trim().toUpperCase() : `${telegramSupplierCode(ref)}-V`,
+      note: supplierLabel,
+      description: String(body.description || target.deskripsi || 'Produk dikirim otomatis melalui supplier Telegram setelah pembayaran.'),
+      snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
+      delivery_mode: 'po', active: true, stock: [], bulk_prices: linkedIndex >= 0 ? (variants[linkedIndex].bulk_prices || []) : [],
+      supplier_source: 'telegram_userbot', supplier_product_id: ref,
+      supplier_price_usdt: 0, supplier_public_price_usdt: 0, supplier_stock: null, supplier_synced_at: new Date().toISOString()
+    };
+    if (linkedIndex >= 0) variants[linkedIndex] = supplierVariant; else variants.push(supplierVariant);
+    const updated = await db.updateProductByCode(target.kode, { variants, ...(clearBaseStock ? { data: [] } : {}) });
+    return { ...updated, reseller_target: 'variant', reseller_variant: supplierVariant };
+  }
+
+  const existingLink = localSupplierLinks(localProducts).find((link) => link.source === 'telegram_userbot' && String(link.productId) === ref && link.link_type === 'product');
+  const base = {
+    harga: sellingPrice, cost_price: costIdr, supplier_source: 'telegram_userbot', supplier_product_id: ref,
+    supplier_price_usdt: 0, supplier_public_price_usdt: 0, supplier_stock: null, supplier_synced_at: new Date().toISOString(),
+    delivery_mode: 'po', display_scope: 'both', active: true, data: []
+  };
+  if (existingLink?.product) return db.updateProductByCode(existingLink.product.kode, base);
+  return db.addProduct({
+    ...base, nama: String(body.name || supplierProduct.name).trim(), kode: telegramSupplierCode(ref),
+    deskripsi: String(body.description || 'Produk digital dikirim otomatis melalui supplier Telegram setelah pembayaran.'),
+    snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
+    image_url: '', category: String(body.category || 'Produk Digital'), stock: []
   });
 }
 
@@ -490,6 +596,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
+    if (req.method === 'GET' && action === 'telegram-suppliers') return json(res, 200, { ok: true, data: await getTelegramSuppliersDashboard() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
@@ -517,6 +624,48 @@ module.exports = async function handler(req, res) {
     if (action === 'prodseller-import') {
       const body = bodyOf(req);
       const data = await importProdSellerProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'telegram-supplier-save') {
+      const body = bodyOf(req);
+      let flowConfig = body.flow_config;
+      if (typeof flowConfig === 'string') {
+        try { flowConfig = JSON.parse(flowConfig || '{}'); } catch (_) { return json(res, 400, { ok: false, error: 'Flow config supplier harus JSON valid.' }); }
+      }
+      const data = await db.saveTelegramSupplierConnector({ ...body, flow_config: flowConfig || {} });
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'telegram-supplier-delete') {
+      const body = bodyOf(req);
+      await db.deleteTelegramSupplierConnector(body.id);
+      return json(res, 200, { ok: true });
+    }
+    if (action === 'telegram-supplier-product-save') {
+      const body = bodyOf(req);
+      const data = await db.saveTelegramSupplierProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'telegram-supplier-stock-check') {
+      const body = bodyOf(req);
+      const id = String(body.id || body.product_id || '').trim();
+      if (!id) return json(res, 400, { ok: false, error: 'ID produk supplier wajib diisi.' });
+      const data = await telegramSupplier.getAvailability(id, { live: true, force: true, allowCached: false, waitMs: 12000 });
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'telegram-supplier-product-delete') {
+      const body = bodyOf(req);
+      await db.deleteTelegramSupplierProduct(body.id);
+      return json(res, 200, { ok: true });
+    }
+    if (action === 'telegram-supplier-import') {
+      const body = bodyOf(req);
+      const data = await importTelegramSupplierProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'telegram-supplier-retry') {
+      const body = bodyOf(req);
+      const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' });
       return json(res, 200, { ok: true, data });
     }
 
@@ -681,7 +830,7 @@ module.exports = async function handler(req, res) {
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
       if (body.field && body.value !== undefined) updates[body.field] = ['harga','cost_price','modal','harga_modal'].includes(body.field) ? numberOf(body.value) : String(body.value || '').trim();
       const currentProduct = await db.getProductByCode(code);
-      if (String(currentProduct?.supplier_source || '').toLowerCase() === 'prodseller') {
+      if (['prodseller','telegram_userbot'].includes(String(currentProduct?.supplier_source || '').toLowerCase())) {
         updates.delivery_mode = 'po';
         updates.stock = [];
       }
@@ -702,7 +851,7 @@ module.exports = async function handler(req, res) {
       const poProduct = await db.getProductByCode(po.product_code).catch(() => null);
       const poVariant = poProduct ? db.findVariant(poProduct, po.variant_key || '').variant : null;
       if (supplierLinkOf(poProduct, poVariant || null)) {
-        return json(res, 409, { ok: false, error: 'Pesanan varian ProdSeller diproses otomatis melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
+        return json(res, 409, { ok: false, error: 'Pesanan supplier otomatis diproses melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
       }
       const transactionBeforeSend = await db.getTransactionByOrderRef(orderRef).catch(() => null);
       if (String(transactionBeforeSend?.status || 'completed').toLowerCase() === 'canceled') {

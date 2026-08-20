@@ -632,7 +632,8 @@
     if (!state.selectedProduct) return null;
     return state.selectedProduct.variants.find(function (variant) { return variant.key === state.selectedVariantKey; }) || null;
   }
-  function selectedIsSupplier(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='prodseller' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='prodseller'))); }
+  function selectedIsSupplier(){ var variant=activeVariant(); var source=String((variant&&variant.supplier_source)||(!variant&&state.selectedProduct&&state.selectedProduct.supplier_source)||'').toLowerCase(); return source==='prodseller'||source==='telegram_userbot'; }
+  function selectedSupplierSource(){ var variant=activeVariant(); return String((variant&&variant.supplier_source)||(!variant&&state.selectedProduct&&state.selectedProduct.supplier_source)||'').toLowerCase(); }
   function selectedDeliveryMode() {
     if (!state.selectedProduct) return 'auto';
     var variant = activeVariant();
@@ -675,6 +676,23 @@
       els.detailDescriptionToggle.setAttribute('aria-expanded', 'false');
     }
   }
+  async function refreshSelectedSupplierStock(force) {
+    var product = state.selectedProduct;
+    if (!product || selectedSupplierSource() !== 'telegram_userbot' || !state.catalog.viewer.telegram_ready) return null;
+    var variant = activeVariant();
+    try {
+      var result = await api('supplier-stock', { body: { product_code: product.code, variant_key: variant ? variant.key : '' } });
+      var stock = Math.max(0, Number(result.stock || 0));
+      if (variant) variant.stock = stock; else product.stock = stock;
+      renderVariants(product);
+      updateProductEstimate();
+      return result;
+    } catch (error) {
+      if (force) toast(error.message || 'Stok supplier gagal diperbarui.', true);
+      return null;
+    }
+  }
+
   function updateProductEstimate() {
     if (!state.selectedProduct) return;
     var qty = clampQuantity();
@@ -740,6 +758,7 @@
         var variant = activeVariant();
         setDetailDescription((variant && variant.description) || product.description || 'Tidak ada deskripsi.');
         els.detailTerms.textContent = (variant && variant.terms) || product.terms || 'Tidak ada ketentuan khusus.';
+        if (selectedSupplierSource() === 'telegram_userbot') refreshSelectedSupplierStock(false);
       });
     });
   }
@@ -764,6 +783,7 @@
     renderVariants(product);
     updateProductEstimate();
     openModal(els.productModal);
+    if (selectedSupplierSource() === 'telegram_userbot') refreshSelectedSupplierStock(false);
   }
 
   async function openCheckoutConfirmation() {

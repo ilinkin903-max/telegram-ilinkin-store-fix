@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Setup Telegram Userbot · iLink.in Store</title>
+  <style>
+    :root{color-scheme:light;--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#dce3ee;--blue:#1677ff;--green:#16a34a;--red:#dc2626;--soft:#eef6ff}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eaf3ff 0,#f7f9fc 38%,#f4f7fb 100%);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text)}
+    .wrap{width:min(680px,calc(100% - 28px));margin:34px auto 60px}.brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}.logo{width:46px;height:46px;border-radius:14px;background:#1677ff;color:white;display:grid;place-items:center;font-weight:900;font-size:21px;box-shadow:0 8px 24px #1677ff33}.brand h1{font-size:20px;margin:0}.brand p{font-size:13px;color:var(--muted);margin:3px 0 0}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 18px 50px #1f29370d}.notice{background:#fff8e7;border:1px solid #f4d58b;border-radius:14px;padding:13px 14px;font-size:13px;line-height:1.55;margin-bottom:18px}.notice b{color:#8a5400}
+    .status{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:18px}.pill{border:1px solid var(--line);background:#f9fafb;border-radius:11px;padding:10px;font-size:12px;color:var(--muted)}.pill strong{display:block;color:var(--text);font-size:13px;margin-bottom:2px}.ok strong{color:var(--green)}.bad strong{color:var(--red)}
+    label{font-size:13px;font-weight:700;display:block;margin:14px 0 7px}input,textarea{width:100%;border:1px solid #ccd5e2;border-radius:12px;background:white;padding:12px 13px;font:inherit;outline:none}input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #1677ff18}textarea{min-height:122px;resize:vertical;word-break:break-all}
+    .row{display:grid;grid-template-columns:1fr auto;gap:9px}.btn{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer;background:var(--blue);color:white}.btn:disabled{opacity:.5;cursor:not-allowed}.btn.secondary{background:#eef3f9;color:#24324a}.btn.green{background:var(--green)}.btn.full{width:100%;margin-top:14px}.btn.copy{align-self:stretch}.hidden{display:none!important}
+    .msg{display:none;border-radius:12px;padding:11px 13px;margin-top:13px;font-size:13px;line-height:1.5}.msg.show{display:block}.msg.info{background:var(--soft);color:#24558e}.msg.error{background:#fff0f0;color:#9f1f1f}.msg.success{background:#edf9f0;color:#176b31}.steps{font-size:12px;color:var(--muted);line-height:1.65;margin:18px 0 0;padding-left:20px}.sessionBox{margin-top:18px;border-top:1px dashed var(--line);padding-top:18px}.tiny{font-size:12px;color:var(--muted);line-height:1.55}.footer{text-align:center;color:var(--muted);font-size:11px;margin-top:14px}@media(max-width:520px){.wrap{margin-top:18px}.card{padding:17px}.status{grid-template-columns:1fr}.row{grid-template-columns:1fr}.btn.copy{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand"><div class="logo">iL</div><div><h1>Setup Telegram Userbot</h1><p>iLink.in Store · Vercel On-Demand Supplier</p></div></div>
+    <section class="card">
+      <div class="notice"><b>Gunakan akun Telegram khusus reseller.</b> TG_STRING_SESSION adalah kredensial login penuh. Jangan kirim session ke siapa pun, jangan screenshot session, dan jangan simpan di GitHub.</div>
+
+      <div class="status" id="statusGrid">
+        <div class="pill" id="stApi"><strong>Memeriksa…</strong>TG_API_ID / TG_API_HASH</div>
+        <div class="pill" id="stSession"><strong>Memeriksa…</strong>TG_STRING_SESSION</div>
+      </div>
+
+      <label for="setupKey">Setup Key</label>
+      <input id="setupKey" type="password" autocomplete="off" placeholder="USERBOT_SETUP_KEY atau WEBHOOK_SECRET" />
+
+      <label for="phone">Nomor Telegram reseller</label>
+      <div class="row">
+        <input id="phone" inputmode="tel" autocomplete="tel" placeholder="+628123456789" />
+        <button class="btn" id="sendBtn" type="button">Kirim kode Telegram</button>
+      </div>
+
+      <div id="codeSection" class="hidden">
+        <label for="code">Kode yang diterima dari Telegram</label>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Contoh: 12345" />
+        <button class="btn green full" id="loginBtn" type="button">Login & Buat Session</button>
+      </div>
+
+      <div id="passwordSection" class="hidden">
+        <label for="password">Password Two-Step Verification (2FA)</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password 2FA Telegram" />
+        <button class="btn green full" id="passwordBtn" type="button">Verifikasi 2FA & Buat Session</button>
+      </div>
+
+      <div id="message" class="msg"></div>
+
+      <div id="sessionSection" class="sessionBox hidden">
+        <label for="session">TG_STRING_SESSION</label>
+        <textarea id="session" readonly spellcheck="false"></textarea>
+        <button class="btn full" id="copyBtn" type="button">Copy Session</button>
+        <p class="tiny">Masukkan hasil ini ke <b>Vercel → Project → Settings → Environment Variables → TG_STRING_SESSION</b>, Save, lalu Redeploy. Setelah itu Anda boleh menutup halaman ini.</p>
+      </div>
+
+      <ol class="steps">
+        <li>Pastikan <b>TG_API_ID</b> dan <b>TG_API_HASH</b> sudah ada di Vercel lalu Redeploy.</li>
+        <li>Masukkan Setup Key dan nomor akun Telegram khusus reseller.</li>
+        <li>Tekan <b>Kirim kode Telegram</b>, lalu cek pesan Telegram pada akun tersebut.</li>
+        <li>Masukkan kode. Jika akun memakai 2FA, form password akan muncul otomatis.</li>
+        <li>Copy session yang dihasilkan ke Environment Variable <b>TG_STRING_SESSION</b>.</li>
+      </ol>
+    </section>
+    <div class="footer">Halaman setup tidak menyimpan OTP, password 2FA, atau session di browser.</div>
+  </main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let loginState = '';
+  const msg = $('message');
+  function showMessage(text, type='info') { msg.className = `msg show ${type}`; msg.textContent = text; }
+  function busy(button, yes, text) { if (!button.dataset.label) button.dataset.label = button.textContent; button.disabled = yes; button.textContent = yes ? text : button.dataset.label; }
+  async function api(body) {
+    const response = await fetch('/api/setup-userbot', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  }
+  async function status() {
+    try {
+      const r = await fetch('/api/setup-userbot', { cache:'no-store' });
+      const d = await r.json();
+      const apiOk = d.api_id_configured && d.api_hash_configured && d.setup_key_configured;
+      $('stApi').className = `pill ${apiOk ? 'ok':'bad'}`;
+      $('stApi').innerHTML = `<strong>${apiOk ? 'Siap' : 'Belum lengkap'}</strong>TG_API_ID / TG_API_HASH / Setup Key`;
+      $('stSession').className = `pill ${d.session_configured ? 'ok':''}`;
+      $('stSession').innerHTML = `<strong>${d.session_configured ? 'Sudah terpasang' : 'Belum dibuat'}</strong>TG_STRING_SESSION`;
+    } catch (_) {}
+  }
+  $('sendBtn').addEventListener('click', async () => {
+    const setupKey = $('setupKey').value.trim();
+    const phone = $('phone').value.trim();
+    if (!setupKey || !phone) return showMessage('Isi Setup Key dan nomor Telegram terlebih dahulu.', 'error');
+    busy($('sendBtn'), true, 'Mengirim…');
+    $('sessionSection').classList.add('hidden');
+    $('passwordSection').classList.add('hidden');
+    try {
+      const d = await api({ action:'send_code', setup_key:setupKey, phone });
+      loginState = d.state || '';
+      $('codeSection').classList.remove('hidden');
+      $('code').focus();
+      showMessage(d.message || 'Kode Telegram sudah dikirim.', 'success');
+    } catch (e) { showMessage(e.message, 'error'); }
+    finally { busy($('sendBtn'), false, ''); }
+  });
+  async function login(withPassword) {
+    const setupKey = $('setupKey').value.trim();
+    if (!loginState) return showMessage('Kirim kode Telegram terlebih dahulu.', 'error');
+    const button = withPassword ? $('passwordBtn') : $('loginBtn');
+    busy(button, true, 'Memverifikasi…');
+    try {
+      const d = await api({ action:'login', setup_key:setupKey, state:loginState, code:$('code').value.trim(), password:withPassword ? $('password').value : '' });
+      if (d.needs_password) {
+        loginState = d.state || loginState;
+        $('passwordSection').classList.remove('hidden');
+        $('password').focus();
+        return showMessage(d.message || 'Masukkan password 2FA.', 'info');
+      }
+      if (!d.ok || !d.session) throw new Error(d.error || 'Session tidak berhasil dibuat.');
+      $('session').value = d.session;
+      $('sessionSection').classList.remove('hidden');
+      $('codeSection').classList.add('hidden');
+      $('passwordSection').classList.add('hidden');
+      $('code').value = '';
+      $('password').value = '';
+      loginState = '';
+      showMessage(d.message || 'Login berhasil. Copy TG_STRING_SESSION.', 'success');
+      status();
+    } catch (e) { showMessage(e.message, 'error'); }
+    finally { busy(button, false, ''); }
+  }
+  $('loginBtn').addEventListener('click', () => login(false));
+  $('passwordBtn').addEventListener('click', () => login(true));
+  $('copyBtn').addEventListener('click', async () => {
+    const value = $('session').value;
+    if (!value) return;
+    try { await navigator.clipboard.writeText(value); showMessage('TG_STRING_SESSION berhasil dicopy.', 'success'); }
+    catch (_) { $('session').select(); document.execCommand('copy'); showMessage('TG_STRING_SESSION berhasil dicopy.', 'success'); }
+  });
+  status();
+})();
+</script>
+</body>
+</html>

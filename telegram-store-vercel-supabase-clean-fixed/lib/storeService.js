@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const db = require('./db');
 const paymentService = require('./paymentService');
 const prodseller = require('./prodsellerService');
+const telegramSupplier = require('./telegramSupplierService');
 const { config } = require('./config');
 const { randomFee, randomRef } = require('./utils');
 
@@ -218,7 +219,7 @@ function promoDisplay(promo, originalPrice) {
 function supplierSelection(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (source !== 'prodseller' || !productId) return null;
+  if (!['prodseller', 'telegram_userbot'].includes(source) || !productId) return null;
   return { source, productId, variant };
 }
 
@@ -314,7 +315,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     ? (displayPrices.length ? Math.max(...displayPrices) : priceMax)
     : (basePromo ? basePromo.final_price : priceMax);
   const hasPromo = Boolean(basePromo || variants.some((variant) => variant.promo));
-  const hasSupplierVariants = variants.some((variant) => variant.supplier_source === 'prodseller');
+  const hasSupplierVariants = variants.some((variant) => ['prodseller','telegram_userbot'].includes(String(variant.supplier_source || '').toLowerCase()));
 
   return {
     code: product.kode,
@@ -379,12 +380,19 @@ async function getCatalog(viewer = null) {
     : [];
   const supplierAvailability = new Map();
   const supplierRefs = new Set();
+  const telegramRefs = new Set();
   products.forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) supplierRefs.add(direct.productId);
+    if (direct) {
+      if (direct.source === 'prodseller') supplierRefs.add(direct.productId);
+      else telegramRefs.add(direct.productId);
+    }
     (Array.isArray(product?.variants) ? product.variants : []).forEach((variant) => {
       const ref = supplierSelection(product, variant);
-      if (ref) supplierRefs.add(ref.productId);
+      if (ref) {
+        if (ref.source === 'prodseller') supplierRefs.add(ref.productId);
+        else telegramRefs.add(ref.productId);
+      }
     });
   });
   if (supplierRefs.size && prodseller.configured()) {
@@ -404,30 +412,24 @@ async function getCatalog(viewer = null) {
       let variantsChanged = false;
       variants.forEach((variant, index) => {
         const ref = supplierSelection(product, variant);
-        const availability = ref ? supplierAvailability.get(ref.productId) : null;
+        if (!ref || ref.source !== 'prodseller') return;
+        const availability = supplierAvailability.get(ref.productId);
         if (!availability) return;
-        variants[index] = {
-          ...variant,
-          supplier_price_usdt: availability.unitPrice,
-          supplier_public_price_usdt: availability.publicPrice,
-          supplier_stock: availability.supplierStock,
-          supplier_synced_at: syncedAt
-        };
+        variants[index] = { ...variant, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: syncedAt };
         variantsChanged = true;
       });
-      const directAvailability = direct ? supplierAvailability.get(direct.productId) : null;
+      const directAvailability = direct && direct.source === 'prodseller' ? supplierAvailability.get(direct.productId) : null;
       if (directAvailability || variantsChanged) {
         db.updateProductByCode(product.kode, {
-          ...(directAvailability ? {
-            supplier_price_usdt: directAvailability.unitPrice,
-            supplier_public_price_usdt: directAvailability.publicPrice,
-            supplier_stock: directAvailability.supplierStock,
-            supplier_synced_at: syncedAt
-          } : {}),
+          ...(directAvailability ? { supplier_price_usdt: directAvailability.unitPrice, supplier_public_price_usdt: directAvailability.publicPrice, supplier_stock: directAvailability.supplierStock, supplier_synced_at: syncedAt } : {}),
           ...(variantsChanged ? { variants } : {})
         }).catch(() => null);
       }
     });
+  }
+  if (telegramRefs.size) {
+    const telegramMap = await telegramSupplier.getAvailabilityMap([...telegramRefs]).catch(() => new Map());
+    telegramMap.forEach((value, key) => supplierAvailability.set(String(key), value));
   }
 
 
@@ -577,48 +579,29 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   const isSupplier = Boolean(supplier);
   let liveSupplierCostUnit = null;
   if (isSupplier) {
-    if (!prodseller.configured()) {
-      throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
-    }
     try {
-      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
-      if (availability.availableStock < qty) {
-        throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', {
-          available_stock: Math.max(0, availability.availableStock)
-        });
-      }
-      if (availability.unitPrice > 0) {
-        const settings = await db.getShopSettings();
-        const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-        liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
-        if (selected.variant) {
-          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === selected.index ? {
-            ...variant,
-            cost_price: liveSupplierCostUnit,
-            supplier_price_usdt: availability.unitPrice,
-            supplier_public_price_usdt: availability.publicPrice,
-            supplier_stock: availability.supplierStock,
-            supplier_synced_at: new Date().toISOString()
-          } : variant);
-          db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
-        } else {
-          db.updateProductByCode(product.kode, {
-            supplier_price_usdt: availability.unitPrice,
-            supplier_public_price_usdt: availability.publicPrice,
-            supplier_stock: availability.supplierStock,
-            supplier_synced_at: new Date().toISOString(),
-            cost_price: liveSupplierCostUnit
-          }).catch(() => null);
+      if (supplier.source === 'prodseller') {
+        if (!prodseller.configured()) throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
+        const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+        if (availability.availableStock < qty) throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, availability.availableStock) });
+        if (availability.unitPrice > 0) {
+          const settings = await db.getShopSettings();
+          const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+          liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
+          if (selected.variant) {
+            const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === selected.index ? { ...variant, cost_price: liveSupplierCostUnit, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString() } : variant);
+            db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
+          } else db.updateProductByCode(product.kode, { supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString(), cost_price: liveSupplierCostUnit }).catch(() => null);
         }
+      } else {
+        const availability = await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: false, waitMs: 10000 });
+        if (availability.availableStock < qty) throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, availability.availableStock) });
+        if (availability.currency === 'IDR' && availability.unitCost > 0) liveSupplierCostUnit = Math.round(availability.unitCost);
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      if (error?.code === 'PRODSELLER_BALANCE') {
-        throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
-      }
-      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) {
-        throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
-      }
+      if (error?.code === 'PRODSELLER_BALANCE') throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
+      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
       throw httpError('Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
     }
   }
@@ -988,6 +971,34 @@ async function getOrderStatus(user, invoice) {
   };
 }
 
+
+async function getLiveSupplierStock(user, productCode, variantKey) {
+  if (!user?.id) throw httpError('Buka Marketplace melalui Telegram untuk memperbarui stok supplier.', 401, 'TELEGRAM_REQUIRED');
+  const code = String(productCode || '').trim().toUpperCase();
+  const product = await db.getProductByCode(code);
+  if (!product || product.active === false) throw httpError('Produk tidak tersedia.', 404, 'PRODUCT_NOT_FOUND');
+  const selected = selectedProductVariant(product, variantKey);
+  const supplier = supplierSelection(product, selected.variant || null);
+  if (!supplier) return { product_code: code, variant_key: selected.key || '', supplier: false, stock: selected.variant ? variantStock(selected.variant) : (Array.isArray(product.data) ? product.data.length : 0) };
+  if (supplier.source === 'prodseller') {
+    if (!prodseller.configured()) throw httpError('Supplier ProdSeller belum dikonfigurasi.', 503, 'SUPPLIER_NOT_CONFIGURED');
+    const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+    return { product_code: code, variant_key: selected.key || '', supplier: true, supplier_source: 'prodseller', stock: Math.max(0, Number(availability.availableStock || 0)) };
+  }
+  const availability = await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: true, waitMs: 8000 });
+  return {
+    product_code: code,
+    variant_key: selected.key || '',
+    supplier: true,
+    supplier_source: 'telegram_userbot',
+    stock: Math.max(0, Number(availability.availableStock || 0)),
+    supplier_stock: availability.supplierStock == null ? null : Number(availability.supplierStock),
+    balance: availability.balance == null ? null : Number(availability.balance),
+    unit_cost: Number(availability.unitCost || 0),
+    currency: availability.currency || 'IDR'
+  };
+}
+
 async function cancelOrder(user, invoice) {
   if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
   const ref = String(invoice || '').trim();
@@ -1035,6 +1046,7 @@ module.exports = {
   getQrDownloadByToken,
   getQrDownload,
   getOrderStatus,
+  getLiveSupplierStock,
   cancelOrder,
   getHistory,
   httpError,

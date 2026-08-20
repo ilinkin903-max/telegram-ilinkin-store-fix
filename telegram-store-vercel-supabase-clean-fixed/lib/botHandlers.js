@@ -6,6 +6,7 @@ const tg = require('./telegram');
 const db = require('./db');
 const paymentService = require('./paymentService');
 const prodseller = require('./prodsellerService');
+const telegramSupplier = require('./telegramSupplierService');
 const walletNotifications = require('./walletNotifications');
 const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
@@ -815,10 +816,10 @@ function supplierSelection(product, selection = null) {
   else if (selection && typeof selection === 'object') variant = selectedVariant(product, selection);
   const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
   const variantProductId = String(variant?.supplier_product_id || '').trim();
-  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
+  if (['prodseller','telegram_userbot'].includes(variantSource) && variantProductId) return { source: variantSource, productId: variantProductId, variant };
   const source = String(product?.supplier_source || '').trim().toLowerCase();
   const productId = String(product?.supplier_product_id || '').trim();
-  if (source === 'prodseller' && productId) return { productId, variant: null };
+  if (['prodseller','telegram_userbot'].includes(source) && productId) return { source, productId, variant: null };
   return null;
 }
 
@@ -863,33 +864,41 @@ function storedSupplierProduct(product, variant = null) {
   };
 }
 
-async function supplierAvailabilityForProducts(products = []) {
+async function supplierAvailabilityForProducts(products = [], options = {}) {
   const map = new Map();
-  if (!prodseller.configured()) return map;
-  const refs = new Map();
+  const prodRefs = new Map();
+  const telegramRefs = new Set();
   (products || []).forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) refs.set(direct.productId, { product, variant: null });
+    if (direct) (direct.source === 'prodseller' ? prodRefs.set(direct.productId, { product, variant: null }) : telegramRefs.add(direct.productId));
     activeVariantsWithIndex(product).forEach(({ variant }) => {
       const ref = supplierSelection(product, variant);
-      if (ref) refs.set(ref.productId, { product, variant });
+      if (ref) (ref.source === 'prodseller' ? prodRefs.set(ref.productId, { product, variant }) : telegramRefs.add(ref.productId));
     });
   });
-  if (!refs.size) return map;
-
-  const balanceData = await prodseller.getBalance().catch(() => null);
-  if (!balanceData) return map;
-  const rows = await Promise.allSettled([...refs.entries()].map(async ([productId, meta]) => {
-    try {
-      const live = await prodseller.getProduct(productId);
-      return [productId, prodseller.availabilityFrom({ balanceData, product: live })];
-    } catch (_) {
-      return [productId, prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) })];
+  if (prodRefs.size && prodseller.configured()) {
+    const balanceData = await prodseller.getBalance().catch(() => null);
+    if (balanceData) {
+      const rows = await Promise.allSettled([...prodRefs.entries()].map(async ([productId, meta]) => {
+        try { const live = await prodseller.getProduct(productId); return [productId, prodseller.availabilityFrom({ balanceData, product: live })]; }
+        catch (_) { return [productId, prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) })]; }
+      }));
+      rows.forEach((row) => { if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]); });
     }
-  }));
-  rows.forEach((row) => {
-    if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]);
-  });
+  }
+  if (telegramRefs.size) {
+    if (options.liveTelegram === true && telegramRefs.size === 1) {
+      const ref = [...telegramRefs][0];
+      try { map.set(String(ref), await telegramSupplier.getAvailability(ref, { live: true, force: true, allowCached: true, waitMs: 8000 })); }
+      catch (_) {
+        const telegramMap = await telegramSupplier.getAvailabilityMap([ref]).catch(() => new Map());
+        telegramMap.forEach((value, key) => map.set(String(key), value));
+      }
+    } else {
+      const telegramMap = await telegramSupplier.getAvailabilityMap([...telegramRefs]).catch(() => new Map());
+      telegramMap.forEach((value, key) => map.set(String(key), value));
+    }
+  }
   return map;
 }
 
@@ -898,6 +907,7 @@ function supplierStockForSelection(product, selection = null, availabilityMap = 
   if (!ref) return null;
   const found = availabilityMap instanceof Map ? availabilityMap.get(ref.productId) : null;
   if (found) return Math.max(0, Math.floor(Number(found.availableStock || 0)));
+  if (ref.source === 'telegram_userbot') return 0;
   const variant = ref.variant || (selection && selection.variant_key !== undefined ? selectedVariant(product, selection) : null);
   const stored = storedSupplierProduct(product, variant);
   if (stored.price <= 0 || stored.stock === 0) return 0;
@@ -1701,7 +1711,7 @@ async function showConfirmation(query, edit = false) {
   const subtotal = Number(order.quantity || 1) * orderUnitPrice(product, order);
   const promoPromise = db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), subtotal, order.variant_key).catch(() => null);
   const availabilityPromise = isSupplierProduct(product, order)
-    ? supplierAvailabilityForProducts([product]).catch(() => new Map())
+    ? supplierAvailabilityForProducts([product], { liveTelegram: true }).catch(() => new Map())
     : Promise.resolve(new Map());
   const [promo, availabilityMap] = await Promise.all([promoPromise, availabilityPromise]);
   const supplierAvailableStock = isSupplierProduct(product, order) ? supplierStockForSelection(product, order, availabilityMap) : null;
@@ -1740,43 +1750,27 @@ async function calculateCheckoutPricing(userId, order, product) {
   const quantity = Math.max(1, Number(order.quantity || 1));
   let costUnit = db.orderUnitCost(product, order);
   if (isSupplierProduct(product, order)) {
-    if (!prodseller.configured()) {
-      const error = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.');
-      error.code = 'SUPPLIER_NOT_CONFIGURED';
-      throw error;
-    }
     try {
       const supplier = supplierSelection(product, order);
-      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+      const availability = supplier.source === 'prodseller'
+        ? (prodseller.configured() ? await prodseller.getAvailability(supplier.productId, { force: true }) : (() => { const e = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.'); e.code='SUPPLIER_NOT_CONFIGURED'; throw e; })())
+        : await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: false, waitMs: 10000 });
       if (availability.availableStock < quantity) {
         const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
         throw error;
       }
-      if (availability.unitPrice > 0) {
+      if (supplier.source === 'telegram_userbot') {
+        if (availability.currency === 'IDR' && availability.unitCost > 0) costUnit = Math.max(0, Math.round(availability.unitCost));
+      } else if (availability.unitPrice > 0) {
         const settings = await db.getShopSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
         costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         const found = db.findVariant(product, order.variant_key || '');
         if (found.variant && isSupplierProduct(product, found.variant)) {
-          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === found.index ? {
-            ...variant,
-            cost_price: costUnit,
-            supplier_price_usdt: availability.unitPrice,
-            supplier_public_price_usdt: availability.publicPrice,
-            supplier_stock: availability.supplierStock,
-            supplier_synced_at: new Date().toISOString()
-          } : variant);
+          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === found.index ? { ...variant, cost_price: costUnit, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString() } : variant);
           db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
-        } else {
-          db.updateProductByCode(product.kode, {
-            supplier_price_usdt: availability.unitPrice,
-            supplier_public_price_usdt: availability.publicPrice,
-            supplier_stock: availability.supplierStock,
-            supplier_synced_at: new Date().toISOString(),
-            cost_price: costUnit
-          }).catch(() => null);
-        }
+        } else db.updateProductByCode(product.kode, { supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString(), cost_price: costUnit }).catch(() => null);
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;

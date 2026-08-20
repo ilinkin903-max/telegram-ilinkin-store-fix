@@ -47,6 +47,11 @@ module.exports = async function handler(req, res) {
     }
 
     const body = bodyOf(req);
+    if (action === 'supplier-stock') {
+      const data = await store.getLiveSupplierStock(user, body.product_code, body.variant_key);
+      return json(res, 200, { ok: true, data });
+    }
+
     if (action === 'checkout-preview') {
       const data = await store.previewCheckout({
         user,

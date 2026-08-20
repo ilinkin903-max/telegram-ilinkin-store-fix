@@ -6,3 +6,5 @@ node_modules/
 *.log
 Database/*.json
 !Database/README.md
+worker/.env
+worker/node_modules/

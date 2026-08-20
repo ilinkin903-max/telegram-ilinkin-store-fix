@@ -1,0 +1,20 @@
+{
+  "name": "ilink-userbot-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram MTProto worker for iLink.in Store multi-supplier reseller",
+  "scripts": {
+    "start": "node userbot-worker.js",
+    "session": "node create-session.js",
+    "check": "node --check userbot-worker.js && node --check create-session.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.45.4",
+    "axios": "1.7.7",
+    "dotenv": "16.4.5",
+    "teleproto": "1.228.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -4,6 +4,8 @@ const db = require('./db');
 const tg = require('./telegram');
 const walletNotifications = require('./walletNotifications');
 const prodseller = require('./prodsellerService');
+const telegramSupplier = require('./telegramSupplierService');
+function telegramOnDemand() { return require('./telegramOnDemandService'); }
 const { formatRupiah, formatWIB } = require('./utils');
 
 function getVercelWaitUntil() {
@@ -511,35 +513,46 @@ async function notifyFirstPurchaseReferral(inviteeId) {
 }
 
 
-function prodSellerSelection(product = {}, order = {}) {
+function automaticSupplierSelection(product = {}, order = {}) {
   const variant = selectedVariant(product, order);
   const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
   const variantProductId = String(variant?.supplier_product_id || '').trim();
-  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
+  if (['prodseller','telegram_userbot'].includes(variantSource) && variantProductId) return { source: variantSource, productId: variantProductId, variant };
   const source = String(product?.supplier_source || '').trim().toLowerCase();
   const productId = String(product?.supplier_product_id || '').trim();
-  if (source === 'prodseller' && productId) return { productId, variant: null };
+  if (['prodseller','telegram_userbot'].includes(source) && productId) return { source, productId, variant: null };
   return null;
+}
+
+function prodSellerSelection(product = {}, order = {}) {
+  const selected = automaticSupplierSelection(product, order);
+  return selected?.source === 'prodseller' ? selected : null;
 }
 
 function isProdSellerProduct(product = {}, order = {}) {
   return Boolean(prodSellerSelection(product, order));
 }
 
+function isAutomaticSupplierProduct(product = {}, order = {}) {
+  return Boolean(automaticSupplierSelection(product, order));
+}
+
 async function notifyOwnerSupplierIssue(order, product, error, supplierRow = null) {
   if (!config.channelLog) return;
   try {
     const ref = displayPaymentReference(order?.invoice_ref || order?.order_ref || '-');
+    const selectedSupplier = automaticSupplierSelection(product, order);
+    const supplierLabel = selectedSupplier?.source === 'telegram_userbot' ? 'Telegram Supplier' : 'ProdSeller';
     const text = `⚠️ ORDER SUPPLIER BELUM TERKIRIM\n` +
       `=======================\n` +
       `Invoice: ${ref}\n` +
       `Produk: ${product?.nama || product?.kode || '-'}\n` +
-      `Supplier: ProdSeller\n` +
-      `Product ID: ${prodSellerSelection(product, order)?.productId || '-'}\n` +
+      `Supplier: ${supplierLabel}\n` +
+      `Product ID: ${selectedSupplier?.productId || '-'}\n` +
       `Jumlah: ${Number(order?.quantity || 1)}\n` +
       `Status: ${supplierRow?.status || 'error'}\n` +
       `Keterangan: ${String(error?.message || error || 'Belum terkirim')}\n\n` +
-      `Buka Reseller Dashboard → Supplier / Reseller untuk cek saldo lalu Retry Supplier.`;
+      `Buka Reseller Dashboard → Supplier / Reseller untuk cek status lalu Retry Supplier jika aman.`;
     await tg.sendMessage(config.channelLog, text);
   } catch (notifyError) {
     console.error('Gagal kirim log supplier:', notifyError.message || notifyError);
@@ -651,13 +664,172 @@ async function processProdSellerDelivery({ order, product, transaction, buyer = 
   }
 }
 
+
+async function processTelegramSupplierDelivery({ order, product, transaction, buyer = {}, source = 'supplier-auto' }) {
+  const invoice = String(order?.invoice_ref || transaction?.order_ref || '').trim();
+  if (!invoice) throw new Error('Invoice supplier tidak ditemukan.');
+  const supplier = automaticSupplierSelection(product, transaction || order);
+  if (!supplier || supplier.source !== 'telegram_userbot') return { handled: false };
+
+  const existing = await db.getSupplierOrder(invoice).catch(() => null);
+  if (existing?.status === 'delivered' && existing.delivered_text) {
+    const poOrder = await db.getPoOrder(invoice).catch(() => null);
+    try {
+      await sendSupplierDeliveryOnce({ invoice, userId: Number(order?.telegram_id || transaction?.telegram_id), poOrder: poOrder || { ...order, order_ref: invoice }, deliveryText: existing.delivered_text, product });
+    } catch (error) {
+      return { handled: true, pending: true, error, supplier_order: existing, transaction };
+    }
+    return { handled: true, delivered: String(existing.delivered_text).split(/\r?\n/).filter(Boolean), supplier_order: existing, transaction };
+  }
+
+  const availability = await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: true, waitMs: 10000 });
+  const qty = Math.max(1, Number(order?.quantity || transaction?.quantity || 1));
+  if (availability.availableStock < qty) {
+    const error = new Error(`Stok supplier Telegram tidak mencukupi. Stok tersedia: ${availability.availableStock}.`);
+    error.code = 'TELEGRAM_SUPPLIER_STOCK';
+    throw error;
+  }
+
+  const supplierProduct = availability.product || {};
+  const connector = availability.connector || {};
+  const supplierRow = await db.upsertSupplierOrder({
+    order_ref: invoice,
+    supplier: 'telegram_userbot',
+    supplier_order_id: existing?.supplier_order_id || '',
+    supplier_product_id: supplier.productId,
+    supplier_connector_id: connector.id || null,
+    supplier_product_ref: supplierProduct.id || null,
+    quantity: qty,
+    amount_usdt: 0,
+    amount_currency: String(supplierProduct.currency || connector.currency || '').toUpperCase(),
+    status: ['processing','delivered','delivery_pending'].includes(String(existing?.status || '').toLowerCase()) ? existing.status : 'queued',
+    delivered_text: existing?.delivered_text || '',
+    error_code: '',
+    error_message: '',
+    raw_response: {
+      source,
+      product_name: product?.nama || '',
+      variant_name: transaction?.variant_name || order?.variant_name || '',
+      telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
+      cost_amount: Number(supplierProduct.cost_amount || 0),
+      currency: String(supplierProduct.currency || connector.currency || '').toUpperCase()
+    },
+    flow_snapshot: {
+      connector: { id: connector.id, code: connector.code, name: connector.name, bot_username: connector.bot_username, worker_profile: connector.worker_profile },
+      product: { id: supplierProduct.id, name: supplierProduct.name, external_code: supplierProduct.external_code, order_flow: supplierProduct.order_flow || [], delivery_regex: supplierProduct.delivery_regex || '' }
+    },
+    worker_profile: 'vercel-ondemand',
+    next_attempt_at: null
+  });
+
+  const runNow = async () => {
+    try {
+      const result = await telegramOnDemand().executeOrder(invoice, { waitMs: 25000 });
+      if (!result?.deliveredText) return null;
+      const costTotalIdr = String(supplierProduct.currency || connector.currency || '').toUpperCase() === 'IDR'
+        ? Math.round(Number(supplierProduct.cost_amount || 0) * qty)
+        : 0;
+      return completeTelegramSupplierOrder(invoice, result.deliveredText, {
+        worker_id: 'vercel-ondemand',
+        worker_state: { trace: result.trace || [], completed_at: new Date().toISOString(), mode: 'vercel-ondemand' },
+        cost_total_idr: costTotalIdr
+      });
+    } catch (error) {
+      await notifyOwnerSupplierIssue({ ...order, invoice_ref: invoice }, product, error, await db.getSupplierOrder(invoice).catch(() => supplierRow));
+      throw error;
+    }
+  };
+
+  const waitUntil = getVercelWaitUntil();
+  if (waitUntil) {
+    waitUntil(runNow().catch((error) => console.error('Telegram supplier background error:', error.message || error)));
+    return { handled: true, pending: true, queued: true, background: true, supplier_order: supplierRow, transaction };
+  }
+
+  try {
+    const completed = await runNow();
+    return completed ? { handled: true, pending: false, delivered: completed.delivered || [], supplier_order: completed.supplier_order, transaction: completed.transaction || transaction } : { handled: true, pending: true, queued: true, supplier_order: supplierRow, transaction };
+  } catch (error) {
+    return { handled: true, pending: true, queued: true, error, supplier_order: await db.getSupplierOrder(invoice).catch(() => supplierRow), transaction };
+  }
+}
+
+async function completeTelegramSupplierOrder(orderRef, deliveryText, worker = {}) {
+  const invoice = String(orderRef || '').trim();
+  const incomingDelivery = String(deliveryText || '').trim();
+  if (!invoice || !incomingDelivery) throw new Error('Invoice dan hasil produk supplier wajib diisi.');
+  const supplierRow = await db.getSupplierOrder(invoice);
+  if (!supplierRow || String(supplierRow.supplier || '') !== 'telegram_userbot') throw new Error('Order Telegram supplier tidak ditemukan.');
+
+  const transaction = await db.getTransactionByOrderRef(invoice);
+  if (!transaction) throw new Error('Transaksi pelanggan tidak ditemukan.');
+  const product = await db.getProductByCode(transaction.product_code);
+  const selected = automaticSupplierSelection(product, transaction);
+  if (!selected || selected.source !== 'telegram_userbot') throw new Error('Produk transaksi bukan Telegram supplier.');
+
+  // Jika worker sudah pernah menyerahkan hasil, gunakan hasil pertama sebagai sumber kebenaran.
+  // Retry berikutnya hanya mencoba finalisasi/pengiriman Telegram ke pembeli, bukan mengganti produk.
+  const effectiveDelivery = String(supplierRow.delivered_text || '').trim() || incomingDelivery;
+  const row = await db.upsertSupplierOrder({
+    ...supplierRow,
+    order_ref: invoice,
+    supplier: 'telegram_userbot',
+    supplier_product_id: selected.productId,
+    status: 'delivered',
+    delivered_text: effectiveDelivery,
+    error_code: '',
+    error_message: '',
+    worker_id: String(worker.worker_id || supplierRow.worker_id || ''),
+    locked_at: null,
+    worker_state: worker.worker_state && typeof worker.worker_state === 'object' ? worker.worker_state : (supplierRow.worker_state || {}),
+    completed_at: supplierRow.completed_at || new Date().toISOString(),
+    next_attempt_at: null
+  });
+
+  const unitCostSupplier = Math.max(0, Number(supplierRow?.raw_response?.cost_amount || 0));
+  const supplierQty = Math.max(1, Number(supplierRow?.quantity || transaction?.quantity || 1));
+  const supplierCostTotal = unitCostSupplier * supplierQty;
+  if (supplierCostTotal > 0) await db.deductTelegramSupplierBalanceOnce(invoice, supplierCostTotal).catch((error) => console.error('Gagal mengurangi saldo supplier manual:', error.message || error));
+
+  const costTotalIdr = Math.max(0, Number(worker.cost_total_idr || 0));
+  if (costTotalIdr > 0) await db.updateTransactionCost(invoice, costTotalIdr).catch(() => null);
+  const marked = await db.markPoDelivered(invoice, effectiveDelivery, config.ownerId || null);
+  const poOrder = marked?.po_order || await db.getPoOrder(invoice);
+  const finalTransaction = marked?.transaction || await db.getTransactionByOrderRef(invoice);
+  await sendSupplierDeliveryOnce({ invoice, userId: Number(transaction.telegram_id || 0), poOrder: poOrder || { order_ref: invoice, ...transaction }, deliveryText: effectiveDelivery, product });
+  const buyer = await db.getUserByTelegramId(transaction.telegram_id).catch(() => null);
+  await sendOwnerLog({ invoice_ref: invoice, telegram_id: transaction.telegram_id, quantity: transaction.quantity, variant_name: transaction.variant_name }, product, finalTransaction, buyer || {});
+  return { already_delivered: String(supplierRow.status || '') === 'delivered', supplier_order: row, po_order: poOrder, transaction: finalTransaction, delivered: effectiveDelivery.split(/\r?\n/).filter(Boolean) };
+}
+
 async function retrySupplierOrder(orderRef, actor = {}) {
   const invoice = String(orderRef || '').trim();
   if (!invoice) throw new Error('Invoice supplier wajib diisi.');
   const transaction = await db.getTransactionByOrderRef(invoice);
   if (!transaction) throw new Error('Transaksi pelanggan tidak ditemukan.');
   const product = await db.getProductByCode(transaction.product_code);
-  if (!isProdSellerProduct(product, transaction)) throw new Error('Produk/varian pada invoice ini bukan produk ProdSeller.');
+  const autoSupplier = automaticSupplierSelection(product, transaction);
+  if (!autoSupplier) throw new Error('Produk/varian pada invoice ini bukan produk supplier otomatis.');
+  if (autoSupplier.source === 'telegram_userbot') {
+    const current = await db.getSupplierOrder(invoice).catch(() => null);
+    if (!current) throw new Error('Order Telegram supplier belum tersedia.');
+    if (String(current.status || '').toLowerCase() === 'manual_review' && !String(current.delivered_text || '').trim()) {
+      const error = new Error('Order ini memerlukan pemeriksaan manual karena koneksi terputus setelah tahap pembelian supplier. Jangan retry otomatis sebelum memastikan saldo/hasil di bot supplier.');
+      error.code = 'USERBOT_REVIEW_REQUIRED';
+      throw error;
+    }
+    await db.upsertSupplierOrder({ ...current, order_ref: invoice, status: String(current.delivered_text || '').trim() ? 'delivery_pending' : 'retry', error_code: '', error_message: '', worker_id: '', locked_at: null, next_attempt_at: new Date().toISOString() });
+    const result = await telegramOnDemand().executeOrder(invoice, { waitMs: 25000 });
+    if (!result?.deliveredText) throw new Error('Supplier belum mengembalikan hasil produk.');
+    const supplierProduct = await db.getTelegramSupplierProduct(current.supplier_product_ref || current.supplier_product_id);
+    const currency = String(supplierProduct?.currency || current.amount_currency || '').toUpperCase();
+    const costTotalIdr = currency === 'IDR' ? Math.round(Number(supplierProduct?.cost_amount || current.raw_response?.cost_amount || 0) * Math.max(1, Number(current.quantity || 1))) : 0;
+    return completeTelegramSupplierOrder(invoice, result.deliveredText, {
+      worker_id: 'vercel-ondemand-retry',
+      worker_state: { trace: result.trace || [], completed_at: new Date().toISOString(), mode: 'vercel-ondemand-retry' },
+      cost_total_idr: costTotalIdr
+    });
+  }
   const buyer = Object.keys(actor || {}).length ? actor : (await db.getUserByTelegramId(transaction.telegram_id).catch(() => null)) || {};
   const result = await processProdSellerDelivery({
     order: {
@@ -713,7 +885,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     const effectiveMode = String(result.transaction?.delivery_mode || order?.delivery_mode || (product ? db.variantDeliveryMode(product, selected) : 'auto')).toLowerCase();
     let poWaiting = result.po_waiting === true || (effectiveMode === 'po' && String(result.transaction?.delivery_status || '') !== 'delivered');
     let supplierResult = null;
-    if (poWaiting && isProdSellerProduct(product, result.transaction || order)) {
+    if (poWaiting && isAutomaticSupplierProduct(product, result.transaction || order)) {
       const paidNoticeKey = `supplier_paid_notice:${invoice}`;
       const paidNoticeClaimed = await db.claimOnce(paidNoticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (paidNoticeClaimed) {
@@ -725,7 +897,9 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
           throw noticeError;
         }
       }
-      supplierResult = await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
+      supplierResult = automaticSupplierSelection(product, result.transaction || order)?.source === 'telegram_userbot'
+        ? await processTelegramSupplierDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source })
+        : await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
       if (supplierResult && !supplierResult.pending && supplierResult.delivered?.length) {
         poWaiting = false;
         result.transaction = supplierResult.transaction || result.transaction;
@@ -739,7 +913,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (noticeClaimed) {
         try {
-          if (isProdSellerProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
+          if (isAutomaticSupplierProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
           else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
           await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
         } catch (noticeError) {
@@ -747,7 +921,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
           throw noticeError;
         }
       }
-      if (!result.already_completed && !isProdSellerProduct(product, result.transaction || order)) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
+      if (!result.already_completed && !isAutomaticSupplierProduct(product, result.transaction || order)) await sendOwnerPoWaitingLog(order, product, result.transaction, currentBuyer);
     } else if (!(supplierResult && supplierResult.delivered && supplierResult.delivered.length)) {
       await sendOrderReceipt(order.telegram_id, order, product, result.transaction, result.delivered);
       await sendOwnerLog(order, product, result.transaction, currentBuyer);
@@ -976,6 +1150,7 @@ module.exports = {
   scheduleTopupWatcher,
   fulfillPaidOrder,
   retrySupplierOrder,
+  completeTelegramSupplierOrder,
   sendOrderReceipt,
   sendPoPaidNotice,
   sendPoDeliveryReceipt,

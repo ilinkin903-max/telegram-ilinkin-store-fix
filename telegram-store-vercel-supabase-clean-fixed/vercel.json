@@ -5,7 +5,7 @@
       "maxDuration": 300
     },
     "api/payment-webhook.js": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "api/index.js": {
       "maxDuration": 30
@@ -14,7 +14,7 @@
       "maxDuration": 30
     },
     "api/reseller-data.js": {
-      "maxDuration": 30
+      "maxDuration": 300
     },
     "api/set-webhook.js": {
       "maxDuration": 30
@@ -30,6 +30,12 @@
     },
     "api/payment-cron.js": {
       "maxDuration": 300
+    },
+    "api/userbot-bridge.js": {
+      "maxDuration": 30
+    },
+    "api/setup-userbot.js": {
+      "maxDuration": 120
     }
   },
   "rewrites": [

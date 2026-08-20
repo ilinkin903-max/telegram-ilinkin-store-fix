@@ -1,19 +1,21 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.12.0",
+  "version": "4.14.1",
   "private": true,
-  "description": "Telegram auto-order marketplace with wallet/referrals, QRIS, ProdSeller reseller API, supplier otomatis fulfillment, per-variant automatic/PRE-ORDER delivery, vouchers, and reseller dashboard.",
+  "description": "Telegram auto-order marketplace with wallet/referrals, QRIS, ProdSeller API and Vercel on-demand Telegram MTProto suppliers.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",
     "set:webhook": "node scripts/set-webhook.js",
-    "test": "node --check api/index.js && node --check api/telegram.js && node --check api/reseller.js && node --check api/reseller-data.js && node --check api/store-data.js && node --check api/set-webhook.js && node --check api/setup-autogopay.js && node --check api/backup-cron.js && node --check api/payment-cron.js && node --check api/payment-webhook.js && node --check lib/botHandlers.js && node --check lib/db.js && node --check lib/telegram.js && node --check lib/promoUtils.js && node --check lib/paymentService.js && node --check lib/storeService.js && node --check lib/walletNotifications.js && node --check lib/version.js && node --check public/store.js && node --check scripts/import-json-to-supabase.js && node --check scripts/set-webhook.js && node --test tests/*.test.js"
+    "test": "node --check api/index.js && node --check api/telegram.js && node --check api/userbot-bridge.js && node --check api/reseller.js && node --check api/reseller-data.js && node --check api/store-data.js && node --check api/set-webhook.js && node --check api/setup-autogopay.js && node --check api/setup-userbot.js && node --check api/backup-cron.js && node --check api/payment-cron.js && node --check api/payment-webhook.js && node --check lib/botHandlers.js && node --check lib/db.js && node --check lib/telegram.js && node --check lib/promoUtils.js && node --check lib/paymentService.js && node --check lib/storeService.js && node --check lib/telegramSupplierService.js && node --check lib/telegramOnDemandService.js && node --check lib/walletNotifications.js && node --check lib/version.js && node --check public/store.js && node --check scripts/import-json-to-supabase.js && node --check scripts/set-webhook.js && node --test tests/*.test.js",
+    "telegram:session": "node scripts/create-telegram-session.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",
     "axios": "1.7.7",
     "dotenv": "16.4.5",
-    "qrcode": "1.5.4"
+    "qrcode": "1.5.4",
+    "teleproto": "1.228.5"
   },
   "engines": {
     "node": "20.x"

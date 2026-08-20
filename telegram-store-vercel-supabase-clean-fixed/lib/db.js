@@ -1745,6 +1745,17 @@ async function upsertSupplierOrder(input = {}) {
     raw_response: input.raw_response && typeof input.raw_response === 'object' ? input.raw_response : {},
     updated_at: new Date().toISOString()
   };
+  if (input.supplier_connector_id !== undefined) payload.supplier_connector_id = input.supplier_connector_id || null;
+  if (input.supplier_product_ref !== undefined) payload.supplier_product_ref = input.supplier_product_ref || null;
+  if (input.worker_id !== undefined) payload.worker_id = String(input.worker_id || '');
+  if (input.worker_profile !== undefined) payload.worker_profile = String(input.worker_profile || 'default');
+  if (input.locked_at !== undefined) payload.locked_at = input.locked_at || null;
+  if (input.attempt_count !== undefined) payload.attempt_count = Math.max(0, Number(input.attempt_count || 0));
+  if (input.next_attempt_at !== undefined) payload.next_attempt_at = input.next_attempt_at || null;
+  if (input.flow_snapshot !== undefined) payload.flow_snapshot = input.flow_snapshot && typeof input.flow_snapshot === 'object' ? input.flow_snapshot : {};
+  if (input.worker_state !== undefined) payload.worker_state = input.worker_state && typeof input.worker_state === 'object' ? input.worker_state : {};
+  if (input.amount_currency !== undefined) payload.amount_currency = String(input.amount_currency || '');
+  if (input.completed_at !== undefined) payload.completed_at = input.completed_at || null;
   const { data, error } = await sb().from('supplier_orders').upsert(payload, { onConflict: 'order_ref' }).select('*').single();
   if (error) throw error;
   return data;
@@ -1759,7 +1770,244 @@ async function listSupplierOrders(limit = 100) {
   return data || [];
 }
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders'];
+
+async function listTelegramSupplierConnectors() {
+  const { data, error } = await sb().from('telegram_supplier_connectors').select('*').order('created_at', { ascending: true });
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function listTelegramSupplierConnectorsByIds(ids = []) {
+  const clean = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
+  if (!clean.length) return [];
+  const { data, error } = await sb().from('telegram_supplier_connectors').select('*').in('id', clean);
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function getTelegramSupplierConnector(idOrCode) {
+  const key = String(idOrCode || '').trim();
+  if (!key) return null;
+  let query = sb().from('telegram_supplier_connectors').select('*');
+  query = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(key) ? query.eq('id', key) : query.ilike('code', key);
+  const { data, error } = await query.limit(1).maybeSingle();
+  if (error) {
+    if (String(error.code || '') === '42P01') return null;
+    throw error;
+  }
+  return data || null;
+}
+
+async function saveTelegramSupplierConnector(input = {}) {
+  const id = String(input.id || '').trim();
+  const code = String(input.code || input.name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!code) throw new Error('Kode supplier Telegram wajib diisi.');
+  const payload = {
+    code,
+    name: String(input.name || code).trim(),
+    bot_username: String(input.bot_username || '').trim().replace(/^https?:\/\/t\.me\//i, '@').replace(/^([^@])/, '@$1'),
+    enabled: input.enabled === true || ['true','1','on','aktif'].includes(String(input.enabled || '').toLowerCase()),
+    worker_profile: String(input.worker_profile || 'default').trim() || 'default',
+    currency: String(input.currency || 'IDR').trim().toUpperCase(),
+    balance: input.balance === '' || input.balance == null ? null : Math.max(0, Number(input.balance || 0)),
+    flow_config: input.flow_config && typeof input.flow_config === 'object' ? input.flow_config : {},
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.bot_username) throw new Error('Username bot supplier wajib diisi.');
+  if (id) {
+    const { data, error } = await sb().from('telegram_supplier_connectors').update(payload).eq('id', id).select('*').single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await sb().from('telegram_supplier_connectors').upsert(payload, { onConflict: 'code' }).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteTelegramSupplierConnector(id) {
+  const key = String(id || '').trim();
+  if (!key) return false;
+  const { error } = await sb().from('telegram_supplier_connectors').delete().eq('id', key);
+  if (error) throw error;
+  return true;
+}
+
+async function listTelegramSupplierProducts(connectorId = '') {
+  let query = sb().from('telegram_supplier_products').select('*').order('created_at', { ascending: true });
+  if (connectorId) query = query.eq('connector_id', String(connectorId));
+  const { data, error } = await query;
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function listTelegramSupplierProductsByIds(ids = []) {
+  const clean = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
+  if (!clean.length) return [];
+  const { data, error } = await sb().from('telegram_supplier_products').select('*').in('id', clean);
+  if (error) {
+    if (String(error.code || '') === '42P01') return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function getTelegramSupplierProduct(id) {
+  const key = String(id || '').trim();
+  if (!key) return null;
+  const { data, error } = await sb().from('telegram_supplier_products').select('*').eq('id', key).maybeSingle();
+  if (error) {
+    if (String(error.code || '') === '42P01') return null;
+    throw error;
+  }
+  return data || null;
+}
+
+async function saveTelegramSupplierProduct(input = {}) {
+  const id = String(input.id || '').trim();
+  const connectorId = String(input.connector_id || '').trim();
+  const name = String(input.name || '').trim();
+  if (!connectorId || !name) throw new Error('Supplier dan nama produk Telegram wajib diisi.');
+  let orderFlow = input.order_flow;
+  if (typeof orderFlow === 'string') {
+    try { orderFlow = JSON.parse(orderFlow || '[]'); } catch (_) { throw new Error('Flow order harus berupa JSON yang valid.'); }
+  }
+  if (!Array.isArray(orderFlow)) throw new Error('Flow order harus berupa array JSON.');
+  let stockFlow = input.stock_flow;
+  if (typeof stockFlow === 'string') {
+    try { stockFlow = JSON.parse(stockFlow || '[]'); } catch (_) { throw new Error('Flow cek stok harus berupa JSON yang valid.'); }
+  }
+  if (!Array.isArray(stockFlow)) throw new Error('Flow cek stok harus berupa array JSON.');
+  const payload = {
+    connector_id: connectorId,
+    external_code: String(input.external_code || '').trim(),
+    name,
+    cost_amount: Math.max(0, Number(input.cost_amount || 0)),
+    currency: String(input.currency || 'IDR').trim().toUpperCase(),
+    stock: input.stock === '' || input.stock == null ? null : Math.max(0, Math.floor(Number(input.stock || 0))),
+    stock_mode: ['balance','balance_and_stock','fixed','unlimited'].includes(String(input.stock_mode || '').toLowerCase()) ? String(input.stock_mode).toLowerCase() : 'balance',
+    active: input.active === undefined ? true : (input.active === true || ['true','1','on','aktif'].includes(String(input.active || '').toLowerCase())),
+    order_flow: orderFlow,
+    delivery_regex: String(input.delivery_regex || '').trim(),
+    stock_flow: stockFlow,
+    stock_regex: String(input.stock_regex || '').trim(),
+    stock_cache_seconds: Math.max(5, Math.min(600, Number(input.stock_cache_seconds || 60))),
+    notes: String(input.notes || '').trim(),
+    updated_at: new Date().toISOString()
+  };
+  if (id) {
+    const { data, error } = await sb().from('telegram_supplier_products').update(payload).eq('id', id).select('*').single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await sb().from('telegram_supplier_products').insert(payload).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteTelegramSupplierProduct(id) {
+  const key = String(id || '').trim();
+  if (!key) return false;
+  const { error } = await sb().from('telegram_supplier_products').delete().eq('id', key);
+  if (error) throw error;
+  return true;
+}
+
+async function updateTelegramSupplierConnectorRuntime(id, input = {}) {
+  const payload = { updated_at: new Date().toISOString() };
+  if (input.balance !== undefined) payload.balance = input.balance == null ? null : Number(input.balance);
+  if (input.balance_text !== undefined) payload.balance_text = String(input.balance_text || '');
+  if (input.balance_checked_at !== undefined) payload.balance_checked_at = input.balance_checked_at || null;
+  if (input.status !== undefined) payload.status = String(input.status || 'offline');
+  if (input.last_error !== undefined) payload.last_error = String(input.last_error || '');
+  const { data, error } = await sb().from('telegram_supplier_connectors').update(payload).eq('id', String(id || '')).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function updateTelegramSupplierProductRuntime(id, input = {}) {
+  const payload = { updated_at: new Date().toISOString() };
+  if (input.cost_amount !== undefined) payload.cost_amount = Math.max(0, Number(input.cost_amount || 0));
+  if (input.stock !== undefined) payload.stock = input.stock == null ? null : Math.max(0, Math.floor(Number(input.stock || 0)));
+  if (input.stock_text !== undefined) payload.stock_text = String(input.stock_text || '');
+  if (input.stock_checked_at !== undefined) payload.stock_checked_at = input.stock_checked_at || null;
+  const { data, error } = await sb().from('telegram_supplier_products').update(payload).eq('id', String(id || '')).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function tryLockTelegramSupplierConnector(connectorId, lockToken, ttlSeconds = 75) {
+  const { data, error } = await sb().rpc('try_lock_telegram_supplier_connector', {
+    p_connector_id: String(connectorId || ''),
+    p_lock_token: String(lockToken || ''),
+    p_ttl_seconds: Math.max(15, Math.min(300, Number(ttlSeconds || 75)))
+  });
+  if (error) {
+    if (String(error.code || '') === '42883') return false;
+    throw error;
+  }
+  return data === true;
+}
+
+async function unlockTelegramSupplierConnector(connectorId, lockToken) {
+  const { data, error } = await sb().rpc('unlock_telegram_supplier_connector', {
+    p_connector_id: String(connectorId || ''),
+    p_lock_token: String(lockToken || '')
+  });
+  if (error) {
+    if (String(error.code || '') === '42883') return false;
+    throw error;
+  }
+  return data === true;
+}
+
+async function claimTelegramSupplierOrderByRef(orderRef, workerId, lockToken, ttlSeconds = 120) {
+  const { data, error } = await sb().rpc('claim_telegram_supplier_order_by_ref', {
+    p_order_ref: String(orderRef || ''),
+    p_worker_id: String(workerId || ''),
+    p_lock_token: String(lockToken || ''),
+    p_ttl_seconds: Math.max(30, Math.min(300, Number(ttlSeconds || 120)))
+  });
+  if (error) {
+    if (String(error.code || '') === '42883') return null;
+    throw error;
+  }
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
+}
+
+async function deductTelegramSupplierBalanceOnce(orderRef, amount) {
+  const { data, error } = await sb().rpc('deduct_telegram_supplier_balance_once', {
+    p_order_ref: String(orderRef || ''),
+    p_amount: Math.max(0, Number(amount || 0))
+  });
+  if (error) {
+    if (String(error.code || '') === '42883') return null;
+    throw error;
+  }
+  return data;
+}
+
+async function claimTelegramSupplierOrder(workerId, workerProfile = 'default') {
+  const { data, error } = await sb().rpc('claim_telegram_supplier_order', {
+    p_worker_id: String(workerId || ''),
+    p_worker_profile: String(workerProfile || 'default')
+  });
+  if (error) {
+    if (String(error.code || '') === '42883' || String(error.code || '') === '42P01') return null;
+    throw error;
+  }
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
+}
+
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','telegram_supplier_connectors','telegram_supplier_products'];
 
 async function safeSelectAll(table) {
   try {
@@ -2128,6 +2376,23 @@ module.exports = {
   listSupplierOrders,
   upsertSupplierOrder,
   getSupplierOrder,
+  listTelegramSupplierConnectors,
+  listTelegramSupplierConnectorsByIds,
+  getTelegramSupplierConnector,
+  saveTelegramSupplierConnector,
+  deleteTelegramSupplierConnector,
+  listTelegramSupplierProducts,
+  listTelegramSupplierProductsByIds,
+  getTelegramSupplierProduct,
+  saveTelegramSupplierProduct,
+  deleteTelegramSupplierProduct,
+  updateTelegramSupplierConnectorRuntime,
+  updateTelegramSupplierProductRuntime,
+  tryLockTelegramSupplierConnector,
+  unlockTelegramSupplierConnector,
+  claimTelegramSupplierOrderByRef,
+  deductTelegramSupplierBalanceOnce,
+  claimTelegramSupplierOrder,
   listAutoPromos,
   saveAutoPromo,
   deleteAutoPromo,
