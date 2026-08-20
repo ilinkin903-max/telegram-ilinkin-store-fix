@@ -39,6 +39,30 @@ function matchesText(text, step = {}) {
   if (step.text) return source.trim().toLowerCase() === String(step.text).trim().toLowerCase();
   return true;
 }
+function shouldRunStep(step = {}, ctx = {}) {
+  const when = step && step.when;
+  if (!when) return true;
+  const quantity = Math.max(0, Number(ctx.quantity || 0));
+  if (typeof when === 'string') {
+    const normalized = when.replace(/\s+/g, '').toLowerCase();
+    const match = normalized.match(/^quantity(>=|<=|==|=|>|<)(-?\d+(?:\.\d+)?)$/);
+    if (!match) return true;
+    const expected = Number(match[2]);
+    if (match[1] === '>') return quantity > expected;
+    if (match[1] === '>=') return quantity >= expected;
+    if (match[1] === '<') return quantity < expected;
+    if (match[1] === '<=') return quantity <= expected;
+    return quantity === expected;
+  }
+  if (typeof when !== 'object') return true;
+  if (when.quantity_eq != null && quantity !== Number(when.quantity_eq)) return false;
+  if (when.quantity_ne != null && quantity === Number(when.quantity_ne)) return false;
+  if (when.quantity_gt != null && !(quantity > Number(when.quantity_gt))) return false;
+  if (when.quantity_gte != null && !(quantity >= Number(when.quantity_gte))) return false;
+  if (when.quantity_lt != null && !(quantity < Number(when.quantity_lt))) return false;
+  if (when.quantity_lte != null && !(quantity <= Number(when.quantity_lte))) return false;
+  return true;
+}
 function parseNumeric(value) {
   const text = String(value == null ? '' : value).trim();
   if (!text) return NaN;
@@ -113,13 +137,31 @@ async function waitForMessage(client, bot, step = {}, previousFingerprint = '') 
 async function clickButton(client, bot, step, ctx, currentMessage = null, runState = null) {
   const wanted = template(step.text || '', ctx).trim();
   const rx = step.regex ? regexOf(template(step.regex, ctx)) : null;
+  const requestedIndex = Math.max(0, Math.floor(Number(step.button_index || step.index || 0)));
+  const requestedRow = step.row != null ? Math.max(0, Math.floor(Number(step.row))) : null;
+  const requestedCol = step.col != null ? Math.max(0, Math.floor(Number(step.col))) : null;
   const messages = currentMessage ? [currentMessage, ...(await latestMessages(client, bot, 10))] : await latestMessages(client, bot, 10);
   for (const message of messages) {
     const rows = Array.isArray(message?.buttons) ? message.buttons : [];
+    let flatIndex = 0;
     for (let i = 0; i < rows.length; i += 1) {
       for (let j = 0; j < rows[i].length; j += 1) {
+        flatIndex += 1;
         const text = String(rows[i][j]?.text || '');
-        const ok = rx ? rx.test(text) : text.trim().toLowerCase() === wanted.toLowerCase();
+        let ok = false;
+        if (requestedIndex > 0) {
+          ok = flatIndex === requestedIndex;
+          if (ok && step.expect_text) {
+            const expectedText = template(step.expect_text, ctx).trim().toLowerCase();
+            if (text.trim().toLowerCase() !== expectedText) {
+              const error = new Error(`Tombol nomor ${requestedIndex} berubah: diharapkan "${template(step.expect_text, ctx)}", tetapi yang ditemukan "${text}".`);
+              error.code = 'TELEGRAM_SUPPLIER_BUTTON_INDEX_MISMATCH';
+              throw error;
+            }
+          }
+        }
+        else if (requestedRow != null && requestedCol != null) ok = i === requestedRow && j === requestedCol;
+        else ok = rx ? rx.test(text) : text.trim().toLowerCase() === wanted.toLowerCase();
         if (!ok) continue;
         const before = fingerprint(message);
         await message.click({ i, j });
@@ -130,7 +172,8 @@ async function clickButton(client, bot, step, ctx, currentMessage = null, runSta
       }
     }
   }
-  const error = new Error(`Tombol "${wanted || step.regex || '?'}" tidak ditemukan di ${bot}.`);
+  const selector = requestedIndex > 0 ? `nomor ${requestedIndex}` : (requestedRow != null && requestedCol != null ? `baris ${requestedRow}, kolom ${requestedCol}` : (wanted || step.regex || '?'));
+  const error = new Error(`Tombol "${selector}" tidak ditemukan di ${bot}.`);
   error.code = 'TELEGRAM_SUPPLIER_BUTTON_NOT_FOUND';
   throw error;
 }
@@ -151,6 +194,10 @@ async function runFlow(client, bot, flow, ctx = {}, options = {}) {
     const step = flow[index] || {};
     const type = String(step.type || '').trim().toLowerCase();
     if (!type) continue;
+    if (!shouldRunStep(step, ctx)) {
+      trace.push({ index, type, skipped: true, reason: 'condition', when: step.when || null });
+      continue;
+    }
     try {
       if (type === 'sleep') {
         await sleep(Math.max(0, Math.min(10000, Number(step.ms || step.delay_ms || 700))));
