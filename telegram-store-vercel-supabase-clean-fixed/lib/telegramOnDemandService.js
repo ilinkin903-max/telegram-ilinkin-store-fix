@@ -27,6 +27,18 @@ function regexOf(value) {
   try { return slash ? new RegExp(slash[1], slash[2]) : new RegExp(text, 'i'); } catch (_) { return null; }
 }
 function messageText(message) { return String(message?.message || message?.text || '').trim(); }
+function messageButtonText(message) {
+  const rows = Array.isArray(message?.buttons) ? message.buttons : [];
+  return rows.flat().map((button) => String(button?.text || '').trim()).filter(Boolean).join('\n');
+}
+function captureSourceText(message, step = {}) {
+  const source = String(step.source || step.capture_source || 'message').trim().toLowerCase();
+  if (source === 'buttons' || source === 'keyboard') return messageButtonText(message);
+  if (source === 'all' || source === 'message+buttons' || source === 'both') {
+    return [messageText(message), messageButtonText(message)].filter(Boolean).join('\n');
+  }
+  return messageText(message);
+}
 function fingerprint(message) {
   if (!message) return '';
   const buttons = Array.isArray(message.buttons) ? message.buttons.flat().map((b) => String(b?.text || '')).join('|') : '';
@@ -219,7 +231,7 @@ async function runFlow(client, bot, flow, ctx = {}, options = {}) {
         current = await waitForMessage(client, bot, step, fingerprint(current));
       } else if (type === 'capture') {
         if (!current) current = await latestBotMessage(client, bot);
-        captured = extractText(messageText(current), step.regex || options.resultRegex || '');
+        captured = extractText(captureSourceText(current, step), step.regex || options.resultRegex || '');
       } else {
         throw new Error(`Jenis flow tidak dikenal: ${type}`);
       }

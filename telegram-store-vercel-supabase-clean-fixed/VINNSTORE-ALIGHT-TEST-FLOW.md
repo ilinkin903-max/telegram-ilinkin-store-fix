@@ -1,4 +1,4 @@
-# Vinnstore - Alight Motion test flow (v82.3)
+# Vinnstore - Alight Motion test flow (v82.4)
 
 Flow ini dibuat untuk alur:
 
@@ -50,3 +50,29 @@ maka yang disimpan/dikirim ke pembeli hanya:
 ```
 
 Untuk uji awal, gunakan jumlah 1 dahulu dan saldo supplier secukupnya. Pastikan tombol/teks bot supplier benar-benar sama; jika berubah, sesuaikan `text` atau `regex` pada flow.
+
+
+## Flow Cek Stok
+
+Jika setelah `/start` keyboard supplier menampilkan tombol seperti:
+
+```text
+ALIGHT MOTION (74)
+```
+
+gunakan Flow Cek Stok:
+
+```json
+[
+  {"type":"start"},
+  {"type":"capture","source":"buttons"}
+]
+```
+
+Dan isi **Stock Regex**:
+
+```text
+ALIGHT\s*MOTION\s*\((\d+)\)
+```
+
+Angka di grup pertama akan dibaca sebagai stok. Contoh `ALIGHT MOTION (74)` menghasilkan stok `74`. `source:"buttons"` membaca teks keyboard tanpa perlu menekan tombol produk.
