@@ -17,6 +17,9 @@ const botReadCache = {
   settings: { at: 0, value: null },
   products: { at: 0, value: null }
 };
+const joinMemberCache = new Map();
+const JOIN_MEMBER_CACHE_MS = 60 * 1000;
+
 
 function botCacheFresh(entry, ttl = BOT_CACHE_MS) {
   return Boolean(entry?.value) && (Date.now() - Number(entry.at || 0)) < ttl;
@@ -45,6 +48,84 @@ async function cachedBotProducts() {
 
 function styledButton(text, action = {}, style = '') {
   return { text, ...action, ...(style ? { style } : {}) };
+}
+
+function requiredJoinEnabled(settings = {}) {
+  return settingEnabled(settings.join_channel_required, false);
+}
+
+function requiredChannelId(settings = {}) {
+  const direct = String(settings.join_channel_id || '').trim();
+  if (direct) {
+    if (/^-100\d+$/.test(direct) || /^@\w+$/.test(direct)) return direct;
+    if (/^[A-Za-z0-9_]{5,}$/.test(direct)) return `@${direct}`;
+  }
+  const candidates = [settings.join_channel_link, settings.group_link, config.channelStore];
+  for (const raw of candidates) {
+    const value = String(raw || '').trim();
+    if (/^@\w+$/.test(value)) return value;
+    const match = value.match(/^(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]{5,})(?:[/?#].*)?$/i);
+    if (match) return `@${match[1]}`;
+  }
+  return '';
+}
+
+function requiredChannelLink(settings = {}) {
+  const explicit = normalizeUrl(settings.join_channel_link || '');
+  if (explicit) return explicit;
+  const target = requiredChannelId(settings);
+  if (/^@/.test(target)) return `https://t.me/${target.slice(1)}`;
+  return normalizeUrl(settings.group_link || config.channelStore || '');
+}
+
+function chatMemberJoined(member = {}) {
+  const status = String(member?.status || '').toLowerCase();
+  if (['creator', 'administrator', 'member'].includes(status)) return true;
+  if (status === 'restricted') return member.is_member !== false;
+  return false;
+}
+
+function joinPromptKeyboard(settings = {}) {
+  const rows = [];
+  const link = requiredChannelLink(settings);
+  if (link) rows.push([styledButton('📢 Join Channel', { url: link }, 'primary')]);
+  rows.push([styledButton('✅ Saya Sudah Join', { callback_data: 'checkjoin' }, 'success')]);
+  return { inline_keyboard: rows };
+}
+
+async function showJoinRequired(chatId, settings = {}, query = null, extra = '') {
+  const text = `🔒 <b>JOIN CHANNEL TERLEBIH DAHULU</b>\n=======================\nUntuk menggunakan bot, kamu wajib bergabung ke channel terlebih dahulu.\n\nSetelah join, tekan tombol <b>✅ Saya Sudah Join</b>.${extra ? `\n\n${escapeHtml(extra)}` : ''}`;
+  const options = { parse_mode: 'HTML', reply_markup: joinPromptKeyboard(settings) };
+  if (query?.message?.message_id) return editMessage(query, text, options);
+  return tg.sendMessage(chatId, text, options);
+}
+
+async function ensureRequiredChannelJoin(chatId, from = {}, settings = {}, options = {}) {
+  if (!requiredJoinEnabled(settings) || isOwner(from.id)) return true;
+  const channelId = requiredChannelId(settings);
+  if (!channelId) {
+    await showJoinRequired(chatId, settings, options.query, 'Konfigurasi channel belum lengkap. Silakan hubungi admin.');
+    return false;
+  }
+  const cacheKey = `${channelId}:${Number(from.id || 0)}`;
+  const cached = joinMemberCache.get(cacheKey);
+  if (!options.force && cached && Date.now() - cached.at < JOIN_MEMBER_CACHE_MS && cached.joined) return true;
+  try {
+    const member = await tg.getChatMember(channelId, Number(from.id));
+    const joined = chatMemberJoined(member);
+    if (joined) {
+      joinMemberCache.set(cacheKey, { at: Date.now(), joined: true });
+      return true;
+    }
+    joinMemberCache.delete(cacheKey);
+    await showJoinRequired(chatId, settings, options.query);
+    return false;
+  } catch (error) {
+    console.error('Gagal cek wajib join channel:', error.message || error);
+    joinMemberCache.delete(cacheKey);
+    await showJoinRequired(chatId, settings, options.query, 'Bot belum bisa memverifikasi keanggotaan channel. Pastikan bot sudah menjadi admin channel.');
+    return false;
+  }
 }
 
 function isOwner(userId) {
@@ -136,7 +217,7 @@ function escapeHtml(value) {
 function escapeMarkdownText(value) {
   // Telegram Markdown legacy menerima escape untuk karakter ASCII. Meloloskan
   // seluruh karakter pemformatan mencegah nama produk/user merusak pesan.
-  return String(value == null ? '' : value).replace(/([\\_*\[\]()`~>#+\-=|{}.!])/g, '\\$1');
+  return String(value == null ? '' : value).replace(/([_*`\[])/g, '\\$1');
 }
 
 function formatProductInfoText(value, maxLength = 900) {
@@ -408,18 +489,18 @@ async function editMessage(query, text, options = {}) {
   }
 }
 
-async function buildHomeText(from) {
+async function buildHomeText(from, settings = {}) {
   const [stats, wallet] = await Promise.all([
     cachedStats(),
     db.getWalletSummary(from.id, 1).catch(() => null)
   ]);
+  const userLine = settingEnabled(settings.bot_show_total_users, true) ? `- 👥 Total User: <b>${stats.users} User</b>\n` : '';
   return `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
 ` +
     `Selamat datang di <b>${escapeHtml(config.botName)}</b>
 ` +
-    `- 👥 Total User: <b>${stats.users} User</b>
-` +
+    userLine +
     `- 🛍️ Total Transaksi: <b>${stats.orders} Transaksi</b>
 ` +
     `- 📦 Stok Tersedia: <b>${stats.stokTersedia}</b>
@@ -436,12 +517,12 @@ async function editHome(query, req) {
   await db.upsertUser(query.from).catch((e) => console.error('upsert user gagal:', e.message));
   let text;
   const settingsPromise = cachedSettings().catch(() => ({}));
-  try { text = await buildHomeText(query.from); }
+  const settings = await settingsPromise;
+  try { text = await buildHomeText(query.from, settings); }
   catch (e) {
     console.error('build home gagal:', e.message);
     text = `Halo, <b>${escapeHtml(query.from.first_name || 'Kak')}</b> 👋\n\nSelamat datang di <b>${escapeHtml(config.botName)}</b>\n\nSilakan pilih tombol di bawah ini!`;
   }
-  const settings = await settingsPromise;
   return editMessage(query, text, {
     parse_mode: 'HTML',
     reply_markup: homeKeyboard(req, query.from.id, settings)
@@ -455,13 +536,13 @@ async function sendHome(chatId, from, req, options = {}) {
   await upsertPromise;
   const walletPromise = db.getWalletSummary(from.id, 1).catch(() => null);
   const [stats, wallet, settings] = await Promise.all([statsPromise, walletPromise, settingsPromise]);
+  const userLine = settingEnabled(settings.bot_show_total_users, true) ? `- 👥 Total User: <b>${stats.users || 0} User</b>\n` : '';
   const text = `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
 
 ` +
     `Selamat datang di <b>${escapeHtml(config.botName)}</b>
 ` +
-    `- 👥 Total User: <b>${stats.users || 0} User</b>
-` +
+    userLine +
     `- 🛍️ Total Transaksi: <b>${stats.orders || 0} Transaksi</b>
 ` +
     `- 📦 Stok Tersedia: <b>${stats.stokTersedia || 0}</b>
@@ -904,7 +985,10 @@ function productButtons(products, page = 0, totalPages = 1, availabilityMap = ne
     const summary = productDeliverySummary(p);
     const readyStock = readyStockForProduct(p, availabilityMap);
     const availability = summary === 'po' ? 'PRE-ORDER' : (summary === 'mixed' ? `Stok ${readyStock} + PO` : `Stok ${readyStock}`);
-    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, 'primary')];
+    const active = activeVariantsWithIndex(p).map((item) => item.variant);
+    const hasManualPo = active.length ? active.some((v) => !isSupplierProduct(p, v) && isPoProduct(p, v)) : (!isSupplierProduct(p) && isPoProduct(p));
+    const soldOut = readyStock <= 0 && !hasManualPo;
+    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, soldOut ? 'danger' : 'primary')];
   });
   if (totalPages > 1) {
     const nav = [];
@@ -1223,6 +1307,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   if (lower.startsWith('/start') || lower.startsWith('/menu')) {
     if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
     const settings = await cachedSettings().catch(() => ({}));
+    if (!(await ensureRequiredChannelJoin(chatId, from, settings))) return;
     const refCode = lower.startsWith('/start') ? startReferralCode(text) : '';
     try {
       const registration = await db.registerUserWithReferral(from, refCode, settings);
@@ -1280,10 +1365,12 @@ Pengundang langsung menerima bonus ${escapeHtml(formatRupiah(reward.amount))}.`,
     }
     return sendHome(chatId, from, req, { skipUpsert: true });
   }
+  if (!(await ensureLicenseActive(chatId))) return;
+  const accessSettings = await cachedSettings().catch(() => ({}));
+  if (!(await ensureRequiredChannelJoin(chatId, from, accessSettings))) return;
+
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
   if (lower.startsWith('/cekorder') || lower.startsWith('/cekpesanan') || lower.startsWith('/riwayat')) return sendCheckOrder(chatId, from.id);
-
-  if (!(await ensureLicenseActive(chatId))) return;
 
   if (lower.startsWith('/polling')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
@@ -1975,6 +2062,12 @@ async function handleCallbackQuery(query, req) {
   }
 
   if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
+  const accessSettings = await cachedSettings().catch(() => ({}));
+  if (cmd === 'checkjoin') {
+    if (!(await ensureRequiredChannelJoin(query.message.chat.id, query.from, accessSettings, { query, force: true }))) return;
+    return editHome(query, req);
+  }
+  if (!(await ensureRequiredChannelJoin(query.message.chat.id, query.from, accessSettings, { query }))) return;
 
   if (cmd === 'wallet') return sendWalletPage(query.message.chat.id, query.from, query);
   if (cmd === 'topup') return beginTopup(query);

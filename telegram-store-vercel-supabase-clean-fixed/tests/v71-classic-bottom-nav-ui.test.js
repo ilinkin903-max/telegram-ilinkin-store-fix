@@ -11,7 +11,8 @@ const storeHtml = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8
 test('reseller kembali ke UI klasik dan navigasi berada di bawah', () => {
   assert.match(reseller, /v71: UI klasik kembali \+ menu utama selalu di bawah/);
   assert.match(reseller, /\.navTiles\{[\s\S]*position:fixed;[\s\S]*bottom:max\(/);
-  assert.match(reseller, /\.editSaveDock\{bottom:108px!important\}/);
+  assert.match(reseller, /body\.modalOpen \.navTiles\{visibility:hidden;pointer-events:none\}/);
+  assert.match(reseller, /\.editSaveDock\{bottom:6px!important\}/);
 });
 
 test('marketplace memakai visual klasik yang sama dan bottom navigation', () => {

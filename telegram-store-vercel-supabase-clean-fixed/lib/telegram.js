@@ -101,6 +101,13 @@ async function sendPoll(chatId, question, optionsList = [], options = {}) {
   });
 }
 
+async function getChatMember(chatId, userId) {
+  return callTelegram('getChatMember', {
+    chat_id: chatId,
+    user_id: userId
+  });
+}
+
 
 async function copyMessage(chatId, fromChatId, messageId, options = {}) {
   return callTelegram('copyMessage', {
@@ -153,6 +160,7 @@ module.exports = {
   sendPhotoRef,
   sendSticker,
   sendPoll,
+  getChatMember,
   copyMessage,
   forwardMessage,
   sendDocument,

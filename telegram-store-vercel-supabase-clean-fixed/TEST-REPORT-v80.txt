@@ -1,0 +1,6 @@
+iLink.in Store v80 verification
+- JavaScript syntax checks: PASS
+- Dashboard inline JavaScript syntax: PASS
+- Regression/feature tests v71-v80: 52/52 PASS
+- New v80: required channel join, hide total users, mobile edit save position, Markdown legacy escaping, sold-out red product button.
+- Database migration: none required (shop_settings is key/value based).
