@@ -4,6 +4,7 @@ const tg = require('../lib/telegram');
 const paymentService = require('../lib/paymentService');
 const prodseller = require('../lib/prodsellerService');
 const telegramSupplier = require('../lib/telegramSupplierService');
+const aiFlow = require('../lib/aiFlowService');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
@@ -597,6 +598,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
     if (req.method === 'GET' && action === 'telegram-suppliers') return json(res, 200, { ok: true, data: await getTelegramSuppliersDashboard() });
+    if (req.method === 'GET' && action === 'supplier-ai-config') return json(res, 200, { ok: true, data: await aiFlow.getPublicConfig() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
@@ -624,6 +626,21 @@ module.exports = async function handler(req, res) {
     if (action === 'prodseller-import') {
       const body = bodyOf(req);
       const data = await importProdSellerProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'supplier-ai-config-save') {
+      const body = bodyOf(req);
+      const data = await aiFlow.saveConfig(body);
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'supplier-ai-test') {
+      const data = await aiFlow.testConnection();
+      return json(res, 200, { ok: true, data });
+    }
+    if (action === 'supplier-ai-generate-flow') {
+      const body = bodyOf(req);
+      const data = await aiFlow.generateFlow(body);
       return json(res, 200, { ok: true, data });
     }
 

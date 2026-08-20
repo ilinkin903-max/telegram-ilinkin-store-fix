@@ -19,6 +19,7 @@ const config = {
   prodsellerBaseUrl: required('PRODSELLER_BASE_URL', 'https://prodseller.com/v1').replace(/\/$/, ''),
   userbotBridgeSecret: required('USERBOT_BRIDGE_SECRET', '').trim(),
   userbotSetupKey: required('USERBOT_SETUP_KEY', '').trim(),
+  aiConfigSecret: required('AI_CONFIG_SECRET', '').trim(),
   tgApiId: Number(required('TG_API_ID', '0')),
   tgApiHash: required('TG_API_HASH', '').trim(),
   tgStringSession: required('TG_STRING_SESSION', '').trim(),

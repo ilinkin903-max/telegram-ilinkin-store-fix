@@ -988,6 +988,25 @@ async function completeTopup(topup, incoming = {}) {
 }
 
 
+async function getRawShopSetting(key, fallback = null) {
+  const name = String(key || '').trim();
+  if (!name) return fallback;
+  const { data, error } = await sb().from('shop_settings').select('value').eq('key', name).maybeSingle();
+  if (error) {
+    if (String(error.code || '') === '42P01' || /shop_settings/i.test(String(error.message || ''))) return fallback;
+    throw error;
+  }
+  return data?.value == null ? fallback : data.value;
+}
+
+async function saveRawShopSetting(key, value) {
+  const name = String(key || '').trim();
+  if (!name) throw new Error('Key setting kosong.');
+  const { error } = await sb().from('shop_settings').upsert({ key: name, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+  return value;
+}
+
 async function getShopSettings() {
   const defaults = {
     store_name: '',
@@ -2317,6 +2336,8 @@ module.exports = {
   getMonthlyRekap,
   getShopSettings,
   saveShopSettings,
+  getRawShopSetting,
+  saveRawShopSetting,
   getAnalytics,
   upsertPendingOrder,
   getPendingOrder,

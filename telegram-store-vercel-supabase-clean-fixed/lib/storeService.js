@@ -608,7 +608,8 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   const availableStock = selected.variant
     ? variantStock(selected.variant)
     : (Array.isArray(product.data) ? product.data.length : 0);
-  if (!isPo && availableStock < qty) {
+  // Produk supplier otomatis memakai stok live supplier, bukan array stok lokal iLink.
+  if (!isPo && !isSupplier && availableStock < qty) {
     throw httpError(`Stok tidak mencukupi. Stok tersedia: ${availableStock}.`, 409, 'INSUFFICIENT_STOCK', { available_stock: availableStock });
   }
 
