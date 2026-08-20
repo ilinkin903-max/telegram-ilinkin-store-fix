@@ -889,7 +889,7 @@ async function supplierAvailabilityForProducts(products = [], options = {}) {
   if (telegramRefs.size) {
     if (options.liveTelegram === true && telegramRefs.size === 1) {
       const ref = [...telegramRefs][0];
-      try { map.set(String(ref), await telegramSupplier.getAvailability(ref, { live: true, force: true, allowCached: true, waitMs: 8000 })); }
+      try { map.set(String(ref), await telegramSupplier.getAvailability(ref, { live: true, force: false, allowCached: true, waitMs: 8000 })); }
       catch (_) {
         const telegramMap = await telegramSupplier.getAvailabilityMap([ref]).catch(() => new Map());
         telegramMap.forEach((value, key) => map.set(String(key), value));
@@ -1745,6 +1745,43 @@ async function changeQuantity(query, delta, reset = false) {
 }
 
 
+function telegramAvailabilityCacheAgeMs(availability = {}) {
+  const checkedAt = availability?.product?.stock_checked_at;
+  if (!checkedAt) return Infinity;
+  const ts = new Date(checkedAt).getTime();
+  return Number.isFinite(ts) ? Math.max(0, Date.now() - ts) : Infinity;
+}
+
+async function telegramAvailabilityForCheckout(productId) {
+  // Checkout should reuse a freshly verified stock result instead of forcing a second
+  // MTProto interaction on the voucher/payment-method step. If cache is stale,
+  // getAvailability() will try to refresh it; when that refresh fails we only accept
+  // the cached result for a short grace window.
+  const availability = await telegramSupplier.getAvailability(productId, {
+    live: true,
+    force: false,
+    allowCached: true,
+    waitMs: 8000
+  });
+  const supplierProduct = availability?.product || {};
+  const hasStockFlow = Array.isArray(supplierProduct.stock_flow) && supplierProduct.stock_flow.length > 0;
+  if (hasStockFlow) {
+    if (availability.supplierStock == null || supplierProduct.stock_checked_at == null) {
+      const error = new Error('Stok supplier belum berhasil diverifikasi. Buka produk lagi atau coba beberapa saat lagi.');
+      error.code = 'TELEGRAM_SUPPLIER_STOCK_UNVERIFIED';
+      throw error;
+    }
+    const ttlMs = Math.max(5000, Math.min(600000, Number(supplierProduct.stock_cache_seconds || 60) * 1000));
+    const graceMs = Math.max(180000, ttlMs * 3);
+    if (telegramAvailabilityCacheAgeMs(availability) > graceMs) {
+      const error = new Error('Data stok supplier sudah terlalu lama dan belum berhasil diperbarui. Buka produk lagi untuk cek stok terbaru.');
+      error.code = 'TELEGRAM_SUPPLIER_STOCK_STALE';
+      throw error;
+    }
+  }
+  return availability;
+}
+
 async function calculateCheckoutPricing(userId, order, product) {
   const unit = orderUnitPrice(product, order);
   const quantity = Math.max(1, Number(order.quantity || 1));
@@ -1754,7 +1791,7 @@ async function calculateCheckoutPricing(userId, order, product) {
       const supplier = supplierSelection(product, order);
       const availability = supplier.source === 'prodseller'
         ? (prodseller.configured() ? await prodseller.getAvailability(supplier.productId, { force: true }) : (() => { const e = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.'); e.code='SUPPLIER_NOT_CONFIGURED'; throw e; })())
-        : await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: false, waitMs: 10000 });
+        : await telegramAvailabilityForCheckout(supplier.productId);
       if (availability.availableStock < quantity) {
         const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
@@ -1850,7 +1887,7 @@ async function createWalletPayment(query) {
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
   const product = await db.getProductByCode(order.product_code);
   if (!product || product.active === false) return tg.sendMessage(userId, '⚠️ Produk tidak tersedia.');
-  if (!isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
+  if (!isSupplierProduct(product, order) && !isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
   let price;
   try { price = await calculateCheckoutPricing(userId, order, product); }
   catch (error) { return tg.sendMessage(userId, `⚠️ ${error.message || 'Produk sedang tidak tersedia.'}`); }
@@ -1892,7 +1929,7 @@ async function createPayment(query) {
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
-  if (!isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
+  if (!isSupplierProduct(product, order) && !isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
   let price;
   try { price = await calculateCheckoutPricing(userId, order, product); }

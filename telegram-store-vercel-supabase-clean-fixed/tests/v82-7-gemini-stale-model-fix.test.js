@@ -11,7 +11,7 @@ test('v82.7 normalizes stale OpenAI models to Gemini', () => {
   assert.match(ai, /function normalizeGeminiModel/);
   assert.match(ai, /!\/\^\(gemini-\|gemma-\)\/i\.test\(model\)/);
   assert.match(ai, /return DEFAULT_GEMINI_MODEL/);
-  assert.match(ai, /const DEFAULT_GEMINI_MODEL = 'gemini-2\.5-flash'/);
+  assert.match(ai, /const DEFAULT_GEMINI_MODEL = 'gemini-3\.7-flash'/);
 });
 
 test('v82.7 locks Google Gemini base URL and chat completions backend', () => {
@@ -22,5 +22,5 @@ test('v82.7 locks Google Gemini base URL and chat completions backend', () => {
 
 test('v82.7 dashboard does not render gpt model into Gemini field', () => {
   assert.match(dashboard, /\^gemini-\|\^gemma-/i);
-  assert.match(dashboard, /'gemini-2\.5-flash'/);
+  assert.match(dashboard, /'gemini-3\.7-flash'/);
 });

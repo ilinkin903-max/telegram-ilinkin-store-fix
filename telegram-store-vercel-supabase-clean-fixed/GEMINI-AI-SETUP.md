@@ -20,3 +20,6 @@ Periksa Flow Cek Stok, Stock Regex, Flow Order, dan Regex Hasil sebelum menyimpa
 
 ## Keamanan
 API key disimpan terenkripsi server-side. Jangan commit API key ke GitHub.
+
+## v82.8 - Model otomatis dari Google
+Jika model default tidak tersedia untuk API key/project Anda, klik **Muat Model dari Google**. Dashboard akan membaca `/v1beta/openai/models`, memilih model teks yang tersedia, lalu **Tes Koneksi Gemini** akan menggunakan model tersebut. Tidak perlu menebak nama model secara manual.

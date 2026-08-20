@@ -5,13 +5,61 @@ const { config } = require('./config');
 const CONFIG_KEY = 'supplier_ai_config_v1';
 const ALLOWED_STEP_TYPES = new Set(['start','click','send','wait','capture','sleep']);
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash';
+const GEMINI_MODEL_PREFERENCE = ['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.5-pro'];
 function normalizeGeminiModel(value) {
   const model = String(value || '').trim();
   // v82.5 pernah menyimpan model OpenAI seperti gpt-5-mini. Jika config lama
   // masih tersisa, jangan pernah meneruskannya ke Google Gemini.
   if (!model || !/^(gemini-|gemma-)/i.test(model)) return DEFAULT_GEMINI_MODEL;
   return model;
+}
+
+
+function normalizeModelId(value) {
+  return String(value || '').trim().replace(/^models\//i, '');
+}
+function usableTextModel(id) {
+  const model = normalizeModelId(id).toLowerCase();
+  if (!/^(gemini-|gemma-)/.test(model)) return false;
+  return !/(image|imagen|veo|video|audio|live|tts|embedding|lyria)/.test(model);
+}
+async function fetchAvailableModels(apiKey) {
+  const response = await fetch(`${GEMINI_BASE_URL}/models`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` }
+  });
+  const text = await response.text();
+  let json = {};
+  try { json = text ? JSON.parse(text) : {}; } catch (_) {}
+  if (!response.ok) {
+    const msg = json?.error?.message || json?.error || text || `HTTP ${response.status}`;
+    throw new Error(`Gagal mengambil daftar model Gemini: ${String(msg).slice(0, 400)}`);
+  }
+  const rows = Array.isArray(json?.data) ? json.data : (Array.isArray(json?.models) ? json.models : []);
+  const ids = rows.map((row) => normalizeModelId(typeof row === 'string' ? row : (row?.id || row?.name || ''))).filter(usableTextModel);
+  return [...new Set(ids)];
+}
+function chooseAvailableModel(models, requested) {
+  const list = Array.isArray(models) ? models.map(normalizeModelId).filter(Boolean) : [];
+  const wanted = normalizeModelId(requested);
+  if (wanted && list.includes(wanted)) return wanted;
+  for (const model of GEMINI_MODEL_PREFERENCE) if (list.includes(model)) return model;
+  return list.find((id) => /flash/i.test(id)) || list[0] || '';
+}
+async function persistModel(model) {
+  const selected = normalizeModelId(model);
+  if (!selected) return;
+  const row = await readStored();
+  if (String(row.model || '').trim() === selected) return;
+  await db.saveRawShopSetting(CONFIG_KEY, { ...row, base_url: GEMINI_BASE_URL, backend: 'chat_completions', model: selected, updated_at: new Date().toISOString() });
+}
+async function listAvailableModels() {
+  const cfg = await getPrivateConfig();
+  const models = await fetchAvailableModels(cfg.api_key);
+  const selected = chooseAvailableModel(models, cfg.model);
+  if (!selected) throw new Error('API key Google terhubung, tetapi tidak ada model teks Gemini yang tersedia untuk project ini. Cek project/API key di Google AI Studio.');
+  return { models, selected, current: cfg.model };
 }
 
 function cleanBaseUrl(value) {
@@ -102,40 +150,41 @@ async function callAi(systemPrompt, userPrompt, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(45000, Number(options.timeoutMs || 30000))));
   try {
-    let url, body;
-    if (cfg.backend === 'responses') {
-      url = `${cfg.base_url}/responses`;
-      body = { model: cfg.model, input: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.1 };
-    } else {
-      url = `${cfg.base_url}/chat/completions`;
-      body = { model: cfg.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.1 };
-    }
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.api_key}` },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    const text = await response.text();
-    let json = {};
-    try { json = text ? JSON.parse(text) : {}; } catch (_) {}
-    if (!response.ok) {
-      const msg = json?.error?.message || json?.error || text || `HTTP ${response.status}`;
-      const rawMsg = String(msg);
-      if (response.status === 404 && /model|models\//i.test(rawMsg)) {
-        throw new Error(`Model Gemini tidak tersedia (${cfg.model}). Pilih gemini-2.5-flash lalu Simpan Gemini dan tes lagi.`);
+    let model = normalizeGeminiModel(options.model || cfg.model);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const url = `${cfg.base_url}/chat/completions`;
+      const body = { model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }] };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.api_key}` },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      const text = await response.text();
+      let json = {};
+      try { json = text ? JSON.parse(text) : {}; } catch (_) {}
+      if (!response.ok) {
+        const msg = json?.error?.message || json?.error || text || `HTTP ${response.status}`;
+        const rawMsg = String(msg);
+        const modelError = response.status === 404 && /model|models\//i.test(rawMsg);
+        if (modelError && attempt === 0) {
+          const models = await fetchAvailableModels(cfg.api_key);
+          const replacement = chooseAvailableModel(models, model);
+          if (replacement && replacement !== model) {
+            model = replacement;
+            await persistModel(model);
+            continue;
+          }
+          throw new Error(`Model Gemini yang tersimpan (${model}) tidak tersedia untuk API key ini. Model yang tersedia: ${models.slice(0, 12).join(', ') || 'tidak ada model teks'}.`);
+        }
+        throw new Error(`AI provider gagal: ${rawMsg.slice(0, 400)}`);
       }
-      throw new Error(`AI provider gagal: ${rawMsg.slice(0, 400)}`);
+      const content = String(json?.choices?.[0]?.message?.content || '');
+      if (!content.trim()) throw new Error('AI provider tidak mengembalikan teks.');
+      if (model !== cfg.model) await persistModel(model);
+      return { content: content.trim(), model, backend: 'chat_completions' };
     }
-    let content = '';
-    if (cfg.backend === 'responses') {
-      content = String(json.output_text || '');
-      if (!content && Array.isArray(json.output)) {
-        for (const item of json.output) for (const part of (item?.content || [])) if (part?.text) content += part.text;
-      }
-    } else content = String(json?.choices?.[0]?.message?.content || '');
-    if (!content.trim()) throw new Error('AI provider tidak mengembalikan teks.');
-    return { content: content.trim(), model: cfg.model, backend: cfg.backend };
+    throw new Error('AI provider gagal memilih model Gemini yang tersedia.');
   } finally { clearTimeout(timer); }
 }
 function parseJsonObject(text) {
@@ -172,8 +221,13 @@ function validateGenerated(obj) {
   return out;
 }
 async function testConnection() {
-  const result = await callAi('Jawab singkat.', 'Balas persis dengan teks: ILINK_AI_OK', { timeoutMs: 20000 });
-  return { ok: /ILINK_AI_OK/i.test(result.content), response: result.content.slice(0, 200), model: result.model, backend: result.backend };
+  const cfg = await getPrivateConfig();
+  const models = await fetchAvailableModels(cfg.api_key);
+  const selected = chooseAvailableModel(models, cfg.model);
+  if (!selected) throw new Error('API key Google valid, tetapi tidak ada model teks Gemini yang tersedia untuk project ini.');
+  await persistModel(selected);
+  const result = await callAi('Jawab singkat.', 'Balas persis dengan teks: ILINK_AI_OK', { timeoutMs: 20000, model: selected });
+  return { ok: /ILINK_AI_OK/i.test(result.content), response: result.content.slice(0, 200), model: result.model, backend: result.backend, models };
 }
 async function generateFlow(input = {}) {
   const instructions = String(input.instructions || '').trim();
@@ -198,4 +252,4 @@ async function generateFlow(input = {}) {
   return { ...validateGenerated(parseJsonObject(result.content)), model: result.model };
 }
 
-module.exports = { getPublicConfig, saveConfig, testConnection, generateFlow };
+module.exports = { getPublicConfig, saveConfig, listAvailableModels, testConnection, generateFlow };

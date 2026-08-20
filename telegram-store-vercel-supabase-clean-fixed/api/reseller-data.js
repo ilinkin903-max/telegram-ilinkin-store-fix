@@ -599,6 +599,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
     if (req.method === 'GET' && action === 'telegram-suppliers') return json(res, 200, { ok: true, data: await getTelegramSuppliersDashboard() });
     if (req.method === 'GET' && action === 'supplier-ai-config') return json(res, 200, { ok: true, data: await aiFlow.getPublicConfig() });
+    if (req.method === 'GET' && action === 'supplier-ai-models') return json(res, 200, { ok: true, data: await aiFlow.listAvailableModels() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
