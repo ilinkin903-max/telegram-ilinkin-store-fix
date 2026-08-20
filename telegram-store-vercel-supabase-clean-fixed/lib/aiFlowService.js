@@ -4,6 +4,15 @@ const { config } = require('./config');
 
 const CONFIG_KEY = 'supplier_ai_config_v1';
 const ALLOWED_STEP_TYPES = new Set(['start','click','send','wait','capture','sleep']);
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+function normalizeGeminiModel(value) {
+  const model = String(value || '').trim();
+  // v82.5 pernah menyimpan model OpenAI seperti gpt-5-mini. Jika config lama
+  // masih tersisa, jangan pernah meneruskannya ke Google Gemini.
+  if (!model || !/^(gemini-|gemma-)/i.test(model)) return DEFAULT_GEMINI_MODEL;
+  return model;
+}
 
 function cleanBaseUrl(value) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
@@ -52,8 +61,8 @@ async function getPublicConfig() {
   try { apiKey = row.api_key_enc ? decrypt(row.api_key_enc) : ''; } catch (_) {}
   return {
     enabled: row.enabled !== false,
-    base_url: String(row.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
-    model: String(row.model || 'gemini-2.5-flash'),
+    base_url: GEMINI_BASE_URL,
+    model: normalizeGeminiModel(row.model),
     backend: String(row.backend || 'chat_completions'),
     configured: Boolean(apiKey),
     api_key_masked: maskKey(apiKey),
@@ -66,8 +75,8 @@ async function getPrivateConfig() {
   if (!apiKey) throw new Error('API Key AI belum disimpan.');
   return {
     enabled: row.enabled !== false,
-    base_url: cleanBaseUrl(row.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
-    model: String(row.model || 'gemini-2.5-flash').trim(),
+    base_url: GEMINI_BASE_URL,
+    model: normalizeGeminiModel(row.model).trim(),
     backend: String(row.backend || 'chat_completions').trim().toLowerCase(),
     api_key: apiKey
   };
@@ -77,9 +86,9 @@ async function saveConfig(input = {}) {
   const apiKeyInput = String(input.api_key || '').trim();
   const next = {
     enabled: input.enabled === false || String(input.enabled).toLowerCase() === 'false' ? false : true,
-    base_url: cleanBaseUrl(input.base_url || prev.base_url || 'https://generativelanguage.googleapis.com/v1beta/openai'),
-    model: String(input.model || prev.model || 'gemini-2.5-flash').trim(),
-    backend: ['responses','chat_completions'].includes(String(input.backend || prev.backend || 'chat_completions').toLowerCase()) ? String(input.backend || prev.backend || 'chat_completions').toLowerCase() : 'chat_completions',
+    base_url: GEMINI_BASE_URL,
+    model: normalizeGeminiModel(input.model || prev.model),
+    backend: 'chat_completions',
     api_key_enc: apiKeyInput ? encrypt(apiKeyInput) : String(prev.api_key_enc || ''),
     updated_at: new Date().toISOString()
   };
@@ -112,7 +121,11 @@ async function callAi(systemPrompt, userPrompt, options = {}) {
     try { json = text ? JSON.parse(text) : {}; } catch (_) {}
     if (!response.ok) {
       const msg = json?.error?.message || json?.error || text || `HTTP ${response.status}`;
-      throw new Error(`AI provider gagal: ${String(msg).slice(0, 400)}`);
+      const rawMsg = String(msg);
+      if (response.status === 404 && /model|models\//i.test(rawMsg)) {
+        throw new Error(`Model Gemini tidak tersedia (${cfg.model}). Pilih gemini-2.5-flash lalu Simpan Gemini dan tes lagi.`);
+      }
+      throw new Error(`AI provider gagal: ${rawMsg.slice(0, 400)}`);
     }
     let content = '';
     if (cfg.backend === 'responses') {

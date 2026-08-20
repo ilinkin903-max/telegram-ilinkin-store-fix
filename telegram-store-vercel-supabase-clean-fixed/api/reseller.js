@@ -966,7 +966,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   function renderSupplierAi(){
     var c=state.supplierAi||{}; var f=document.getElementById('supplierAiConfigForm'); var st=document.getElementById('supplierAiStatus'); var hint=document.getElementById('supplierAiKeyHint');
     if(st){st.textContent=c.configured?'TERHUBUNG':'BELUM DIATUR';st.className='chip '+(c.configured?'green':'yellow');}
-    if(f){if(f.base_url)f.base_url.value='https://generativelanguage.googleapis.com/v1beta/openai';if(f.model)f.model.value=c.model||'gemini-2.5-flash';if(f.backend)f.backend.value='chat_completions';if(f.api_key)f.api_key.value='';}
+    if(f){if(f.base_url)f.base_url.value='https://generativelanguage.googleapis.com/v1beta/openai';if(f.model)f.model.value=(/^gemini-|^gemma-/i.test(String(c.model||''))?c.model:'gemini-2.5-flash');if(f.backend)f.backend.value='chat_completions';if(f.api_key)f.api_key.value='';}
     if(hint)hint.textContent=c.configured?('API key tersimpan: '+(c.api_key_masked||'••••')+'. Kosongkan field API Key jika tidak ingin menggantinya.'):'API key belum tersimpan.';
   }
 
