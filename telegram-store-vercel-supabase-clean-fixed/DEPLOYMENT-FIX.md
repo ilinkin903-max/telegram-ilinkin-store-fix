@@ -21,7 +21,7 @@ Error: Command "npm install" exited with 1
 1. Buka Vercel.
 2. Pilih project `telegram-ilinkin-store-fix`.
 3. Buka **Settings → Build and Deployment**.
-4. Pastikan **Node.js Version** adalah `20.x`. Nilai pada `package.json` juga akan mengunci deployment ke Node.js 20.
+4. Pastikan **Node.js Version** adalah `24.x`. Nilai pada `package.json` juga akan mengunci deployment ke Node.js 24.
 5. Buka **Deployments**.
 6. Klik menu tiga titik pada deployment terakhir.
 7. Pilih **Redeploy**.
