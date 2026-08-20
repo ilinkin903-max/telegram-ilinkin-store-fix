@@ -57,7 +57,7 @@ Untuk uji awal, gunakan jumlah 1 dahulu dan saldo supplier secukupnya. Pastikan 
 Jika setelah `/start` keyboard supplier menampilkan tombol seperti:
 
 ```text
-ALIGHT MOTION (74)
+[2]. ALIGHT MOTION ( 74 )
 ```
 
 gunakan Flow Cek Stok:
@@ -72,7 +72,7 @@ gunakan Flow Cek Stok:
 Dan isi **Stock Regex**:
 
 ```text
-ALIGHT\s*MOTION\s*\((\d+)\)
+(?:\[\d+\]\.\s*)?ALIGHT\s+MOTION\s*\(\s*(\d+)\s*\)
 ```
 
-Angka di grup pertama akan dibaca sebagai stok. Contoh `ALIGHT MOTION (74)` menghasilkan stok `74`. `source:"buttons"` membaca teks keyboard tanpa perlu menekan tombol produk.
+Angka di grup pertama akan dibaca sebagai stok. Contoh `[2]. ALIGHT MOTION ( 74 )` menghasilkan stok `74`. `source:"buttons"` membaca teks keyboard tanpa perlu menekan tombol produk.

@@ -14,6 +14,6 @@ test('v82.4 can capture supplier stock from keyboard button text', () => {
 
 test('v82.4 includes Alight Motion keyboard stock flow and regex', () => {
   assert.match(guide, /"type":"capture","source":"buttons"/);
-  assert.match(guide, /ALIGHT\\s\*MOTION\\s\*\\\(\(\\d\+\)\\\)/);
+  assert.ok(guide.includes('ALIGHT\\s+MOTION\\s*\\(\\s*(\\d+)\\s*\\)'));
   assert.match(guide, /stok `74`/);
 });

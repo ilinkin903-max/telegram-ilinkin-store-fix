@@ -245,7 +245,7 @@ async function generateFlow(input = {}) {
     `capture mendukung source: message, buttons, all.\n`+
     `Gunakan commit:true HANYA pada tombol final yang benar-benar memproses/memotong saldo supplier.\n`+
     `Untuk hasil akun, gunakan wait + capture_delivery:true + delivery_regex jika marker hasil diketahui.\n`+
-    `Untuk stok yang tertulis di keyboard seperti ALIGHT MOTION (74), gunakan start lalu capture source buttons dan regex spesifik nama produk.\n`+
+    `Untuk stok yang tertulis seperti [2]. ALIGHT MOTION ( 74 ), buat regex toleran terhadap nomor daftar dan spasi, misalnya \(?:\\[\\d+\\]\\.\\s*\)?ALIGHT\\s+MOTION\\s*\\(\\s*(\\d+)\\s*\\). Gunakan capture source buttons bila stok berada di keyboard, atau source all bila bisa berada di teks pesan/keyboard.\nUntuk hasil produk, jangan capture dari menu/list produk. Flow order harus menunggu pesan hasil yang benar-benar mengandung marker seperti ACCOUNT DETAIL, baru set capture_delivery:true dan delivery_regex untuk mengambil isi sesudah marker.\n`+
     `Kembalikan JSON object persis dengan keys: stock_flow, stock_regex, order_flow, delivery_regex, notes. Jangan gunakan markdown fence.`;
   const user = `Produk/config saat ini:\n${JSON.stringify(current, null, 2)}\n\nInstruksi admin:\n${instructions}\n\nSusun flow yang paling deterministik dan aman. Jangan mengarang tombol yang tidak disebutkan; jika instruksi tidak lengkap, tulis kekurangannya di notes tetapi tetap gunakan data yang tersedia.`;
   const result = await callAi(system, user, { timeoutMs: 35000 });

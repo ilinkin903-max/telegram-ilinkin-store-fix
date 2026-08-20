@@ -1,6 +1,6 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.15.1",
+  "version": "4.15.2",
   "private": true,
   "description": "Telegram auto-order marketplace with AI-assisted supplier flows, live Telegram supplier stock and Vercel on-demand MTProto.",
   "scripts": {

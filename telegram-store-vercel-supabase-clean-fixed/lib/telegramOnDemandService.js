@@ -39,6 +39,15 @@ function captureSourceText(message, step = {}) {
   }
   return messageText(message);
 }
+function normalizeIndexedButtonLabel(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^\[?\d+\]?\s*[.)-]?\s*/i, '')
+    .replace(/\s*\(\s*\d+\s*\)\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 function fingerprint(message) {
   if (!message) return '';
   const buttons = Array.isArray(message.buttons) ? message.buttons.flat().map((b) => String(b?.text || '')).join('|') : '';
@@ -164,9 +173,11 @@ async function clickButton(client, bot, step, ctx, currentMessage = null, runSta
         if (requestedIndex > 0) {
           ok = flatIndex === requestedIndex;
           if (ok && step.expect_text) {
-            const expectedText = template(step.expect_text, ctx).trim().toLowerCase();
-            if (text.trim().toLowerCase() !== expectedText) {
-              const error = new Error(`Tombol nomor ${requestedIndex} berubah: diharapkan "${template(step.expect_text, ctx)}", tetapi yang ditemukan "${text}".`);
+            const expectedRaw = template(step.expect_text, ctx);
+            const expectedText = normalizeIndexedButtonLabel(expectedRaw);
+            const actualText = normalizeIndexedButtonLabel(text);
+            if (actualText !== expectedText) {
+              const error = new Error(`Tombol nomor ${requestedIndex} berubah: diharapkan "${expectedRaw}", tetapi yang ditemukan "${text}".`);
               error.code = 'TELEGRAM_SUPPLIER_BUTTON_INDEX_MISMATCH';
               throw error;
             }
@@ -245,7 +256,17 @@ async function runFlow(client, bot, flow, ctx = {}, options = {}) {
   }
   if (!captured) {
     if (!current) current = await latestBotMessage(client, bot);
-    captured = extractText(messageText(current), options.resultRegex || '');
+    const resultRegex = String(options.resultRegex || '').trim();
+    if (resultRegex) {
+      const rx = regexOf(resultRegex);
+      const currentText = messageText(current);
+      if (rx && !rx.test(currentText)) {
+        // Supplier sering mengirim menu/daftar produk lebih dulu sebelum hasil akun.
+        // Jangan langsung menerapkan delivery regex ke pesan menu; tunggu pesan yang benar-benar cocok.
+        current = await waitForMessage(client, bot, { regex: resultRegex, timeout_ms: options.resultTimeoutMs || 45000 }, fingerprint(current));
+      }
+    }
+    captured = extractText(messageText(current), resultRegex);
   }
   return { resultText: captured, trace, lastMessageId: current?.id || null, commitReached: !!runState.commitReached };
 }
