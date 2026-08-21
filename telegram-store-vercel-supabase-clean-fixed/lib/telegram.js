@@ -104,7 +104,7 @@ async function sendPoll(chatId, question, optionsList = [], options = {}) {
 async function getChatMember(chatId, userId) {
   return callTelegram('getChatMember', {
     chat_id: chatId,
-    user_id: userId
+    user_id: Number(userId)
   });
 }
 
@@ -142,6 +142,15 @@ async function sendDocument(chatId, filename, content, options = {}) {
   return json.result;
 }
 
+
+async function setMyName(name, languageCode = '') {
+  const botName = String(name || '').trim();
+  if (!botName) throw new Error('Nama bot tidak boleh kosong.');
+  const payload = { name: botName.slice(0, 64) };
+  if (String(languageCode || '').trim()) payload.language_code = String(languageCode).trim();
+  return callTelegram('setMyName', payload);
+}
+
 async function setWebhook(url) {
   return callTelegram('setWebhook', {
     url,
@@ -164,5 +173,6 @@ module.exports = {
   copyMessage,
   forwardMessage,
   sendDocument,
+  setMyName,
   setWebhook
 };

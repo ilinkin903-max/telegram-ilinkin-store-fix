@@ -2,11 +2,26 @@ require('dotenv').config();
 
 const required = (name, fallback = '') => process.env[name] || fallback;
 
+function parseOwnerIds() {
+  const raw = [process.env.OWNER_ID, process.env.OWNER_IDS, process.env.DEV_OWNER_ID]
+    .filter(Boolean)
+    .join(',');
+  const seen = new Set();
+  return raw
+    .split(/[\s,;]+/)
+    .map((value) => Number(String(value || '').trim()))
+    .filter((value) => Number.isSafeInteger(value) && value > 0 && !seen.has(value) && seen.add(value));
+}
+
+const ownerIds = parseOwnerIds();
+const primaryOwnerId = ownerIds[0] || 0;
+
 const config = {
   botToken: required('BOT_TOKEN'),
-  botName: required('BOT_NAME', 'Telegram Store'),
+  botName: required('BOT_NAME', 'Link Auto Order'),
   botUsername: required('BOT_USERNAME'),
-  ownerId: Number(required('OWNER_ID', '0')),
+  ownerId: primaryOwnerId,
+  ownerIds,
   channelStore: required('CHANNEL_STORE', ''),
   customerService: required('CUSTOMER_SERVICE', ''),
   channelLog: required('CHANNEL_LOG', ''),
@@ -17,23 +32,26 @@ const config = {
   autogopayRedirectUrl: required('AUTOGOPAY_REDIRECT_URL', ''),
   prodsellerApiKey: required('PRODSELLER_API_KEY', '').trim(),
   prodsellerBaseUrl: required('PRODSELLER_BASE_URL', 'https://prodseller.com/v1').replace(/\/$/, ''),
-  userbotBridgeSecret: required('USERBOT_BRIDGE_SECRET', '').trim(),
-  userbotSetupKey: required('USERBOT_SETUP_KEY', '').trim(),
-  aiConfigSecret: required('AI_CONFIG_SECRET', '').trim(),
-  tgApiId: Number(required('TG_API_ID', '0')),
-  tgApiHash: required('TG_API_HASH', '').trim(),
-  tgStringSession: required('TG_STRING_SESSION', '').trim(),
+  userbotApiId: Math.max(0, Number(required('TG_API_ID', required('TELEGRAM_API_ID', '0'))) || 0),
+  userbotApiHash: required('TG_API_HASH', required('TELEGRAM_API_HASH', '')).trim(),
+  userbotStringSession: required('TG_STRING_SESSION', required('TELEGRAM_STRING_SESSION', '')).trim(),
+  userbotStepTimeoutMs: Math.max(1500, Math.min(30000, Number(required('USERBOT_STEP_TIMEOUT_MS', '7000')) || 7000)),
+  workflowRetryIntervalSeconds: Math.max(3, Math.min(60, Number(required('WORKFLOW_RETRY_INTERVAL_SECONDS', '8')) || 8)),
+  workflowRetryMaxAttempts: Math.max(1, Math.min(60, Number(required('WORKFLOW_RETRY_MAX_ATTEMPTS', '18')) || 18)),
   pakasirSlug: required('PAKASIR_SLUG', ''),
   pakasirApiKey: required('PAKASIR_API_KEY', ''),
   pakasirWebhookSecret: required('PAKASIR_WEBHOOK_SECRET', ''),
   pakasirWebhookRequireSecret: process.env.PAKASIR_WEBHOOK_REQUIRE_SECRET === 'true',
   supabaseUrl: required('SUPABASE_URL'),
-  supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
+  supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY', required('SUPABASE_SECRET_KEY', '')),
   publicUrl: required('PUBLIC_URL'),
-  miniAppUrl: required('MINIAPP_URL'),
+  miniAppUrl: required('MINIAPP_URL', required('DASHBOARD_URL', '')),
   storeUrl: required('STORE_URL', ''),
   webhookSecret: required('WEBHOOK_SECRET', ''),
   cronSecret: required('CRON_SECRET', ''),
+  jobRunnerSecret: required('JOB_RUNNER_SECRET', ''),
+  paymentPollIntervalSeconds: Math.max(5, Number(required('PAYMENT_POLL_INTERVAL_SECONDS', '30')) || 30),
+  paymentPollMaxAttempts: Math.max(1, Number(required('PAYMENT_POLL_MAX_ATTEMPTS', '30')) || 30),
   qrDownloadSecret: required('QR_DOWNLOAD_SECRET', required('WEBHOOK_SECRET', '')),
   licenseManagerUrl: required('LICENSE_MANAGER_URL', required('RENTAL_MANAGER_URL', '')),
   licenseApiSecret: required('LICENSE_API_SECRET', ''),
@@ -59,15 +77,25 @@ function getPublicBaseUrl(req) {
   return `${proto}://${host}`.replace(/\/$/, '');
 }
 
+function resolvePublicUrl(value, base = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
+  if (base && raw.startsWith('/')) return `${base}${raw}`;
+  return raw;
+}
+
 function getMiniAppUrl(req) {
-  if (config.miniAppUrl) return config.miniAppUrl;
   const base = getPublicBaseUrl(req);
-  return base ? `${base}/reseller` : '';
+  const configured = resolvePublicUrl(config.miniAppUrl, base);
+  if (configured) return configured;
+  return base ? `${base}/dashboard` : '';
 }
 
 function getStorefrontUrl(req) {
-  if (config.storeUrl) return config.storeUrl;
   const base = getPublicBaseUrl(req);
+  const configured = resolvePublicUrl(config.storeUrl, base);
+  if (configured) return configured;
   return base || '';
 }
 

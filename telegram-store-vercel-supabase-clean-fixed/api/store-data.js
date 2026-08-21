@@ -47,11 +47,6 @@ module.exports = async function handler(req, res) {
     }
 
     const body = bodyOf(req);
-    if (action === 'supplier-stock') {
-      const data = await store.getLiveSupplierStock(user, body.product_code, body.variant_key);
-      return json(res, 200, { ok: true, data });
-    }
-
     if (action === 'checkout-preview') {
       const data = await store.previewCheckout({
         user,
@@ -94,6 +89,15 @@ module.exports = async function handler(req, res) {
     return json(res, 404, { ok: false, error: 'Action tidak ditemukan.' });
   } catch (error) {
     console.error('Store API error:', error);
+    const raw = String(error?.message || '');
+    const schemaMissing = String(error?.code || '') === 'PGRST205' || /public\.products.*schema cache|could not find.*products.*schema cache/i.test(raw);
+    if (schemaMissing) {
+      return json(res, 503, {
+        ok: false,
+        error: 'Database bot belum kompatibel dengan v81. Jalankan supabase/v81.2-database-compat.sql di Supabase SQL Editor, lalu redeploy Vercel.',
+        code: 'DATABASE_SCHEMA_NOT_READY'
+      });
+    }
     return json(res, Number(error.statusCode || 500), {
       ok: false,
       error: error.message || 'Terjadi kesalahan pada server.',

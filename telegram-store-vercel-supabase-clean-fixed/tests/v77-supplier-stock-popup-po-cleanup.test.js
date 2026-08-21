@@ -13,7 +13,7 @@ test('pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO', ()
   assert.doesNotMatch(paidFn, /PESANAN PRE-ORDER/);
   assert.doesNotMatch(deliveryFn, /PESANAN PO SUDAH DIKIRIM/);
   assert.match(deliveryFn, /SYARAT &amp; KETENTUAN/);
-  assert.match(deliveryFn, /PRODUK \/ AKUN/);
+  assert.match(deliveryFn, /<b>PRODUK<\/b>/);
 });
 
 test('popup dashboard menutup menu bawah dan berada di lapisan teratas', () => {
@@ -37,17 +37,17 @@ test('stok supplier dihitung dari saldo dan stok aktual supplier', () => {
 
 test('marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER', () => {
   const storeJs = read('public/store.js');
-  assert.match(storeJs, /isSupplier \? \('Stok ' \+ Math\.max/);
-  assert.match(storeJs, /els\.detailStockBadge\.textContent = isSupplier \? \('Stok ' \+ selectedStock\(\)\)/);
+  assert.match(storeJs, /isWorkflow \? 'Otomatis' : \(isSupplier \? \('Stok ' \+ Math\.max/);
+  assert.match(storeJs, /els\.detailStockBadge\.textContent = isWorkflow \? 'OTOMATIS' : \(isSupplier \? \('Stok ' \+ selectedStock\(\)\)/);
   assert.doesNotMatch(storeJs, /AUTO SUPPLIER/);
 });
 
 test('produk supplier tidak dicampur ke menu Pesanan PO', () => {
   const api = read('api/reseller-data.js');
   const dashboard = read('api/reseller.js');
-  assert.match(api, /supplierLinkOf|supplierCodes/);
+  assert.match(api, /automatedSupplierLinkOf|supplierLinkOf|supplierCodes/);
   assert.match(api, /filter\(\(order\) =>|supplierCodes\.has/);
   assert.match(api, /tidak dapat dikirim sebagai PO manual/);
   assert.match(dashboard, /SUPPLIER OTOMATIS · PRODSELLER/);
-  assert.match(dashboard, /bukan Pesanan PO manual/);
+  assert.match(api, /tidak dapat dikirim sebagai PO manual/);
 });

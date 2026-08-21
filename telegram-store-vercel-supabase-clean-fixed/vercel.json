@@ -1,43 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/telegram.js": {
-      "maxDuration": 300
-    },
-    "api/payment-webhook.js": {
-      "maxDuration": 300
-    },
-    "api/index.js": {
-      "maxDuration": 30
-    },
-    "api/reseller.js": {
-      "maxDuration": 30
-    },
-    "api/reseller-data.js": {
-      "maxDuration": 300
-    },
-    "api/set-webhook.js": {
-      "maxDuration": 30
-    },
-    "api/setup-autogopay.js": {
-      "maxDuration": 60
-    },
-    "api/backup-cron.js": {
-      "maxDuration": 30
-    },
-    "api/store-data.js": {
-      "maxDuration": 300
-    },
-    "api/payment-cron.js": {
-      "maxDuration": 300
-    },
-    "api/userbot-bridge.js": {
-      "maxDuration": 30
-    },
-    "api/setup-userbot.js": {
-      "maxDuration": 120
-    }
-  },
   "rewrites": [
     {
       "source": "/",
@@ -50,6 +12,10 @@
     {
       "source": "/marketplace",
       "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/api/reseller"
     },
     {
       "source": "/reseller",
@@ -69,5 +35,6 @@
       "path": "/api/backup-cron",
       "schedule": "0 17 * * *"
     }
-  ]
+  ],
+  "installCommand": "npm install --no-audit --no-fund"
 }

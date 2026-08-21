@@ -3,8 +3,8 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const db = require('./db');
 const paymentService = require('./paymentService');
+const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
-const telegramSupplier = require('./telegramSupplierService');
 const { config } = require('./config');
 const { randomFee, randomRef } = require('./utils');
 
@@ -219,8 +219,15 @@ function promoDisplay(promo, originalPrice) {
 function supplierSelection(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (!['prodseller', 'telegram_userbot'].includes(source) || !productId) return null;
+  if (source !== 'prodseller' || !productId) return null;
   return { source, productId, variant };
+}
+
+function workflowSelection(product, variant = null) {
+  const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
+  const workflowId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
+  if (source !== 'telegram_workflow' || !workflowId) return null;
+  return { source, workflowId, variant };
 }
 
 function supplierAvailabilityFromProduct(product, supplierId, fallbackStock = 0) {
@@ -236,22 +243,23 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
   const promo = promoDisplay(bestPromoForSelection(promos, productCode, key, 1, price), price);
   const flashPromo = promoDisplay(bestPromoForSelection(flashPromos, productCode, key, 1, price), price);
   const supplier = supplierSelection(product, variant);
+  const workflow = workflowSelection(product, variant);
   const availability = supplier ? supplierAvailabilityFromProduct(product, supplier.productId, variant?.supplier_stock) : null;
   const deliveryMode = db.normalizeDeliveryMode(variant?.delivery_mode, '');
   return {
     key,
     name: String(variant?.name || `Varian ${index + 1}`),
     price,
-    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : variantStock(variant),
+    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? 0 : variantStock(variant)),
     sold: Number(variant?.sold || 0),
     active: variant?.active !== false,
     description: String(variant?.description || ''),
     terms: String(variant?.snk || ''),
     note: String(variant?.note || ''),
-    delivery_mode: supplier ? 'auto' : deliveryMode,
-    effective_delivery_mode: supplier ? 'auto' : db.normalizeDeliveryMode(variant?.delivery_mode, db.normalizeDeliveryMode(productDeliveryMode, 'auto')),
-    supplier_source: supplier?.source || '',
-    supplier_product_id: supplier?.productId || '',
+    delivery_mode: (supplier || workflow) ? 'auto' : deliveryMode,
+    effective_delivery_mode: (supplier || workflow) ? 'auto' : db.normalizeDeliveryMode(variant?.delivery_mode, db.normalizeDeliveryMode(productDeliveryMode, 'auto')),
+    supplier_source: supplier?.source || workflow?.source || '',
+    supplier_product_id: supplier?.productId || workflow?.workflowId || '',
     supplier_stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : null,
     bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || []),
     promo,
@@ -280,20 +288,22 @@ function bestPromoForSelection(promos, productCode, variantKey, quantity, subtot
 
 function sanitizeProduct(product, promos = [], flashPromos = []) {
   const directSupplier = supplierSelection(product, null);
+  const directWorkflow = workflowSelection(product, null);
   const isSupplier = Boolean(directSupplier);
+  const isWorkflow = Boolean(directWorkflow);
   const productDeliveryMode = db.normalizeDeliveryMode(product?.delivery_mode, 'auto');
-  const isPo = !isSupplier && productDeliveryMode === 'po';
+  const isPo = !isSupplier && !isWorkflow && productDeliveryMode === 'po';
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
     .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos, productDeliveryMode, product))
     .filter((variant) => variant.active);
-  const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0));
+  const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0 || variant.supplier_source === 'telegram_workflow'));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
   const supplierAvailableStock = isSupplier
     ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock).availableStock || 0)))
     : null;
   const stock = variants.length
     ? variants.reduce((sum, variant) => sum + (variant.effective_delivery_mode === 'po' ? 0 : Math.max(0, Number(variant.stock || 0))), 0)
-    : (isSupplier ? supplierAvailableStock : (isPo ? 0 : baseStock));
+    : (isSupplier ? supplierAvailableStock : (isWorkflow ? 0 : (isPo ? 0 : baseStock)));
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
     .filter((price) => price > 0);
@@ -315,7 +325,8 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     ? (displayPrices.length ? Math.max(...displayPrices) : priceMax)
     : (basePromo ? basePromo.final_price : priceMax);
   const hasPromo = Boolean(basePromo || variants.some((variant) => variant.promo));
-  const hasSupplierVariants = variants.some((variant) => ['prodseller','telegram_userbot'].includes(String(variant.supplier_source || '').toLowerCase()));
+  const hasSupplierVariants = variants.some((variant) => variant.supplier_source === 'prodseller');
+  const hasWorkflowVariants = variants.some((variant) => variant.supplier_source === 'telegram_workflow');
 
   return {
     code: product.kode,
@@ -325,10 +336,11 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
-    delivery_mode: isSupplier ? 'auto' : productDeliveryMode,
+    delivery_mode: (isSupplier || isWorkflow) ? 'auto' : productDeliveryMode,
     supplier_source: String(product?.supplier_source || '').toLowerCase(),
     supplier_stock: isSupplier ? supplierAvailableStock : null,
     has_supplier_variants: hasSupplierVariants,
+    has_workflow_variants: hasWorkflowVariants,
     has_po_variants: variants.some((variant) => variant.effective_delivery_mode === 'po'),
     has_auto_variants: variants.some((variant) => variant.effective_delivery_mode === 'auto'),
     price: Number(product.harga || 0),
@@ -348,7 +360,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     has_promo: hasPromo,
     available: product.active !== false && (variants.length
       ? buyableVariants.length > 0
-      : (isSupplier ? stock > 0 : (isPo ? Number(product?.harga || 0) > 0 : stock > 0)))
+      : (isSupplier ? stock > 0 : (isWorkflow ? Number(product?.harga || 0) > 0 : (isPo ? Number(product?.harga || 0) > 0 : stock > 0))))
   };
 }
 
@@ -380,19 +392,12 @@ async function getCatalog(viewer = null) {
     : [];
   const supplierAvailability = new Map();
   const supplierRefs = new Set();
-  const telegramRefs = new Set();
   products.forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) {
-      if (direct.source === 'prodseller') supplierRefs.add(direct.productId);
-      else telegramRefs.add(direct.productId);
-    }
+    if (direct) supplierRefs.add(direct.productId);
     (Array.isArray(product?.variants) ? product.variants : []).forEach((variant) => {
       const ref = supplierSelection(product, variant);
-      if (ref) {
-        if (ref.source === 'prodseller') supplierRefs.add(ref.productId);
-        else telegramRefs.add(ref.productId);
-      }
+      if (ref) supplierRefs.add(ref.productId);
     });
   });
   if (supplierRefs.size && prodseller.configured()) {
@@ -412,24 +417,30 @@ async function getCatalog(viewer = null) {
       let variantsChanged = false;
       variants.forEach((variant, index) => {
         const ref = supplierSelection(product, variant);
-        if (!ref || ref.source !== 'prodseller') return;
-        const availability = supplierAvailability.get(ref.productId);
+        const availability = ref ? supplierAvailability.get(ref.productId) : null;
         if (!availability) return;
-        variants[index] = { ...variant, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: syncedAt };
+        variants[index] = {
+          ...variant,
+          supplier_price_usdt: availability.unitPrice,
+          supplier_public_price_usdt: availability.publicPrice,
+          supplier_stock: availability.supplierStock,
+          supplier_synced_at: syncedAt
+        };
         variantsChanged = true;
       });
-      const directAvailability = direct && direct.source === 'prodseller' ? supplierAvailability.get(direct.productId) : null;
+      const directAvailability = direct ? supplierAvailability.get(direct.productId) : null;
       if (directAvailability || variantsChanged) {
         db.updateProductByCode(product.kode, {
-          ...(directAvailability ? { supplier_price_usdt: directAvailability.unitPrice, supplier_public_price_usdt: directAvailability.publicPrice, supplier_stock: directAvailability.supplierStock, supplier_synced_at: syncedAt } : {}),
+          ...(directAvailability ? {
+            supplier_price_usdt: directAvailability.unitPrice,
+            supplier_public_price_usdt: directAvailability.publicPrice,
+            supplier_stock: directAvailability.supplierStock,
+            supplier_synced_at: syncedAt
+          } : {}),
           ...(variantsChanged ? { variants } : {})
         }).catch(() => null);
       }
     });
-  }
-  if (telegramRefs.size) {
-    const telegramMap = await telegramSupplier.getAvailabilityMap([...telegramRefs]).catch(() => new Map());
-    telegramMap.forEach((value, key) => supplierAvailability.set(String(key), value));
   }
 
 
@@ -512,7 +523,7 @@ async function getCatalog(viewer = null) {
       id: Number(viewer.id),
       first_name: viewer.first_name || '',
       username: viewer.username || '',
-      is_owner: Number(viewer.id) === Number(config.ownerId),
+      is_owner: (Array.isArray(config.ownerIds) && config.ownerIds.length ? config.ownerIds : [config.ownerId]).includes(Number(viewer.id)),
       wallet_ready: Boolean(wallet),
       wallet: wallet ? {
         balance_main: Number(wallet.balance_main || 0),
@@ -576,40 +587,59 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   const deliveryMode = db.variantDeliveryMode(product, selected.variant);
   const isPo = deliveryMode === 'po';
   const supplier = supplierSelection(product, selected.variant || null);
+  const workflow = workflowSelection(product, selected.variant || null);
   const isSupplier = Boolean(supplier);
   let liveSupplierCostUnit = null;
   if (isSupplier) {
+    if (!prodseller.configured()) {
+      throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
+    }
     try {
-      if (supplier.source === 'prodseller') {
-        if (!prodseller.configured()) throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
-        const availability = await prodseller.getAvailability(supplier.productId, { force: true });
-        if (availability.availableStock < qty) throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, availability.availableStock) });
-        if (availability.unitPrice > 0) {
-          const settings = await db.getShopSettings();
-          const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-          liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
-          if (selected.variant) {
-            const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === selected.index ? { ...variant, cost_price: liveSupplierCostUnit, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString() } : variant);
-            db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
-          } else db.updateProductByCode(product.kode, { supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString(), cost_price: liveSupplierCostUnit }).catch(() => null);
+      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+      if (availability.availableStock < qty) {
+        throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', {
+          available_stock: Math.max(0, availability.availableStock)
+        });
+      }
+      if (availability.unitPrice > 0) {
+        const settings = await db.getShopSettings();
+        const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+        liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
+        if (selected.variant) {
+          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === selected.index ? {
+            ...variant,
+            cost_price: liveSupplierCostUnit,
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString()
+          } : variant);
+          db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
+        } else {
+          db.updateProductByCode(product.kode, {
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString(),
+            cost_price: liveSupplierCostUnit
+          }).catch(() => null);
         }
-      } else {
-        const availability = await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: false, waitMs: 10000 });
-        if (availability.availableStock < qty) throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', { available_stock: Math.max(0, availability.availableStock) });
-        if (availability.currency === 'IDR' && availability.unitCost > 0) liveSupplierCostUnit = Math.round(availability.unitCost);
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      if (error?.code === 'PRODSELLER_BALANCE') throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
-      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
+      if (error?.code === 'PRODSELLER_BALANCE') {
+        throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
+      }
+      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) {
+        throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
+      }
       throw httpError('Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
     }
   }
   const availableStock = selected.variant
     ? variantStock(selected.variant)
     : (Array.isArray(product.data) ? product.data.length : 0);
-  // Produk supplier otomatis memakai stok live supplier, bukan array stok lokal iLink.
-  if (!isPo && !isSupplier && availableStock < qty) {
+  if (!isPo && availableStock < qty) {
     throw httpError(`Stok tidak mencukupi. Stok tersedia: ${availableStock}.`, 409, 'INSUFFICIENT_STOCK', { available_stock: availableStock });
   }
 
@@ -663,8 +693,8 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
     afterDiscount,
     appliedCode,
     deliveryMode,
-    supplierSource: supplier?.source || '',
-    supplierProductId: supplier?.productId || ''
+    supplierSource: supplier?.source || workflow?.source || '',
+    supplierProductId: supplier?.productId || workflow?.workflowId || ''
   };
 }
 
@@ -722,7 +752,8 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     await db.releaseClaim(checkoutKey).catch(() => null);
     throw httpError(error.message || 'Payment gateway gagal membuat QRIS.', 502, 'QR_NOT_RECEIVED');
   }
-  const invoice = gatewayPayment.order_id || requestedInvoice;
+  // Pertahankan invoice lokal seperti Link Auto Order; verifikasi memakai transaction_id + nominal.
+  const invoice = requestedInvoice;
   const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const qrText = gatewayPayment.qr_string;
 
@@ -749,10 +780,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     await db.releaseClaim(checkoutKey).catch(() => null);
   }
 
-  const watcher_scheduled = paymentService.schedulePaymentWatcher({
-    invoiceRef: invoice,
-    telegramId: Number(user.id)
-  });
+  const watcher_scheduled = paymentPoll.scheduleOrderPolling(invoice);
   const qr_data_url = await QRCode.toDataURL(qrText, { width: 640, margin: 2, errorCorrectionLevel: 'M' });
 
   return {
@@ -774,7 +802,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     expires_at: expiresAt,
     qr_data_url,
     qr_download_token: qrTokenSecret() ? issueQrDownloadToken(invoice, Number(user.id), expiresAt) : '',
-    checkout_url: gatewayPayment.checkout_url || '',
+    checkout_url: '',
     payment_provider: gatewayPayment.provider,
     watcher_scheduled,
     delivery_mode: deliveryMode,
@@ -972,34 +1000,6 @@ async function getOrderStatus(user, invoice) {
   };
 }
 
-
-async function getLiveSupplierStock(user, productCode, variantKey) {
-  if (!user?.id) throw httpError('Buka Marketplace melalui Telegram untuk memperbarui stok supplier.', 401, 'TELEGRAM_REQUIRED');
-  const code = String(productCode || '').trim().toUpperCase();
-  const product = await db.getProductByCode(code);
-  if (!product || product.active === false) throw httpError('Produk tidak tersedia.', 404, 'PRODUCT_NOT_FOUND');
-  const selected = selectedProductVariant(product, variantKey);
-  const supplier = supplierSelection(product, selected.variant || null);
-  if (!supplier) return { product_code: code, variant_key: selected.key || '', supplier: false, stock: selected.variant ? variantStock(selected.variant) : (Array.isArray(product.data) ? product.data.length : 0) };
-  if (supplier.source === 'prodseller') {
-    if (!prodseller.configured()) throw httpError('Supplier ProdSeller belum dikonfigurasi.', 503, 'SUPPLIER_NOT_CONFIGURED');
-    const availability = await prodseller.getAvailability(supplier.productId, { force: true });
-    return { product_code: code, variant_key: selected.key || '', supplier: true, supplier_source: 'prodseller', stock: Math.max(0, Number(availability.availableStock || 0)) };
-  }
-  const availability = await telegramSupplier.getAvailability(supplier.productId, { live: true, force: true, allowCached: true, waitMs: 8000 });
-  return {
-    product_code: code,
-    variant_key: selected.key || '',
-    supplier: true,
-    supplier_source: 'telegram_userbot',
-    stock: Math.max(0, Number(availability.availableStock || 0)),
-    supplier_stock: availability.supplierStock == null ? null : Number(availability.supplierStock),
-    balance: availability.balance == null ? null : Number(availability.balance),
-    unit_cost: Number(availability.unitCost || 0),
-    currency: availability.currency || 'IDR'
-  };
-}
-
 async function cancelOrder(user, invoice) {
   if (!user?.id) throw httpError('Sesi Telegram tidak ditemukan.', 401, 'TELEGRAM_REQUIRED');
   const ref = String(invoice || '').trim();
@@ -1047,7 +1047,6 @@ module.exports = {
   getQrDownloadByToken,
   getQrDownload,
   getOrderStatus,
-  getLiveSupplierStock,
   cancelOrder,
   getHistory,
   httpError,

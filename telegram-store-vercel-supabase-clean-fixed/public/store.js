@@ -50,7 +50,7 @@
     quantityInput: $('quantityInput'), voucherInput: $('voucherInput'), estimatedTotal: $('estimatedTotal'), buyNowButton: $('buyNowButton'),
     paymentModal: $('paymentModal'), paymentPendingView: $('paymentPendingView'), paymentSuccessView: $('paymentSuccessView'),
     paymentExpiredView: $('paymentExpiredView'), paymentQr: $('paymentQr'), paymentCountdown: $('paymentCountdown'),
-    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'), paymentCheckoutLink: $('paymentCheckoutLink'),
+    paymentBreakdown: $('paymentBreakdown'), watcherInfo: $('watcherInfo'), downloadQrButton: $('downloadQrButton'),
     paymentBubble: $('paymentBubble'), paymentBubbleText: $('paymentBubbleText'), historyModal: $('historyModal'), historyList: $('historyList'),
     historySubtitle: $('historySubtitle'), loadingOverlay: $('loadingOverlay'), toast: $('toast'),
     confirmModal: $('confirmModal'), confirmOrderSummary: $('confirmOrderSummary'), confirmCheckoutButton: $('confirmCheckoutButton'),
@@ -599,11 +599,13 @@
       : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
     var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
     var isSupplier = String(product.supplier_source || '').toLowerCase() === 'prodseller';
+    var isWorkflow = String(product.supplier_source || '').toLowerCase() === 'telegram_workflow';
     var hasSupplierVariants = Boolean(product.has_supplier_variants);
+    var hasWorkflowVariants = Boolean(product.has_workflow_variants);
     var mixedDelivery = Boolean(product.variants && product.variants.length && product.has_po_variants && product.has_auto_variants);
     var allPoVariants = Boolean(product.variants && product.variants.length && product.has_po_variants && !product.has_auto_variants);
     var cardPo = product.variants && product.variants.length ? allPoVariants : isPo;
-    var availability = isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (hasSupplierVariants ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock))));
+    var availability = isWorkflow ? 'Otomatis' : (isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : ((hasSupplierVariants || hasWorkflowVariants) ? 'Otomatis' : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)))));
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">' + escapeHtml(availability) + '</span></div>' +
       '<div class="product-card-body">' +
@@ -611,7 +613,7 @@
         '<h3 class="product-name">' + escapeHtml(product.name) + '</h3>' +
         '<div class="product-meta"><span>★ 5.0</span><span>•</span><span>' + product.sold + ' terjual</span>' + (product.variants.length ? '<span>•</span><span>' + product.variants.length + ' varian</span>' : '') + '</div>' +
         '<div class="product-price">' + priceHtml + '</div>' +
-        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? ((isSupplier || !product.variants.length) ? 'Beli Sekarang' : 'Lihat Pilihan') : 'Stok Habis') + '</button></div>' +
+        '<div class="card-actions"><button class="button button-primary" type="button" data-open-product="' + escapeHtml(product.code) + '"' + (!product.available ? ' disabled' : '') + '>' + (product.available ? ((isSupplier || isWorkflow || !product.variants.length) ? 'Beli Sekarang' : 'Lihat Pilihan') : 'Stok Habis') + '</button></div>' +
       '</div></article>';
   }
 
@@ -632,8 +634,8 @@
     if (!state.selectedProduct) return null;
     return state.selectedProduct.variants.find(function (variant) { return variant.key === state.selectedVariantKey; }) || null;
   }
-  function selectedIsSupplier(){ var variant=activeVariant(); var source=String((variant&&variant.supplier_source)||(!variant&&state.selectedProduct&&state.selectedProduct.supplier_source)||'').toLowerCase(); return source==='prodseller'||source==='telegram_userbot'; }
-  function selectedSupplierSource(){ var variant=activeVariant(); return String((variant&&variant.supplier_source)||(!variant&&state.selectedProduct&&state.selectedProduct.supplier_source)||'').toLowerCase(); }
+  function selectedIsSupplier(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='prodseller' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='prodseller'))); }
+  function selectedIsWorkflow(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='telegram_workflow' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='telegram_workflow'))); }
   function selectedDeliveryMode() {
     if (!state.selectedProduct) return 'auto';
     var variant = activeVariant();
@@ -676,23 +678,6 @@
       els.detailDescriptionToggle.setAttribute('aria-expanded', 'false');
     }
   }
-  async function refreshSelectedSupplierStock(force) {
-    var product = state.selectedProduct;
-    if (!product || selectedSupplierSource() !== 'telegram_userbot' || !state.catalog.viewer.telegram_ready) return null;
-    var variant = activeVariant();
-    try {
-      var result = await api('supplier-stock', { body: { product_code: product.code, variant_key: variant ? variant.key : '' } });
-      var stock = Math.max(0, Number(result.stock || 0));
-      if (variant) variant.stock = stock; else product.stock = stock;
-      renderVariants(product);
-      updateProductEstimate();
-      return result;
-    } catch (error) {
-      if (force) toast(error.message || 'Stok supplier gagal diperbarui.', true);
-      return null;
-    }
-  }
-
   function updateProductEstimate() {
     if (!state.selectedProduct) return;
     var qty = clampQuantity();
@@ -702,6 +687,7 @@
     var variant = activeVariant();
     var isPo = selectedDeliveryMode() === 'po';
     var isSupplier = selectedIsSupplier();
+    var isWorkflow = selectedIsWorkflow();
     var promo = variant && variant.promo ? variant.promo : product.promo;
     var promoAppliesToShownPrice = Boolean(promo && qty === 1 && Number(promo.original_price) === Number(unit));
     if (promoAppliesToShownPrice) {
@@ -719,14 +705,16 @@
         els.detailPromo.classList.remove('hidden');
       } else els.detailPromo.classList.add('hidden');
     }
-    els.stockHint.textContent = isSupplier ? ('Stok tersedia: ' + selectedStock() + ' · dikirim otomatis setelah pembayaran') : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock()));
-    els.detailStockBadge.textContent = isSupplier ? ('Stok ' + selectedStock()) : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock()));
-    els.buyNowButton.disabled = state.catalog.store_active === false || (!isPo && selectedStock() < 1) || (product.variants.length && !variant);
-    els.buyNowButton.textContent = isSupplier ? 'Beli Sekarang' : (isPo ? 'Pre-Order Sekarang' : 'Beli Sekarang');
+    els.stockHint.textContent = isWorkflow ? 'Diproses otomatis setelah pembayaran' : (isSupplier ? ('Stok tersedia: ' + selectedStock() + ' · dikirim otomatis setelah pembayaran') : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock())));
+    els.detailStockBadge.textContent = isWorkflow ? 'OTOMATIS' : (isSupplier ? ('Stok ' + selectedStock()) : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock())));
+    els.buyNowButton.disabled = state.catalog.store_active === false || (!isPo && !isWorkflow && selectedStock() < 1) || (product.variants.length && !variant);
+    els.buyNowButton.textContent = isWorkflow ? 'Beli Sekarang' : (isSupplier ? 'Beli Sekarang' : (isPo ? 'Pre-Order Sekarang' : 'Beli Sekarang'));
     var checkoutHelp = $('checkoutHelp');
-    if (checkoutHelp) checkoutHelp.textContent = isSupplier
-      ? 'Setelah pembayaran berhasil, produk diproses otomatis dan akun/key dikirim ke Telegram.'
-      : (isPo ? 'Setelah pembayaran berhasil, pesanan masuk sebagai PRE-ORDER. Produk/akun dikirim seller ke chat Telegram setelah disiapkan.' : 'Pembayaran QRIS berlaku 10 menit. Produk dikirim otomatis ke Telegram.');
+    if (checkoutHelp) checkoutHelp.textContent = isWorkflow
+      ? 'Setelah pembayaran berhasil, pesanan diproses otomatis melalui bot supplier dan hasil dikirim ke Telegram.'
+      : (isSupplier
+        ? 'Setelah pembayaran berhasil, produk diproses otomatis dan hasil dikirim ke Telegram.'
+        : (isPo ? 'Setelah pembayaran berhasil, pesanan masuk sebagai PRE-ORDER. Produk dikirim seller ke chat Telegram setelah disiapkan.' : 'Pembayaran QRIS berlaku 10 menit. Produk dikirim otomatis ke Telegram.'));
   }
 
   function renderVariants(product) {
@@ -738,8 +726,8 @@
       var mode = String(variant.effective_delivery_mode || variant.delivery_mode || product.delivery_mode || 'auto').toLowerCase();
       return mode === 'po' ? 'po' : 'auto';
     }
-    if (!product.variants.some(function (variant) { return variant.key === state.selectedVariantKey && (variantMode(variant) === 'po' || variant.stock > 0); })) {
-      var first = product.variants.find(function (variant) { return variantMode(variant) === 'po' || variant.stock > 0; }) || product.variants[0];
+    if (!product.variants.some(function (variant) { return variant.key === state.selectedVariantKey && (String(variant.supplier_source||'').toLowerCase()==='telegram_workflow' || variantMode(variant) === 'po' || variant.stock > 0); })) {
+      var first = product.variants.find(function (variant) { return String(variant.supplier_source||'').toLowerCase()==='telegram_workflow' || variantMode(variant) === 'po' || variant.stock > 0; }) || product.variants[0];
       state.selectedVariantKey = first ? first.key : '';
     }
     els.variantHint.textContent = product.variants.length + ' pilihan';
@@ -748,8 +736,9 @@
         ? '<span class="variant-price"><strong>' + escapeHtml(rupiah(variant.promo.final_price)) + '</strong><del>' + escapeHtml(rupiah(variant.price)) + '</del></span>'
         : '<span class="variant-price"><strong>' + escapeHtml(rupiah(variant.price)) + '</strong></span>';
       var mode = variantMode(variant);
-      var unavailable = mode !== 'po' && variant.stock < 1;
-      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (mode === 'po' ? 'Pre-Order' : ('Stok ' + variant.stock)) + '</small></button>';
+      var workflowVariant = String(variant.supplier_source||'').toLowerCase()==='telegram_workflow';
+      var unavailable = !workflowVariant && mode !== 'po' && variant.stock < 1;
+      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (workflowVariant ? 'Otomatis' : (mode === 'po' ? 'Pre-Order' : ('Stok ' + variant.stock))) + '</small></button>';
     }).join('');
     els.variantOptions.querySelectorAll('[data-variant]').forEach(function (button) {
       button.addEventListener('click', function () {
@@ -758,7 +747,6 @@
         var variant = activeVariant();
         setDetailDescription((variant && variant.description) || product.description || 'Tidak ada deskripsi.');
         els.detailTerms.textContent = (variant && variant.terms) || product.terms || 'Tidak ada ketentuan khusus.';
-        if (selectedSupplierSource() === 'telegram_userbot') refreshSelectedSupplierStock(false);
       });
     });
   }
@@ -783,7 +771,6 @@
     renderVariants(product);
     updateProductEstimate();
     openModal(els.productModal);
-    if (selectedSupplierSource() === 'telegram_userbot') refreshSelectedSupplierStock(false);
   }
 
   async function openCheckoutConfirmation() {
@@ -809,7 +796,7 @@
         ['Produk', preview.product || product.name],
         ['Varian', preview.variant || 'Tanpa varian'],
         ['Jumlah', Number(preview.quantity || qty) + ' item'],
-        ['Pengiriman', String(preview.supplier_source || product.supplier_source || '').toLowerCase()==='prodseller' ? 'Otomatis setelah pembayaran' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
+        ['Pengiriman', ['prodseller','telegram_workflow'].includes(String(preview.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Otomatis setelah pembayaran' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
         ['Subtotal', rupiah(preview.subtotal || 0)]
       ];
       if (Number(preview.discount || 0) > 0) {
@@ -865,9 +852,9 @@
         if (els.paymentSuccessText) {
           var used = Number(payment.wallet_main_used || 0) + Number(payment.wallet_referral_used || 0);
           var poWaiting = payment.status === 'awaiting_delivery' || String(payment.delivery_mode || '') === 'po';
-          var supplierWaiting = poWaiting && String(payment.supplier_source || product.supplier_source || '').toLowerCase()==='prodseller';
+          var supplierWaiting = poWaiting && ['prodseller','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase());
           els.paymentSuccessText.textContent = supplierWaiting
-            ? 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong. Sistem sedang mengambil produk dari supplier dan akan mengirim akun/key ke chat Telegram Anda.'
+            ? 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.'
             : (poWaiting ? 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong. Pesanan PRE-ORDER sudah masuk dan produk/akun akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong dan produk dikirim ke chat Telegram Anda.');
         }
         openModal(els.paymentModal);
@@ -877,7 +864,7 @@
       } else {
         state.activePayment = payment;
         if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = 'Pembayaran Berhasil';
-        if (els.paymentSuccessText) els.paymentSuccessText.textContent = String(payment.supplier_source || product.supplier_source || '').toLowerCase()==='prodseller' ? 'Pembayaran berhasil. Sistem akan mengambil produk dari supplier dan mengirim akun/key ke chat Telegram Anda.' : (String(payment.delivery_mode || '') === 'po' ? 'Pembayaran berhasil. Pesanan PRE-ORDER akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Produk telah diproses dan dikirim ke chat Telegram Anda.');
+        if (els.paymentSuccessText) els.paymentSuccessText.textContent = ['prodseller','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Pembayaran berhasil. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.' : (String(payment.delivery_mode || '') === 'po' ? 'Pembayaran berhasil. Pesanan PRE-ORDER akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Produk telah diproses dan dikirim ke chat Telegram Anda.');
         showPayment(payment);
       }
     } catch (error) {
@@ -936,14 +923,7 @@
     els.paymentExpiredView.classList.add('hidden');
     els.paymentQr.src = payment.qr_data_url;
     els.paymentBreakdown.innerHTML = paymentRows(payment);
-    if (els.paymentCheckoutLink) {
-      els.paymentCheckoutLink.classList.toggle('hidden', !payment.checkout_url);
-      if (payment.checkout_url) els.paymentCheckoutLink.href = payment.checkout_url;
-      else els.paymentCheckoutLink.removeAttribute('href');
-    }
-    els.watcherInfo.textContent = payment.watcher_scheduled
-      ? 'Sistem memeriksa pembayaran otomatis. Tombol cek hanya sebagai cadangan.'
-      : 'Webhook pembayaran tetap aktif. Gunakan tombol cek jika status belum berubah.';
+    els.watcherInfo.textContent = 'Setelah membayar, tekan tombol Cek Pembayaran agar pesanan segera diproses.';
     startPaymentTimers();
     if (shouldOpen !== false) openModal(els.paymentModal);
     updatePaymentBubble();
@@ -1011,10 +991,10 @@
         clearPaymentTimers(); clearActivePaymentStorage(); state.paymentStatus = 'success'; updatePaymentBubble();
         els.paymentPendingView.classList.add('hidden'); els.paymentSuccessView.classList.remove('hidden'); els.paymentExpiredView.classList.add('hidden');
         var poWaiting = status.status === 'awaiting_delivery' || String(status.delivery_mode || state.activePayment.delivery_mode || '') === 'po';
-        var supplierWaiting = poWaiting && String(status.supplier_source || state.activePayment.supplier_source || '').toLowerCase()==='prodseller';
-        if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = supplierWaiting ? 'Pembayaran Berhasil · Auto Supplier' : (poWaiting ? 'Pembayaran Berhasil · PRE-ORDER' : 'Pembayaran Berhasil');
+        var supplierWaiting = poWaiting && ['prodseller','telegram_workflow'].includes(String(status.supplier_source || state.activePayment.supplier_source || '').toLowerCase());
+        if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = supplierWaiting ? 'Pembayaran Berhasil · Diproses Otomatis' : (poWaiting ? 'Pembayaran Berhasil · PRE-ORDER' : 'Pembayaran Berhasil');
         if (els.paymentSuccessText) els.paymentSuccessText.textContent = supplierWaiting
-          ? 'Pembayaran sudah terdeteksi. Sistem sedang mengambil akun/key dari supplier dan akan mengirimkannya ke chat Telegram Anda.'
+          ? 'Pembayaran sudah terdeteksi. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.'
           : (poWaiting ? 'Pembayaran sudah terdeteksi. Pesanan PRE-ORDER sedang menunggu seller menyiapkan produk/akun dan akan dikirim ke chat Telegram Anda.' : 'Produk telah diproses dan dikirim ke chat Telegram Anda.');
         if (!els.paymentModal.classList.contains('show')) openModal(els.paymentModal);
         if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch (_) {}

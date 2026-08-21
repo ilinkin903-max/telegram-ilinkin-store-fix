@@ -16,6 +16,7 @@ const {
 } = require('../lib/paymentService');
 const tg = require('../lib/telegram');
 const { config } = require('../lib/config');
+const db = require('../lib/db');
 
 
 test('normalisasi response AutoGoPay generate dan status settlement', () => {
@@ -153,7 +154,7 @@ test('pencocokan project Pakasir tidak sensitif huruf besar kecil', () => {
 });
 
 
-test('invoice produk hanya memakai tombol salin bawaan blok kode Telegram', async () => {
+test('invoice produk memakai blok kode dan tombol copy_text Telegram', async () => {
   const originalSendMessage = tg.sendMessage;
   let captured = null;
   tg.sendMessage = async (chatId, text, options) => {
@@ -172,21 +173,27 @@ test('invoice produk hanya memakai tombol salin bawaan blok kode Telegram', asyn
     assert.equal(captured.chatId, 123);
     assert.match(captured.text, /<pre>akun@example\.com\|password<\/pre>/);
     assert.equal(captured.options.parse_mode, 'HTML');
-    assert.equal(captured.options.reply_markup, undefined);
+    assert.equal(captured.options.reply_markup.inline_keyboard[0][0].copy_text.text, 'akun@example.com|password');
   } finally {
     tg.sendMessage = originalSendMessage;
   }
 });
 
-test('notifikasi owner mempertahankan format PESANAN SELESAI', async () => {
+test('notifikasi owner memakai channel transaksi dan format TRANSAKSI BERHASIL', async () => {
   const originalSendMessage = tg.sendMessage;
-  const originalChannelLog = config.channelLog;
+  const originalGetShopSettings = db.getShopSettings;
+  const originalClaimOnce = db.claimOnce;
+  const originalMarkClaimDone = db.markClaimDone;
+  const originalReleaseClaim = db.releaseClaim;
   let captured = null;
-  config.channelLog = '@log_test';
   tg.sendMessage = async (chatId, text) => {
     captured = { chatId, text };
     return { ok: true };
   };
+  db.getShopSettings = async () => ({ transaction_notifications_enabled: true, transaction_channel_id: '@log_test' });
+  db.claimOnce = async () => true;
+  db.markClaimDone = async () => true;
+  db.releaseClaim = async () => true;
 
   try {
     await sendOwnerLog(
@@ -196,7 +203,7 @@ test('notifikasi owner mempertahankan format PESANAN SELESAI', async () => {
       { username: 'triyafwemfa' }
     );
     assert.equal(captured.chatId, '@log_test');
-    assert.match(captured.text, /^✅ PESANAN SELESAI\n=======================/);
+    assert.match(captured.text, /^✅ TRANSAKSI BERHASIL\n=======================/);
     assert.match(captured.text, /User: @triyafwemfa/);
     assert.match(captured.text, /Trx ID: 68C83CE131A3/);
     assert.match(captured.text, /Produk: ChatGPT - Plus/);
@@ -207,6 +214,9 @@ test('notifikasi owner mempertahankan format PESANAN SELESAI', async () => {
     assert.match(captured.text, /Tanggal:/);
   } finally {
     tg.sendMessage = originalSendMessage;
-    config.channelLog = originalChannelLog;
+    db.getShopSettings = originalGetShopSettings;
+    db.claimOnce = originalClaimOnce;
+    db.markClaimDone = originalMarkClaimDone;
+    db.releaseClaim = originalReleaseClaim;
   }
 });

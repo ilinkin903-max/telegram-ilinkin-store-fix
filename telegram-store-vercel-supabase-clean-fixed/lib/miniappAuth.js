@@ -48,8 +48,9 @@ function getMiniAppUser(req) {
 
 function assertOwnerMiniApp(req) {
   const user = getMiniAppUser(req);
-  if (!user || Number(user.id) !== Number(config.ownerId)) {
-    const err = new Error('Unauthorized Mini App user. Buka panel dari tombol /reseller owner di Telegram.');
+  const allowedOwners = Array.isArray(config.ownerIds) && config.ownerIds.length ? config.ownerIds : [config.ownerId].filter(Boolean);
+  if (!user || !allowedOwners.includes(Number(user.id))) {
+    const err = new Error('Unauthorized Mini App user. Buka Dashboard Owner dari tombol bot Telegram.');
     err.statusCode = 401;
     throw err;
   }

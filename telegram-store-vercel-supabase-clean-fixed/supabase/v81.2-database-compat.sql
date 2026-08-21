@@ -1421,6 +1421,410 @@ grant execute on function public.register_bot_user_v66(jsonb, text, boolean, int
 
 
 
+-- ============================================================
+-- v81.2.1 FIX: prerequisite v68 Marketplace + PRE-ORDER
+-- Wajib ada sebelum migration v69 karena v69 memakai:
+--   products.delivery_mode
+--   transactions.delivery_mode/delivery_status
+--   po_orders
+-- ============================================================
+
+-- v68: Marketplace polish + sistem Pre-Order (PO) manual fulfillment.
+-- Jalankan setelah v62, v63, v64, v65, dan v66.
+
+create extension if not exists pgcrypto;
+
+alter table public.products
+  add column if not exists delivery_mode text not null default 'auto';
+
+update public.products
+set delivery_mode = 'auto'
+where delivery_mode is null or lower(delivery_mode) not in ('auto','po');
+
+alter table public.products drop constraint if exists products_delivery_mode_check;
+alter table public.products add constraint products_delivery_mode_check
+  check (delivery_mode in ('auto','po'));
+
+alter table public.transactions add column if not exists delivery_mode text not null default 'auto';
+alter table public.transactions add column if not exists delivery_status text not null default 'delivered';
+alter table public.transactions add column if not exists delivered_at timestamptz;
+alter table public.transactions add column if not exists delivered_by bigint;
+
+update public.transactions
+set delivery_mode = coalesce(nullif(delivery_mode,''),'auto'),
+    delivery_status = coalesce(nullif(delivery_status,''),'delivered'),
+    delivered_at = coalesce(delivered_at, created_at)
+where delivery_mode is null
+   or delivery_status is null
+   or (delivery_mode = 'auto' and delivery_status = 'delivered' and delivered_at is null);
+
+alter table public.transactions drop constraint if exists transactions_delivery_mode_check;
+alter table public.transactions add constraint transactions_delivery_mode_check
+  check (delivery_mode in ('auto','po'));
+alter table public.transactions drop constraint if exists transactions_delivery_status_check;
+alter table public.transactions add constraint transactions_delivery_status_check
+  check (delivery_status in ('waiting_delivery','delivered','canceled'));
+
+create table if not exists public.po_orders (
+  id uuid primary key default gen_random_uuid(),
+  order_ref text not null unique,
+  telegram_id bigint not null,
+  username text,
+  product_code text not null,
+  product_name text not null,
+  variant_key text not null default '',
+  variant_name text not null default '',
+  quantity integer not null default 1,
+  total_price integer not null default 0,
+  payment_method text not null default 'gateway',
+  status text not null default 'waiting_delivery',
+  delivery_text text not null default '',
+  paid_at timestamptz not null default now(),
+  delivered_at timestamptz,
+  delivered_by bigint,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint po_orders_status_check check (status in ('waiting_delivery','delivered','canceled'))
+);
+
+create index if not exists po_orders_status_created_idx on public.po_orders(status, created_at desc);
+create index if not exists po_orders_telegram_idx on public.po_orders(telegram_id, created_at desc);
+
+create or replace function public.fulfill_po_order_v68(
+  p_order jsonb,
+  p_product_code text,
+  p_total_price integer,
+  p_buyer jsonb default '{}'::jsonb,
+  p_use_wallet boolean default false
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice text := trim(coalesce(p_order->>'invoice_ref', ''));
+  v_product_code text := trim(coalesce(p_product_code, p_order->>'product_code', ''));
+  v_variant_key text := trim(coalesce(p_order->>'variant_key', ''));
+  v_variant_name text := trim(coalesce(p_order->>'variant_name', ''));
+  v_quantity integer := greatest(1, coalesce(nullif(p_order->>'quantity', '')::integer, 1));
+  v_telegram_id bigint := coalesce(nullif(p_order->>'telegram_id', '')::bigint, 0);
+  v_unit_price integer := greatest(0, coalesce(nullif(p_order->>'unit_price', '')::integer, 0));
+  v_payment_fee integer := greatest(0, coalesce(nullif(p_order->>'fee', '')::integer, 0));
+  v_cost_unit integer := greatest(0, coalesce(nullif(p_order->>'cost_unit', '')::integer, 0));
+  v_cost_total integer := greatest(0, coalesce(nullif(p_order->>'cost_total', '')::integer, 0));
+  v_cost_source text := trim(coalesce(p_order->>'cost_source', 'unset'));
+  v_voucher_code text := trim(coalesce(p_order->>'voucher_code', ''));
+  v_payment_method text := case when p_use_wallet then 'wallet' else trim(coalesce(p_order->>'payment_method','gateway')) end;
+  v_now timestamptz := now();
+  v_product public.products%rowtype;
+  v_user public.bot_users%rowtype;
+  v_transaction public.transactions%rowtype;
+  v_po public.po_orders%rowtype;
+  v_variant jsonb;
+  v_variant_idx integer;
+  v_variants jsonb;
+  v_profit integer;
+  v_inserted_id uuid;
+  v_main_used bigint := 0;
+  v_ref_used bigint := 0;
+  v_remaining bigint := 0;
+begin
+  if v_invoice = '' then raise exception 'INVOICE_REQUIRED'; end if;
+  if v_product_code = '' then raise exception 'PRODUCT_CODE_REQUIRED'; end if;
+  if v_telegram_id <= 0 then raise exception 'TELEGRAM_ID_INVALID'; end if;
+  if p_total_price is null or p_total_price < 0 then raise exception 'TOTAL_PRICE_INVALID'; end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('invoice:' || v_invoice, 0));
+
+  select * into v_transaction from public.transactions where order_ref = v_invoice limit 1;
+  if found then
+    select * into v_po from public.po_orders where order_ref = v_invoice limit 1;
+    return jsonb_build_object(
+      'already_completed', true,
+      'po_waiting', coalesce(v_transaction.delivery_status,'') = 'waiting_delivery',
+      'delivered', coalesce(v_transaction.delivered_items, '[]'::jsonb),
+      'transaction', to_jsonb(v_transaction),
+      'po_order', case when v_po.id is null then null else to_jsonb(v_po) end
+    );
+  end if;
+
+  select * into v_product
+    from public.products
+   where upper(code) = upper(v_product_code)
+   limit 1
+   for update;
+  if not found then raise exception 'PRODUCT_NOT_FOUND'; end if;
+  if lower(coalesce(v_product.delivery_mode,'auto')) <> 'po' then raise exception 'PRODUCT_NOT_PO'; end if;
+
+  if v_variant_key <> '' then
+    select (ord - 1)::integer, elem into v_variant_idx, v_variant
+      from jsonb_array_elements(coalesce(v_product.variants, '[]'::jsonb)) with ordinality as t(elem, ord)
+     where upper(regexp_replace(
+       coalesce(elem->>'sku', elem->>'kode', elem->>'key', elem->>'name', elem->>'nama', 'VAR' || ord::text),
+       '\s+', '-', 'g'
+     )) = upper(v_variant_key)
+     limit 1;
+    if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
+    if coalesce((v_variant->>'active')::boolean, true) = false then raise exception 'VARIANT_INACTIVE'; end if;
+  end if;
+
+  if p_use_wallet then
+    select * into v_user from public.bot_users where telegram_id = v_telegram_id for update;
+    if not found then raise exception 'USER_NOT_FOUND'; end if;
+    if coalesce(v_user.balance_main,0) + coalesce(v_user.balance_referral,0) < p_total_price then
+      raise exception 'INSUFFICIENT_WALLET_BALANCE';
+    end if;
+  end if;
+
+  if v_cost_total = 0 and v_cost_unit > 0 then v_cost_total := v_cost_unit * v_quantity; end if;
+  if v_cost_source = '' then v_cost_source := case when v_cost_total > 0 then 'snapshot' else 'unset' end; end if;
+  v_profit := case when v_cost_source = 'unset' then 0 else p_total_price - v_payment_fee - v_cost_total end;
+
+  insert into public.transactions (
+    telegram_id, username, product_name, product_code,
+    variant_key, variant_name, unit_price, quantity, total_price,
+    payment_fee, cost_unit, cost_total, cost_source, cost_updated_at,
+    profit_amount, payment_method, wallet_main_used, wallet_referral_used,
+    order_ref, delivered_items, delivered_text,
+    delivery_mode, delivery_status, created_at
+  ) values (
+    v_telegram_id,
+    nullif(trim(coalesce(p_buyer->>'username','')), ''),
+    v_product.name, v_product.code,
+    v_variant_key, v_variant_name, v_unit_price, v_quantity, p_total_price,
+    v_payment_fee, v_cost_unit, v_cost_total, v_cost_source,
+    case when v_cost_source = 'unset' then null else v_now end,
+    v_profit, v_payment_method, 0, 0,
+    v_invoice, '[]'::jsonb, '', 'po', 'waiting_delivery', v_now
+  ) on conflict (order_ref) do nothing returning id into v_inserted_id;
+
+  if v_inserted_id is null then
+    select * into v_transaction from public.transactions where order_ref = v_invoice limit 1;
+    select * into v_po from public.po_orders where order_ref = v_invoice limit 1;
+    return jsonb_build_object('already_completed', true, 'po_waiting', true, 'delivered', coalesce(v_transaction.delivered_items,'[]'::jsonb), 'transaction', to_jsonb(v_transaction), 'po_order', to_jsonb(v_po));
+  end if;
+
+  if v_variant_key <> '' then
+    v_variants := coalesce(v_product.variants, '[]'::jsonb);
+    v_variants := jsonb_set(
+      v_variants,
+      array[v_variant_idx::text, 'sold'],
+      to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold','')::integer, 0)) + v_quantity),
+      true
+    );
+    update public.products
+       set variants = v_variants,
+           sold = coalesce(sold,0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
+  else
+    update public.products
+       set sold = coalesce(sold,0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
+  end if;
+
+  if p_use_wallet then
+    v_main_used := least(coalesce(v_user.balance_main,0), p_total_price);
+    v_remaining := p_total_price - v_main_used;
+    v_ref_used := greatest(0, v_remaining);
+
+    update public.bot_users
+       set balance_main = balance_main - v_main_used,
+           balance_referral = balance_referral - v_ref_used,
+           first_name = coalesce(nullif(trim(coalesce(p_buyer->>'first_name','')), ''), first_name),
+           username = coalesce(nullif(trim(coalesce(p_buyer->>'username','')), ''), username),
+           transaction_count = coalesce(transaction_count,0) + 1,
+           spending = coalesce(spending,0) + p_total_price,
+           updated_at = v_now
+     where telegram_id = v_telegram_id
+     returning * into v_user;
+
+    if v_main_used > 0 then
+      insert into public.wallet_ledger(entry_key, telegram_id, wallet_type, direction, amount, balance_after, reason, reference, created_at)
+      values ('order:' || v_invoice || ':main', v_telegram_id, 'main', 'debit', v_main_used, v_user.balance_main, 'Pembayaran PO dengan saldo utama', v_invoice, v_now)
+      on conflict (entry_key) do nothing;
+    end if;
+    if v_ref_used > 0 then
+      insert into public.wallet_ledger(entry_key, telegram_id, wallet_type, direction, amount, balance_after, reason, reference, created_at)
+      values ('order:' || v_invoice || ':referral', v_telegram_id, 'referral', 'debit', v_ref_used, v_user.balance_referral, 'Pembayaran PO dengan saldo referral', v_invoice, v_now)
+      on conflict (entry_key) do nothing;
+    end if;
+
+    update public.transactions
+       set wallet_main_used = v_main_used,
+           wallet_referral_used = v_ref_used
+     where id = v_inserted_id
+     returning * into v_transaction;
+  else
+    insert into public.bot_users(telegram_id, first_name, username, transaction_count, spending, created_at, updated_at)
+    values (
+      v_telegram_id,
+      nullif(trim(coalesce(p_buyer->>'first_name','')), ''),
+      nullif(trim(coalesce(p_buyer->>'username','')), ''),
+      1, p_total_price, v_now, v_now
+    ) on conflict (telegram_id) do update set
+      first_name = coalesce(excluded.first_name, public.bot_users.first_name),
+      username = coalesce(excluded.username, public.bot_users.username),
+      transaction_count = coalesce(public.bot_users.transaction_count,0) + 1,
+      spending = coalesce(public.bot_users.spending,0) + p_total_price,
+      updated_at = v_now;
+
+    select * into v_transaction from public.transactions where id = v_inserted_id;
+  end if;
+
+  if v_voucher_code <> '' then
+    if upper(v_voucher_code) like 'AUTO_PROMO:%' then
+      update public.auto_promos set used_count = coalesce(used_count,0) + 1, updated_at = v_now
+       where upper(code) = upper(substring(v_voucher_code from 12));
+    else
+      update public.vouchers
+         set used_by = case
+           when coalesce(used_by,'[]'::jsonb) @> jsonb_build_array(v_telegram_id) then coalesce(used_by,'[]'::jsonb)
+           else coalesce(used_by,'[]'::jsonb) || jsonb_build_array(v_telegram_id)
+         end,
+         updated_at = v_now
+       where upper(code) = upper(v_voucher_code);
+    end if;
+  end if;
+
+  insert into public.po_orders(
+    order_ref, telegram_id, username, product_code, product_name,
+    variant_key, variant_name, quantity, total_price, payment_method,
+    status, paid_at, created_at, updated_at
+  ) values (
+    v_invoice, v_telegram_id,
+    nullif(trim(coalesce(p_buyer->>'username','')), ''),
+    v_product.code, v_product.name,
+    v_variant_key, v_variant_name, v_quantity, p_total_price, v_payment_method,
+    'waiting_delivery', v_now, v_now, v_now
+  ) on conflict (order_ref) do update set updated_at = excluded.updated_at
+  returning * into v_po;
+
+  insert into public.shop_settings(key, value, updated_at)
+  values (
+    'historical_stats',
+    jsonb_build_object('orders_total',1,'revenue_total',p_total_price,'quantity_sold',v_quantity,'cost_total',v_cost_total,'profit_total',v_profit,'updated_at',v_now),
+    v_now
+  ) on conflict (key) do update set
+    value = jsonb_build_object(
+      'orders_total', coalesce((public.shop_settings.value->>'orders_total')::numeric,0) + 1,
+      'revenue_total', coalesce((public.shop_settings.value->>'revenue_total')::numeric,0) + p_total_price,
+      'quantity_sold', coalesce((public.shop_settings.value->>'quantity_sold')::numeric,0) + v_quantity,
+      'cost_total', coalesce((public.shop_settings.value->>'cost_total')::numeric,0) + v_cost_total,
+      'profit_total', coalesce((public.shop_settings.value->>'profit_total')::numeric,0) + v_profit,
+      'updated_at', v_now
+    ), updated_at = v_now;
+
+  return jsonb_build_object(
+    'already_completed', false,
+    'po_waiting', true,
+    'delivered', '[]'::jsonb,
+    'transaction', to_jsonb(v_transaction),
+    'po_order', to_jsonb(v_po),
+    'wallet', case when p_use_wallet then jsonb_build_object(
+      'main_used',v_main_used,
+      'referral_used',v_ref_used,
+      'balance_main',v_user.balance_main,
+      'balance_referral',v_user.balance_referral
+    ) else null end
+  );
+end;
+$$;
+
+create or replace function public.fulfill_po_paid_order_v68(
+  p_order jsonb,
+  p_product_code text,
+  p_total_price integer,
+  p_buyer jsonb default '{}'::jsonb
+) returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select public.fulfill_po_order_v68(p_order, p_product_code, p_total_price, p_buyer, false);
+$$;
+
+create or replace function public.fulfill_po_wallet_order_v68(
+  p_order jsonb,
+  p_product_code text,
+  p_total_price integer,
+  p_buyer jsonb default '{}'::jsonb
+) returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select public.fulfill_po_order_v68(p_order, p_product_code, p_total_price, p_buyer, true);
+$$;
+
+create or replace function public.mark_po_delivered_v68(
+  p_order_ref text,
+  p_delivery_text text,
+  p_actor_id bigint default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ref text := trim(coalesce(p_order_ref,''));
+  v_text text := trim(coalesce(p_delivery_text,''));
+  v_po public.po_orders%rowtype;
+  v_transaction public.transactions%rowtype;
+  v_items jsonb := '[]'::jsonb;
+  v_now timestamptz := now();
+begin
+  if v_ref = '' then raise exception 'ORDER_REF_REQUIRED'; end if;
+  if v_text = '' then raise exception 'DELIVERY_TEXT_REQUIRED'; end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('po-delivery:' || v_ref,0));
+  select * into v_po from public.po_orders where order_ref = v_ref for update;
+  if not found then raise exception 'PO_NOT_FOUND'; end if;
+  if v_po.status = 'delivered' then
+    select * into v_transaction from public.transactions where order_ref = v_ref limit 1;
+    return jsonb_build_object('already_delivered',true,'po_order',to_jsonb(v_po),'transaction',to_jsonb(v_transaction));
+  end if;
+  if v_po.status <> 'waiting_delivery' then raise exception 'PO_NOT_WAITING_DELIVERY'; end if;
+
+  select coalesce(jsonb_agg(line order by ord),'[]'::jsonb) into v_items
+  from (
+    select trim(value) as line, ord
+    from regexp_split_to_table(v_text, E'\\r?\\n') with ordinality as t(value,ord)
+    where trim(value) <> ''
+  ) s;
+
+  update public.po_orders
+     set status = 'delivered', delivery_text = v_text,
+         delivered_at = v_now, delivered_by = p_actor_id, updated_at = v_now
+   where id = v_po.id
+   returning * into v_po;
+
+  update public.transactions
+     set delivery_status = 'delivered', delivered_text = v_text,
+         delivered_items = v_items, delivered_at = v_now, delivered_by = p_actor_id
+   where order_ref = v_ref
+   returning * into v_transaction;
+
+  return jsonb_build_object('already_delivered',false,'po_order',to_jsonb(v_po),'transaction',to_jsonb(v_transaction));
+end;
+$$;
+
+revoke all on function public.fulfill_po_order_v68(jsonb,text,integer,jsonb,boolean) from public, anon, authenticated;
+revoke all on function public.fulfill_po_paid_order_v68(jsonb,text,integer,jsonb) from public, anon, authenticated;
+revoke all on function public.fulfill_po_wallet_order_v68(jsonb,text,integer,jsonb) from public, anon, authenticated;
+revoke all on function public.mark_po_delivered_v68(text,text,bigint) from public, anon, authenticated;
+grant execute on function public.fulfill_po_order_v68(jsonb,text,integer,jsonb,boolean) to service_role;
+grant execute on function public.fulfill_po_paid_order_v68(jsonb,text,integer,jsonb) to service_role;
+grant execute on function public.fulfill_po_wallet_order_v68(jsonb,text,integer,jsonb) to service_role;
+grant execute on function public.mark_po_delivered_v68(text,text,bigint) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================
+-- END v81.2.1 prerequisite v68
+-- ============================================================
+
 -- BEGIN bundled v69-po-variant-voucher-ui
 -- v69 — PRE-ORDER per varian + checkout voucher preview/UI
 -- Jalankan setelah update-v68-marketplace-po.sql.
@@ -1797,90 +2201,169 @@ create table if not exists public.supplier_orders (
 create index if not exists supplier_orders_status_idx on public.supplier_orders (status, updated_at desc);
 create index if not exists supplier_orders_supplier_order_idx on public.supplier_orders (supplier, supplier_order_id);
 
--- ==========================================================
--- v82.0 - Telegram supplier workflow recorder
--- ==========================================================
--- Link Auto Order v82.0 - Telegram Supplier Workflow Recorder
--- Additive migration. Does not remove existing products/orders/supplier data.
+-- ============================================================
+-- v81.2 DATABASE COMPATIBILITY
+-- Migrasi aman dari Account Factory / Link Auto Account (af_*)
+-- ke struktur v79/v81 tanpa menghapus tabel atau data lama.
+-- ============================================================
 
-create extension if not exists pgcrypto;
+-- Pindahkan produk lama dan stok yang MASIH tersedia.
+do $$
+begin
+  if to_regclass('public.af_products') is not null then
+    insert into public.products (
+      id, name, code, price, cost_price, description, terms,
+      image_url, category, bulk_prices, variants, active, stock, sold,
+      display_scope, delivery_mode,
+      supplier_source, supplier_product_id,
+      supplier_price_usdt, supplier_public_price_usdt,
+      supplier_stock, supplier_synced_at,
+      created_at, updated_at
+    )
+    select
+      p.id,
+      p.name,
+      'AF-' || upper(substr(replace(p.id::text, '-', ''), 1, 12)) as code,
+      greatest(0, round(coalesce(p.price_per_account, 0)))::integer as price,
+      0 as cost_price,
+      coalesce(p.description, '') as description,
+      coalesce(to_jsonb(p)->>'terms_and_conditions', '') as terms,
+      '' as image_url,
+      case
+        when lower(coalesce(p.source_mode, '')) = 'prodseller' then 'Reseller'
+        else 'Produk Digital'
+      end as category,
+      '[]'::jsonb as bulk_prices,
+      '[]'::jsonb as variants,
+      coalesce(p.is_active, true) as active,
+      case
+        when to_regclass('public.af_inventory_items') is null then '[]'::jsonb
+        else coalesce((
+          select jsonb_agg(i.payload order by i.created_at, i.id)
+          from public.af_inventory_items i
+          where i.product_id = p.id
+            and i.status = 'available'
+        ), '[]'::jsonb)
+      end as stock,
+      case
+        when to_regclass('public.af_inventory_items') is null then 0
+        else coalesce((
+          select count(*)::integer
+          from public.af_inventory_items i
+          where i.product_id = p.id
+            and i.status in ('consumed', 'delivered')
+        ), 0)
+      end as sold,
+      'both' as display_scope,
+      'auto' as delivery_mode,
+      case when lower(coalesce(p.source_mode, '')) = 'prodseller' then 'prodseller' else '' end as supplier_source,
+      case when lower(coalesce(p.source_mode, '')) = 'prodseller' then coalesce(p.external_code, '') else '' end as supplier_product_id,
+      0::numeric(14,4) as supplier_price_usdt,
+      0::numeric(14,4) as supplier_public_price_usdt,
+      null::integer as supplier_stock,
+      null::timestamptz as supplier_synced_at,
+      coalesce(p.created_at, now()),
+      coalesce(p.updated_at, now())
+    from public.af_products p
+    on conflict (id) do update set
+      name = excluded.name,
+      price = excluded.price,
+      description = excluded.description,
+      terms = case when trim(public.products.terms) = '' then excluded.terms else public.products.terms end,
+      active = excluded.active,
+      stock = case
+        when jsonb_array_length(coalesce(public.products.stock, '[]'::jsonb)) = 0 then excluded.stock
+        else public.products.stock
+      end,
+      sold = greatest(public.products.sold, excluded.sold),
+      supplier_source = case when public.products.supplier_source = '' then excluded.supplier_source else public.products.supplier_source end,
+      supplier_product_id = case when public.products.supplier_product_id = '' then excluded.supplier_product_id else public.products.supplier_product_id end,
+      updated_at = now();
+  end if;
+end $$;
 
-create table if not exists public.reseller_workflows (
-  id uuid primary key default gen_random_uuid(),
-  name text not null default '',
-  product_code text not null default '',
-  variant_key text not null default '',
-  target_username text not null default '',
-  active boolean not null default false,
-  sample_quantity integer not null default 1,
-  step_timeout_ms integer not null default 7000,
-  last_message_id bigint,
-  last_message_snapshot jsonb not null default '{}'::jsonb,
-  previous_link_snapshot jsonb not null default '{}'::jsonb,
-  created_by bigint,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+-- Pindahkan user lama supaya daftar user/broadcast tetap terisi.
+do $$
+begin
+  if to_regclass('public.af_bot_users') is not null then
+    insert into public.bot_users (
+      telegram_id, first_name, username, created_at, updated_at
+    )
+    select
+      u.telegram_id,
+      nullif(trim(coalesce(u.first_name, '')), ''),
+      nullif(trim(coalesce(u.username, '')), ''),
+      coalesce(u.created_at, now()),
+      coalesce(u.updated_at, u.last_seen_at, now())
+    from public.af_bot_users u
+    on conflict (telegram_id) do update set
+      first_name = coalesce(excluded.first_name, public.bot_users.first_name),
+      username = coalesce(excluded.username, public.bot_users.username),
+      updated_at = greatest(public.bot_users.updated_at, excluded.updated_at);
+  end if;
+end $$;
 
-alter table public.reseller_workflows add column if not exists previous_link_snapshot jsonb not null default '{}'::jsonb;
+-- Pindahkan saldo utama dan referral tanpa menimpa saldo baru yang sudah terisi.
+do $$
+begin
+  if to_regclass('public.af_user_wallets') is not null then
+    insert into public.bot_users (telegram_id, created_at, updated_at)
+    select w.telegram_id, now(), now()
+    from public.af_user_wallets w
+    on conflict (telegram_id) do nothing;
 
-create index if not exists reseller_workflows_product_idx
-  on public.reseller_workflows (product_code, variant_key, active, updated_at desc);
-create index if not exists reseller_workflows_target_idx
-  on public.reseller_workflows (target_username, active, updated_at desc);
+    update public.bot_users b
+       set balance_main = case
+             when coalesce(b.balance_main, 0) = 0 then greatest(0, round(w.main_balance))::bigint
+             else b.balance_main
+           end,
+           balance_referral = case
+             when coalesce(b.balance_referral, 0) = 0 then greatest(0, round(w.referral_balance))::bigint
+             else b.balance_referral
+           end,
+           updated_at = now()
+      from public.af_user_wallets w
+     where b.telegram_id = w.telegram_id;
+  end if;
+end $$;
 
-create table if not exists public.reseller_workflow_steps (
-  id uuid primary key default gen_random_uuid(),
-  workflow_id uuid not null references public.reseller_workflows(id) on delete cascade,
-  step_order integer not null,
-  action_type text not null check (action_type in ('text','button')),
-  action_value text not null default '',
-  preview_value text not null default '',
-  response_snapshot jsonb not null default '{}'::jsonb,
-  capture_result boolean not null default false,
-  created_at timestamptz not null default now(),
-  unique(workflow_id, step_order)
-);
+-- Pastikan semua user punya referral_code setelah migrasi.
+update public.bot_users
+set referral_code = upper(substr(encode(digest(telegram_id::text || ':' || gen_random_uuid()::text, 'sha256'), 'hex'), 1, 10)),
+    updated_at = now()
+where trim(coalesce(referral_code, '')) = '';
 
-create index if not exists reseller_workflow_steps_workflow_idx
-  on public.reseller_workflow_steps (workflow_id, step_order);
+-- Pindahkan nama toko/pesan sambutan bila tersedia dan setting baru masih kosong.
+do $$
+declare
+  v_store_name text;
+  v_welcome text;
+begin
+  if to_regclass('public.af_app_settings') is not null then
+    select nullif(trim(value #>> '{}'), '') into v_store_name
+      from public.af_app_settings where key = 'store_name' limit 1;
+    select nullif(trim(value #>> '{}'), '') into v_welcome
+      from public.af_app_settings where key = 'welcome_text' limit 1;
 
-create table if not exists public.reseller_workflow_runs (
-  id uuid primary key default gen_random_uuid(),
-  order_ref text not null unique,
-  workflow_id uuid not null references public.reseller_workflows(id) on delete restrict,
-  telegram_id bigint,
-  product_code text not null default '',
-  variant_key text not null default '',
-  quantity integer not null default 1,
-  status text not null default 'queued',
-  current_step integer not null default 0,
-  result_text text not null default '',
-  last_message_id bigint,
-  last_message_snapshot jsonb not null default '{}'::jsonb,
-  error_code text not null default '',
-  error_message text not null default '',
-  started_at timestamptz,
-  finished_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+    if v_store_name is not null then
+      insert into public.shop_settings(key, value, updated_at)
+      values ('store_name', to_jsonb(v_store_name), now())
+      on conflict (key) do nothing;
+    end if;
+    if v_welcome is not null then
+      insert into public.shop_settings(key, value, updated_at)
+      values ('store_description', to_jsonb(v_welcome), now())
+      on conflict (key) do nothing;
+    end if;
+  end if;
+end $$;
 
-create index if not exists reseller_workflow_runs_status_idx
-  on public.reseller_workflow_runs (status, updated_at desc);
-create index if not exists reseller_workflow_runs_workflow_idx
-  on public.reseller_workflow_runs (workflow_id, updated_at desc);
-
--- Service-role based backend owns these tables. Keep RLS enabled without public policies.
-alter table public.reseller_workflows enable row level security;
-alter table public.reseller_workflow_steps enable row level security;
-alter table public.reseller_workflow_runs enable row level security;
-
--- v82 setting defaults (stored as JSONB strings, matching existing shop_settings usage).
-insert into public.shop_settings(key, value)
-values
-  ('workflow_reseller_enabled', to_jsonb('true'::text)),
-  ('workflow_step_timeout_ms', to_jsonb('7000'::text))
-on conflict (key) do nothing;
-
+-- Force PostgREST/Supabase API schema cache reload.
 notify pgrst, 'reload schema';
+
+-- Ringkasan hasil migrasi.
+select
+  (select count(*) from public.products) as total_products_v81,
+  (select count(*) from public.products where supplier_source = 'prodseller') as total_supplier_products_v81,
+  (select coalesce(sum(jsonb_array_length(stock)), 0) from public.products) as total_ready_stock_v81,
+  (select count(*) from public.bot_users) as total_users_v81;

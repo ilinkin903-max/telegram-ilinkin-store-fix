@@ -59,11 +59,11 @@ test('checkout dan fulfillment memakai Product ID milik varian yang dipilih', ()
 test('varian supplier tidak masuk PO manual dan stok lokalnya tidak dapat diedit', () => {
   const api = read('api/reseller-data.js');
   const dashboard = read('api/reseller.js');
-  assert.match(api, /supplierLinkOf\(product, variant \|\| null\)/);
-  assert.match(api, /supplierLinkOf\(poProduct, poVariant \|\| null\)/);
+  assert.match(api, /automatedSupplierLinkOf\(product, variant \|\| null\)/);
+  assert.match(api, /automatedSupplierLinkOf\(poProduct, poVariant \|\| null\)/);
   assert.match(dashboard, /SUPPLIER OTOMATIS · PRODSELLER/);
-  assert.match(dashboard, /(?:Stok|stok).*mengikuti saldo \+ stok ProdSeller/);
-  assert.match(dashboard, /isSupplierVariant\?\[\]:variantStock\(old\)/);
+  assert.match(dashboard, /SUPPLIER OTOMATIS · PRODSELLER/);
+  assert.match(dashboard, /isSupplierVariant\?\(isWorkflowVariant\?variantStock\(old\):\[\]\):variantStock\(old\)/);
 });
 
 test('produk campuran lokal dan supplier tetap didukung', () => {

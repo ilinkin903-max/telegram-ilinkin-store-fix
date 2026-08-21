@@ -63,8 +63,8 @@ test('banner bernama dipertahankan sebagai pasangan nama dan URL', () => {
       { name: 'Promo ChatGPT', url: 'https://example.com/chatgpt.jpg' }
     ])),
     [
-      { name: 'Promo Canva', url: 'https://example.com/canva.jpg' },
-      { name: 'Promo ChatGPT', url: 'https://example.com/chatgpt.jpg' }
+      { name: 'Promo Canva', url: 'https://example.com/canva.jpg', type: 'image' },
+      { name: 'Promo ChatGPT', url: 'https://example.com/chatgpt.jpg', type: 'image' }
     ]
   );
 });

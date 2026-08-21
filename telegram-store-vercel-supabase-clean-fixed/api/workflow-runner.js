@@ -1,0 +1,61 @@
+const paymentService = require('../lib/paymentService');
+const workflowRetry = require('../lib/workflowRetryScheduler');
+const { config } = require('../lib/config');
+const { getAppVersion } = require('../lib/version');
+
+function bearerToken(req) {
+  const auth = String(req.headers?.authorization || '');
+  const bearer = auth.replace(/^Bearer\s+/i, '').trim();
+  return bearer || String(req.headers?.['x-job-secret'] || '').trim();
+}
+
+function bodyOf(req) {
+  if (typeof req.body === 'string') {
+    try { return JSON.parse(req.body || '{}'); } catch (_) { return {}; }
+  }
+  return req.body || {};
+}
+
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  if (!workflowRetry.runnerSecret()) return res.status(503).json({ ok: false, error: 'JOB_RUNNER_SECRET belum diatur.' });
+  if (!workflowRetry.isAuthorized(bearerToken(req))) return res.status(401).json({ ok: false, error: 'Unauthorized.' });
+
+  const body = bodyOf(req);
+  const invoice = String(body.invoice || body.order_ref || '').trim();
+  const attempt = Math.max(0, Number(body.attempt || 0));
+  if (!invoice) return res.status(400).json({ ok: false, error: 'Invoice wajib diisi.' });
+
+  try {
+    const result = await paymentService.retryWorkflowOrder(invoice, {}, { forceRestart: false });
+    return res.status(200).json({ ok: true, version: getAppVersion(), state: 'completed', invoice, attempt, data: result });
+  } catch (error) {
+    const code = String(error?.code || '').toUpperCase();
+    const retryable = ['WORKFLOW_BUSY', 'WORKFLOW_STILL_RUNNING'].includes(code);
+    const maxAttempts = Math.max(1, Number(config.workflowRetryMaxAttempts || 18));
+    if (retryable && attempt + 1 < maxAttempts) {
+      const scheduled = workflowRetry.scheduleWorkflowRetry(invoice, attempt + 1);
+      return res.status(202).json({
+        ok: true,
+        version: getAppVersion(),
+        state: 'queued',
+        invoice,
+        attempt,
+        next_attempt: attempt + 1,
+        retry_scheduled: scheduled,
+        error: error.message || String(error)
+      });
+    }
+    // 409 sengaja: worker berhenti. Untuk status ATTENTION admin harus mengecek chat supplier
+    // sebelum mengulang agar tidak terjadi pembelian ganda.
+    return res.status(409).json({
+      ok: false,
+      version: getAppVersion(),
+      state: retryable ? 'retry_limit' : 'attention',
+      invoice,
+      attempt,
+      code: code || 'WORKFLOW_ERROR',
+      error: error.message || String(error)
+    });
+  }
+};

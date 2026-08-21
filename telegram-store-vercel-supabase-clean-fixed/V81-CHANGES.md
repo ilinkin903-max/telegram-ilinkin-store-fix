@@ -1,18 +1,28 @@
-# v81
-- Multi Telegram Userbot supplier connectors.
-- Supabase queue dengan lock per supplier bot dan stale-lock recovery.
-- Worker VPS Teleproto/MTProto dengan multi-slot concurrency.
-- Flow engine configurable: start/send/click/wait/capture/sleep.
-- Optional balance sync per connector.
-- Telegram supplier product mapping ke produk/varian iLink.
-- Live effective stock dari saldo snapshot + stok supplier.
-- Automatic fulfillment queue after payment; bukan PO manual.
-- Secure Vercel userbot bridge for final delivery to buyer.
-- Retry Telegram supplier from Supplier / Reseller.
+# V81 — Dashboard Owner & Button Reliability Fix
 
-## Reliability / anti double-order
-- Claim queue mengunci row connector + order agar dua worker tidak mengambil dua order pada bot supplier yang sama.
-- Balance sync memakai RPC lock terpisah dan tidak berjalan bersamaan dengan order connector.
-- Flow mendukung `commit:true`; timeout setelah saldo dipotong masuk `manual_review`, bukan auto-retry.
-- Hasil akun/key disimpan sebelum retry bridge; retry delivery tidak membeli ulang ke supplier.
-- Worker memakai Teleproto MTProto dan `floodSleepThreshold` untuk rate-limit pendek.
+V81 tetap memakai basis v79 dan pembayaran Link Auto Order v80. Tidak ada perubahan schema Supabase.
+
+## Perbaikan Dashboard Owner
+- Tombol `⚙️ Dashboard Owner` kembali muncul pada `/start` untuk owner.
+- Owner dapat dikonfigurasi dengan `OWNER_ID`, `OWNER_IDS`, atau `DEV_OWNER_ID`.
+- Command baru `/dashboard`; `/reseller` tetap menjadi alias.
+- Route `/dashboard` diarahkan ke Mini App dashboard yang sama dengan `/reseller`.
+- `DASHBOARD_URL` didukung sebagai alias `MINIAPP_URL`.
+- `SUPABASE_SECRET_KEY` didukung sebagai alias `SUPABASE_SERVICE_ROLE_KEY`.
+- URL relatif seperti `/dashboard` dan `/marketplace` otomatis digabung dengan `PUBLIC_URL`.
+
+## Perbaikan Tombol Bot
+- Callback query tidak lagi dijawab dua kali.
+- Tombol yang membutuhkan alert sekarang dapat menampilkan pesan alert dengan benar.
+- Tombol lama/stale memberikan pesan agar user kembali ke `/start`, bukan diam/spinner terus.
+- Bila handler tombol error setelah callback sudah dijawab, pesan aktif diganti dengan halaman error dan tombol `Menu Utama`.
+- Tombol pembayaran QRIS memberi respons `Menyiapkan QRIS...` sebelum request payment berjalan.
+- Tombol batal memberi konfirmasi dan kembali ke menu utama.
+
+## Mini App
+- Judul dashboard diubah dari `Reseller Dashboard` menjadi `Dashboard Owner`.
+- Mini App owner menerima semua ID yang didaftarkan melalui `OWNER_IDS`.
+- Dashboard tetap harus dibuka dari tombol Web App Telegram agar `initData` tersedia.
+
+## Update
+Tidak perlu SQL/migration baru. Upload patch V81 ke source V80, lalu redeploy Vercel.

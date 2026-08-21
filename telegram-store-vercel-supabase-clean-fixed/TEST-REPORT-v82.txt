@@ -1,0 +1,32 @@
+LINK AUTO ORDER v82.0.0 — FINAL TEST REPORT
+Date: 2026-08-21
+
+1. JavaScript syntax check
+   Result: PASS
+   Files checked: 59 JavaScript files under api/, lib/, public/, scripts/, tests/
+
+2. Workflow recorder targeted tests
+   Result: PASS
+   Tests: 11/11
+   Coverage highlights:
+   - dynamic placeholders
+   - mixed text + button replay
+   - workflow DB migration
+   - dashboard recorder controls
+   - fulfillment routing
+   - restore previous supplier link
+   - supplier-busy retry safety
+   - Teleproto CommonJS/ESM loader fallback
+   - workflow excluded from manual PO
+   - local stock preservation
+   - 7000 ms timeout + teleproto dependency/install command
+
+3. Full regression suite
+   Result: PASS
+   Tests: 197/197
+   Failed: 0
+
+Notes:
+- Full regression suite was executed offline with local stubs only for network/runtime dependencies (axios, dotenv, qrcode, Supabase client). No real QRIS payment, Supabase mutation, Telegram login, or supplier purchase was executed.
+- The real Teleproto package version used by package.json is 1.228.5. Vercel installCommand runs npm install so it is installed during deployment.
+- Live userbot validation still requires valid TG_API_ID, TG_API_HASH, and TG_STRING_SESSION in Vercel.

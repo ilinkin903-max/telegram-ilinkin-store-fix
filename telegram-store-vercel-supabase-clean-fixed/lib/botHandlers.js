@@ -5,8 +5,8 @@ const { config, getMiniAppUrl, getStorefrontUrl } = require('./config');
 const tg = require('./telegram');
 const db = require('./db');
 const paymentService = require('./paymentService');
+const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
-const telegramSupplier = require('./telegramSupplierService');
 const walletNotifications = require('./walletNotifications');
 const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
@@ -18,9 +18,6 @@ const botReadCache = {
   settings: { at: 0, value: null },
   products: { at: 0, value: null }
 };
-const joinMemberCache = new Map();
-const JOIN_MEMBER_CACHE_MS = 60 * 1000;
-
 
 function botCacheFresh(entry, ttl = BOT_CACHE_MS) {
   return Boolean(entry?.value) && (Date.now() - Number(entry.at || 0)) < ttl;
@@ -33,8 +30,8 @@ async function cachedStats() {
   return value;
 }
 
-async function cachedSettings() {
-  if (botCacheFresh(botReadCache.settings)) return botReadCache.settings.value;
+async function cachedSettings(force = false) {
+  if (!force && botCacheFresh(botReadCache.settings)) return botReadCache.settings.value;
   const value = await db.getShopSettings();
   botReadCache.settings = { at: Date.now(), value };
   return value;
@@ -51,86 +48,21 @@ function styledButton(text, action = {}, style = '') {
   return { text, ...action, ...(style ? { style } : {}) };
 }
 
-function requiredJoinEnabled(settings = {}) {
-  return settingEnabled(settings.join_channel_required, false);
-}
-
-function requiredChannelId(settings = {}) {
-  const direct = String(settings.join_channel_id || '').trim();
-  if (direct) {
-    if (/^-100\d+$/.test(direct) || /^@\w+$/.test(direct)) return direct;
-    if (/^[A-Za-z0-9_]{5,}$/.test(direct)) return `@${direct}`;
-  }
-  const candidates = [settings.join_channel_link, settings.group_link, config.channelStore];
-  for (const raw of candidates) {
-    const value = String(raw || '').trim();
-    if (/^@\w+$/.test(value)) return value;
-    const match = value.match(/^(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]{5,})(?:[/?#].*)?$/i);
-    if (match) return `@${match[1]}`;
-  }
-  return '';
-}
-
-function requiredChannelLink(settings = {}) {
-  const explicit = normalizeUrl(settings.join_channel_link || '');
-  if (explicit) return explicit;
-  const target = requiredChannelId(settings);
-  if (/^@/.test(target)) return `https://t.me/${target.slice(1)}`;
-  return normalizeUrl(settings.group_link || config.channelStore || '');
-}
-
-function chatMemberJoined(member = {}) {
-  const status = String(member?.status || '').toLowerCase();
-  if (['creator', 'administrator', 'member'].includes(status)) return true;
-  if (status === 'restricted') return member.is_member !== false;
-  return false;
-}
-
-function joinPromptKeyboard(settings = {}) {
-  const rows = [];
-  const link = requiredChannelLink(settings);
-  if (link) rows.push([styledButton('📢 Join Channel', { url: link }, 'primary')]);
-  rows.push([styledButton('✅ Saya Sudah Join', { callback_data: 'checkjoin' }, 'success')]);
-  return { inline_keyboard: rows };
-}
-
-async function showJoinRequired(chatId, settings = {}, query = null, extra = '') {
-  const text = `🔒 <b>JOIN CHANNEL TERLEBIH DAHULU</b>\n=======================\nUntuk menggunakan bot, kamu wajib bergabung ke channel terlebih dahulu.\n\nSetelah join, tekan tombol <b>✅ Saya Sudah Join</b>.${extra ? `\n\n${escapeHtml(extra)}` : ''}`;
-  const options = { parse_mode: 'HTML', reply_markup: joinPromptKeyboard(settings) };
-  if (query?.message?.message_id) return editMessage(query, text, options);
-  return tg.sendMessage(chatId, text, options);
-}
-
-async function ensureRequiredChannelJoin(chatId, from = {}, settings = {}, options = {}) {
-  if (!requiredJoinEnabled(settings) || isOwner(from.id)) return true;
-  const channelId = requiredChannelId(settings);
-  if (!channelId) {
-    await showJoinRequired(chatId, settings, options.query, 'Konfigurasi channel belum lengkap. Silakan hubungi admin.');
-    return false;
-  }
-  const cacheKey = `${channelId}:${Number(from.id || 0)}`;
-  const cached = joinMemberCache.get(cacheKey);
-  if (!options.force && cached && Date.now() - cached.at < JOIN_MEMBER_CACHE_MS && cached.joined) return true;
-  try {
-    const member = await tg.getChatMember(channelId, Number(from.id));
-    const joined = chatMemberJoined(member);
-    if (joined) {
-      joinMemberCache.set(cacheKey, { at: Date.now(), joined: true });
-      return true;
-    }
-    joinMemberCache.delete(cacheKey);
-    await showJoinRequired(chatId, settings, options.query);
-    return false;
-  } catch (error) {
-    console.error('Gagal cek wajib join channel:', error.message || error);
-    joinMemberCache.delete(cacheKey);
-    await showJoinRequired(chatId, settings, options.query, 'Bot belum bisa memverifikasi keanggotaan channel. Pastikan bot sudah menjadi admin channel.');
-    return false;
-  }
-}
-
 function isOwner(userId) {
-  return Number(userId) === Number(config.ownerId);
+  const id = Number(userId);
+  const owners = Array.isArray(config.ownerIds) && config.ownerIds.length ? config.ownerIds : [config.ownerId].filter(Boolean);
+  return owners.includes(id);
+}
+
+async function answerCallback(query, options = {}) {
+  if (!query?.id || query.__callbackAnswered) return null;
+  query.__callbackAnswered = true;
+  try {
+    return await tg.answerCallbackQuery(query.id, options);
+  } catch (error) {
+    console.warn('answerCallbackQuery gagal:', error.message || error);
+    return null;
+  }
 }
 
 function ownerOnlyMessage() {
@@ -216,9 +148,11 @@ function escapeHtml(value) {
 }
 
 function escapeMarkdownText(value) {
-  // Telegram Markdown legacy menerima escape untuk karakter ASCII. Meloloskan
-  // seluruh karakter pemformatan mencegah nama produk/user merusak pesan.
-  return String(value == null ? '' : value).replace(/([_*`\[])/g, '\\$1');
+  // Bot memakai parse_mode=Markdown (legacy), bukan MarkdownV2.
+  // Hanya karakter formatting legacy yang perlu di-escape. Meng-escape tanda
+  // titik, minus, tanda seru, dan karakter MarkdownV2 membuat backslash tampil
+  // mentah pada deskripsi/SnK di Telegram.
+  return String(value == null ? '' : value).replace(/([\\_*\[\]`])/g, '\\$1');
 }
 
 function formatProductInfoText(value, maxLength = 900) {
@@ -463,7 +397,7 @@ function homeKeyboard(req, userId, settings = {}) {
   ]);
   rows.push([styledButton('‹📊› Stok', { callback_data: 'stok' }, 'primary')]);
   const miniAppUrl = getMiniAppUrl(req);
-  if (miniAppUrl && isOwner(userId)) rows.push([styledButton('‹🧩› Reseller Dashboard', { web_app: { url: miniAppUrl } }, 'primary')]);
+  if (miniAppUrl && isOwner(userId)) rows.push([styledButton('‹⚙️› Dashboard Owner', { web_app: { url: miniAppUrl } }, 'primary')]);
   const csUrl = normalizeUrl(settings.customer_service_link || config.customerService);
   const groupUrl = normalizeUrl(settings.group_link || config.channelStore);
   const contactRow = [];
@@ -477,6 +411,7 @@ function homeKeyboard(req, userId, settings = {}) {
 
 
 async function editMessage(query, text, options = {}) {
+  await answerCallback(query);
   const chatId = query.message.chat.id;
   const messageId = query.message.message_id;
   try {
@@ -490,39 +425,43 @@ async function editMessage(query, text, options = {}) {
   }
 }
 
-async function buildHomeText(from, settings = {}) {
+function buildHomeTextValue(from, stats = {}, wallet = {}, settings = {}) {
+  const lines = [
+    `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋`,
+    '',
+    `Selamat datang di <b>${escapeHtml(String(settings.store_name || config.botName || 'Link Auto Order'))}</b>`
+  ];
+  if (settingEnabled(settings.show_total_users, true)) {
+    lines.push(`- 👥 Total User: <b>${Number(stats.users || 0)} User</b>`);
+  }
+  lines.push(
+    `- 🛍️ Total Transaksi: <b>${Number(stats.orders || 0)} Transaksi</b>`,
+    `- 📦 Stok Tersedia: <b>${Number(stats.stokTersedia || 0)}</b>`,
+    `- 📦 Stok Terjual: <b>${Number(stats.stokTerjual || 0)}</b>`,
+    `- 💰 Saldo: <b>${escapeHtml(formatRupiah(wallet?.balance_total || 0))}</b>`,
+    '',
+    'Silakan pilih tombol di bawah ini!'
+  );
+  return lines.join('\n');
+}
+
+async function buildHomeText(from, settings = null) {
+  const activeSettings = settings || await cachedSettings().catch(() => ({}));
   const [stats, wallet] = await Promise.all([
     cachedStats(),
     db.getWalletSummary(from.id, 1).catch(() => null)
   ]);
-  const userLine = settingEnabled(settings.bot_show_total_users, true) ? `- 👥 Total User: <b>${stats.users} User</b>\n` : '';
-  return `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
-
-` +
-    `Selamat datang di <b>${escapeHtml(config.botName)}</b>
-` +
-    userLine +
-    `- 🛍️ Total Transaksi: <b>${stats.orders} Transaksi</b>
-` +
-    `- 📦 Stok Tersedia: <b>${stats.stokTersedia}</b>
-` +
-    `- 📦 Stok Terjual: <b>${stats.stokTerjual}</b>
-` +
-    `- 💰 Saldo: <b>${escapeHtml(formatRupiah(wallet?.balance_total || 0))}</b>
-
-` +
-    `Silakan pilih tombol di bawah ini!`;
+  return buildHomeTextValue(from, stats, wallet, activeSettings);
 }
 
 async function editHome(query, req) {
   await db.upsertUser(query.from).catch((e) => console.error('upsert user gagal:', e.message));
+  const settings = await cachedSettings(true).catch(() => ({}));
   let text;
-  const settingsPromise = cachedSettings().catch(() => ({}));
-  const settings = await settingsPromise;
   try { text = await buildHomeText(query.from, settings); }
   catch (e) {
     console.error('build home gagal:', e.message);
-    text = `Halo, <b>${escapeHtml(query.from.first_name || 'Kak')}</b> 👋\n\nSelamat datang di <b>${escapeHtml(config.botName)}</b>\n\nSilakan pilih tombol di bawah ini!`;
+    text = `Halo, <b>${escapeHtml(query.from.first_name || 'Kak')}</b> 👋\n\nSelamat datang di <b>${escapeHtml(String(settings.store_name || config.botName || 'Link Auto Order'))}</b>\n\nSilakan pilih tombol di bawah ini!`;
   }
   return editMessage(query, text, {
     parse_mode: 'HTML',
@@ -533,27 +472,11 @@ async function editHome(query, req) {
 async function sendHome(chatId, from, req, options = {}) {
   const upsertPromise = options.skipUpsert ? Promise.resolve() : db.upsertUser(from).catch((e) => console.error('upsert user gagal:', e.message));
   const statsPromise = cachedStats().catch((e) => { console.error('getStats gagal:', e.message); return { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 }; });
-  const settingsPromise = cachedSettings().catch(() => ({}));
+  const settingsPromise = cachedSettings(true).catch(() => ({}));
   await upsertPromise;
   const walletPromise = db.getWalletSummary(from.id, 1).catch(() => null);
   const [stats, wallet, settings] = await Promise.all([statsPromise, walletPromise, settingsPromise]);
-  const userLine = settingEnabled(settings.bot_show_total_users, true) ? `- 👥 Total User: <b>${stats.users || 0} User</b>\n` : '';
-  const text = `Halo, <b>${escapeHtml(from.first_name || 'Kak')}</b> 👋
-
-` +
-    `Selamat datang di <b>${escapeHtml(config.botName)}</b>
-` +
-    userLine +
-    `- 🛍️ Total Transaksi: <b>${stats.orders || 0} Transaksi</b>
-` +
-    `- 📦 Stok Tersedia: <b>${stats.stokTersedia || 0}</b>
-` +
-    `- 📦 Stok Terjual: <b>${stats.stokTerjual || 0}</b>
-` +
-    `- 💰 Saldo: <b>${escapeHtml(formatRupiah(wallet?.balance_total || 0))}</b>
-
-` +
-    `Silakan pilih tombol di bawah ini!`;
+  const text = buildHomeTextValue(from, stats, wallet, settings);
 
   const reply_markup = homeKeyboard(req, from.id, settings);
   const mediaType = String(settings.start_media_type || 'none').toLowerCase();
@@ -602,6 +525,111 @@ function referralUrl(code) {
   const username = String(config.botUsername || '').trim().replace(/^@/, '');
   if (!username || !code) return '';
   return `https://t.me/${username}?start=ref_${encodeURIComponent(code)}`;
+}
+
+function requiredChannelTarget(settings = {}) {
+  const raw = String(settings.required_channel_id || '').trim();
+  if (!raw) return '';
+  if (/^-100\d+$/.test(raw) || /^@/.test(raw)) return raw;
+  const match = raw.match(/^(?:https?:\/\/)?t\.me\/([a-z0-9_]+)\/?$/i);
+  if (match) return `@${match[1]}`;
+  return raw;
+}
+
+function requiredChannelLink(settings = {}) {
+  const explicit = String(settings.required_channel_link || '').trim();
+  if (explicit) return normalizeUrl(explicit);
+  const target = requiredChannelTarget(settings);
+  return /^@/.test(target) ? normalizeUrl(target) : '';
+}
+
+function memberAllowed(member = {}) {
+  const status = String(member.status || '').toLowerCase();
+  if (['creator', 'administrator', 'member'].includes(status)) return true;
+  if (status === 'restricted') return member.is_member !== false;
+  return false;
+}
+
+async function requiredChannelState(userId, settings = {}) {
+  if (isOwner(userId) || !settingEnabled(settings.join_required_enabled, false)) return { required: false, joined: true };
+  const target = requiredChannelTarget(settings);
+  if (!target) return { required: true, joined: false, misconfigured: true, error: 'ID/username channel wajib join belum diatur.' };
+  try {
+    const member = await tg.getChatMember(target, Number(userId));
+    return { required: true, joined: memberAllowed(member), target, member };
+  } catch (error) {
+    return { required: true, joined: false, target, error: String(error?.message || error) };
+  }
+}
+
+function joinCheckCallback(refCode = '') {
+  const ref = String(refCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  return ref ? `checkjoin:${ref}` : 'checkjoin';
+}
+
+async function sendJoinRequired(chatId, from, settings = {}, options = {}) {
+  const state = options.state || await requiredChannelState(from.id, settings);
+  const link = requiredChannelLink(settings);
+  const rows = [];
+  if (link) rows.push([styledButton('📢 Join Channel', { url: link }, 'primary')]);
+  rows.push([styledButton('✅ Saya Sudah Join', { callback_data: joinCheckCallback(options.refCode) }, 'success')]);
+  const detail = state.misconfigured
+    ? '\n\n⚠️ Pengaturan channel belum lengkap. Hubungi admin.'
+    : state.error
+      ? '\n\n⚠️ Keanggotaan belum dapat diverifikasi. Pastikan bot menjadi admin channel, lalu coba lagi.'
+      : '';
+  const text = `🔒 <b>JOIN CHANNEL TERLEBIH DAHULU</b>\n\nUntuk menggunakan ${escapeHtml(String(settings.store_name || config.botName || 'Link Auto Order'))}, silakan bergabung ke channel terlebih dahulu.\n\nSetelah join, tekan tombol <b>Saya Sudah Join</b> untuk melanjutkan.${detail}`;
+  const payload = { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } };
+  if (options.query?.message?.message_id) return editMessage(options.query, text, payload);
+  return tg.sendMessage(chatId, text, payload);
+}
+
+async function registerStartReferral(from, refCode, settings, chatId) {
+  try {
+    const registration = await db.registerUserWithReferral(from, refCode, settings);
+    const reward = registration?.referral_reward;
+    if (registration?.referral_state === 'pending') {
+      await tg.sendMessage(chatId,
+        `✅ <b>REFERRAL BERHASIL TERHUBUNG</b>\nBonus untuk pengundang akan masuk setelah kamu menyelesaikan pembelian pertama.`,
+        { parse_mode: 'HTML' }
+      ).catch(() => null);
+    }
+    if (reward?.telegram_id && Number(reward.amount || 0) > 0) {
+      await tg.sendMessage(chatId,
+        `✅ <b>REFERRAL BERHASIL DIGUNAKAN</b>\nPengundang langsung menerima bonus ${escapeHtml(formatRupiah(reward.amount))}.`,
+        { parse_mode: 'HTML' }
+      ).catch(() => null);
+      const [wallet, referrer] = await Promise.all([
+        db.getWalletSummary(reward.telegram_id, 1).catch(() => null),
+        db.getUserByTelegramId(reward.telegram_id).catch(() => null)
+      ]);
+      const inviteeLabel = reward.invitee_username
+        ? '@' + String(reward.invitee_username).replace(/^@/, '')
+        : (reward.invitee_name || from.first_name || String(from.id));
+      await tg.sendMessage(reward.telegram_id,
+        `🎁 <b>BONUS REFERRAL MASUK</b>\n=======================\nPengguna yang kamu undang (${escapeHtml(inviteeLabel)}) baru membuka bot melalui link referral kamu.\n\nBonus: <b>${escapeHtml(formatRupiah(reward.amount))}</b>\nSaldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
+        { parse_mode: 'HTML' }
+      ).catch(() => null);
+      await walletNotifications.notifyReferralReward({
+        referrer: referrer || {
+          telegram_id: reward.telegram_id,
+          first_name: reward.referrer_name,
+          username: reward.referrer_username
+        },
+        referrerId: reward.telegram_id,
+        invitee: registration?.user || from,
+        inviteeId: reward.invitee_id || from.id,
+        amount: reward.amount,
+        balanceReferral: wallet?.balance_referral || 0,
+        mode: 'signup'
+      });
+    }
+    return registration;
+  } catch (error) {
+    console.error('Registrasi referral gagal:', error.message || error);
+    await db.upsertUser(from).catch(() => null);
+    return null;
+  }
 }
 
 async function sendWalletPage(chatId, from, query = null) {
@@ -664,14 +692,14 @@ async function sendWalletPage(chatId, from, query = null) {
 async function beginTopup(query) {
   const settings = await db.getShopSettings();
   if (!settingEnabled(settings.topup_enabled, true)) {
-    return tg.answerCallbackQuery(query.id, { text: 'Fitur top up sedang dinonaktifkan.', show_alert: true });
+    return answerCallback(query, { text: 'Fitur top up sedang dinonaktifkan.', show_alert: true });
   }
   if (!paymentService.paymentConfigured()) {
     return tg.sendMessage(query.from.id, `⚠️ Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap.`);
   }
   const current = await db.getPendingTopupByUser(query.from.id).catch(() => null);
   if (current?.status === 'awaiting_payment') {
-    return tg.answerCallbackQuery(query.id, { text: 'Kamu masih memiliki top up yang menunggu pembayaran. Gunakan tombol cek pada invoice top up.', show_alert: true });
+    return answerCallback(query, { text: 'Kamu masih memiliki top up yang menunggu pembayaran. Gunakan tombol cek pada invoice top up.', show_alert: true });
   }
   const ref = current?.status === 'waiting_amount' && current?.topup_ref
     ? String(current.topup_ref)
@@ -703,10 +731,8 @@ async function createTopupPayment(chatId, from, topup, amount, settings) {
   const fee = randomFee();
   const total = amount + fee;
   const gateway = await paymentService.createPaymentTransaction({ amount: total, invoiceRef: topup.topup_ref });
-  const ref = String(gateway.order_id || topup.topup_ref).trim();
-  if (ref !== String(topup.topup_ref)) {
-    await db.cancelPendingTopup(from.id, topup.topup_ref).catch(() => null);
-  }
+  // Link Auto Order mempertahankan referensi lokal; transaction_id provider disimpan terpisah.
+  const ref = String(topup.topup_ref).trim();
   await db.upsertPendingTopup({
     ...topup,
     topup_ref: ref,
@@ -733,39 +759,41 @@ async function createTopupPayment(chatId, from, topup, amount, settings) {
 ` +
     `Total Bayar: <b>${escapeHtml(formatRupiah(total))}</b>
 ` +
+    `Metode: <b>QRIS</b>
+` +
     `=======================
 ` +
-    `Bayar sesuai nominal. Saldo Utama masuk otomatis setelah pembayaran terdeteksi.`;
+    `Setelah membayar, tekan tombol <b>Cek Pembayaran</b> agar saldo segera diperiksa.`;
   const sent = await tg.sendPhoto(from.id, buffer, {
     caption,
     parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [
-      ...(gateway.checkout_url ? [[{ text: '🌐 Buka Halaman Pembayaran', url: gateway.checkout_url }]] : []),
-      [styledButton('🔄 Cek Top Up', { callback_data: `cektopup:${ref}` }, 'primary')],
+      [styledButton('🔄 Cek Pembayaran', { callback_data: `cektopup:${ref}` }, 'primary')],
       [styledButton('❌ Batalkan Top Up', { callback_data: `bataltopup:${ref}` }, 'danger')]
     ] }
   });
-  paymentService.scheduleTopupWatcher({ topupRef: ref, telegramId: from.id });
+  paymentPoll.scheduleTopupPolling(ref);
   return sent;
 }
 
 async function checkTopup(query, ref) {
   const topup = await db.getPendingTopupByRef(ref);
   if (!topup || Number(topup.telegram_id) !== Number(query.from.id)) {
-    return tg.answerCallbackQuery(query.id, { text: 'Top up tidak ditemukan.', show_alert: true });
+    return answerCallback(query, { text: 'Top up tidak ditemukan.', show_alert: true });
   }
   if (topup.status === 'completed') {
-    return tg.answerCallbackQuery(query.id, { text: 'Top up sudah berhasil dan saldo telah masuk.', show_alert: true });
+    return answerCallback(query, { text: 'Top up sudah berhasil dan saldo telah masuk.', show_alert: true });
   }
   if (topup.status !== 'awaiting_payment') {
-    return tg.answerCallbackQuery(query.id, { text: `Status top up: ${topup.status}.`, show_alert: true });
+    return answerCallback(query, { text: `Status top up: ${topup.status}.`, show_alert: true });
   }
   const incoming = await paymentService.verifyTopupTransaction(topup);
   if (incoming.status !== 'completed') {
-    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran top up belum masuk.', show_alert: true });
+    return answerCallback(query, { text: 'Pembayaran top up belum masuk.', show_alert: true });
   }
   const result = await paymentService.completeTopupPayment({ topup, incoming, source: 'manual-topup-check' });
   if (result.state === 'completed' || result.state === 'already_completed') {
+    await answerCallback(query, { text: 'Pembayaran ditemukan. Saldo sedang diperbarui.' });
     await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
     return sendWalletPage(query.from.id, query.from);
   }
@@ -816,15 +844,32 @@ function supplierSelection(product, selection = null) {
   else if (selection && typeof selection === 'object') variant = selectedVariant(product, selection);
   const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
   const variantProductId = String(variant?.supplier_product_id || '').trim();
-  if (['prodseller','telegram_userbot'].includes(variantSource) && variantProductId) return { source: variantSource, productId: variantProductId, variant };
+  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
   const source = String(product?.supplier_source || '').trim().toLowerCase();
   const productId = String(product?.supplier_product_id || '').trim();
-  if (['prodseller','telegram_userbot'].includes(source) && productId) return { source, productId, variant: null };
+  if (source === 'prodseller' && productId) return { productId, variant: null };
   return null;
 }
 
 function isSupplierProduct(product, selection = null) {
   return Boolean(supplierSelection(product, selection));
+}
+
+function workflowSupplierSelection(product, selection = null) {
+  let variant = null;
+  if (selection && typeof selection === 'object' && (selection.supplier_source !== undefined || selection.supplier_product_id !== undefined) && selection.variant_key === undefined) variant = selection;
+  else if (selection && typeof selection === 'object') variant = selectedVariant(product, selection);
+  const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
+  const variantWorkflowId = String(variant?.supplier_product_id || '').trim();
+  if (variantSource === 'telegram_workflow' && variantWorkflowId) return { workflowId: variantWorkflowId, variant };
+  const source = String(product?.supplier_source || '').trim().toLowerCase();
+  const workflowId = String(product?.supplier_product_id || '').trim();
+  if (source === 'telegram_workflow' && workflowId) return { workflowId, variant: null };
+  return null;
+}
+
+function isWorkflowSupplierProduct(product, selection = null) {
+  return Boolean(workflowSupplierSelection(product, selection));
 }
 
 function isPoOrder(product, order = {}) {
@@ -843,14 +888,17 @@ function productStockTotal(product) {
 }
 
 function productDeliverySummary(product) {
+  if (isWorkflowSupplierProduct(product)) return 'workflow';
   if (isSupplierProduct(product)) return 'supplier';
   const variants = activeVariantsWithIndex(product).map((item) => item.variant);
   if (!variants.length) return isPoProduct(product) ? 'po' : 'auto';
+  const hasWorkflow = variants.some((variant) => isWorkflowSupplierProduct(product, variant));
   const hasSupplier = variants.some((variant) => isSupplierProduct(product, variant));
-  const hasPo = variants.some((variant) => !isSupplierProduct(product, variant) && isPoProduct(product, variant));
-  const hasAuto = variants.some((variant) => !isSupplierProduct(product, variant) && !isPoProduct(product, variant));
-  if (hasSupplier && !hasPo && !hasAuto) return 'supplier';
-  if (hasSupplier) return 'mixed_supplier';
+  const hasPo = variants.some((variant) => !isSupplierProduct(product, variant) && !isWorkflowSupplierProduct(product, variant) && isPoProduct(product, variant));
+  const hasAuto = variants.some((variant) => !isSupplierProduct(product, variant) && !isWorkflowSupplierProduct(product, variant) && !isPoProduct(product, variant));
+  if (hasWorkflow && !hasSupplier && !hasPo && !hasAuto) return 'workflow';
+  if (hasSupplier && !hasWorkflow && !hasPo && !hasAuto) return 'supplier';
+  if (hasWorkflow || hasSupplier) return 'mixed_supplier';
   if (hasPo && hasAuto) return 'mixed';
   return hasPo ? 'po' : 'auto';
 }
@@ -864,41 +912,33 @@ function storedSupplierProduct(product, variant = null) {
   };
 }
 
-async function supplierAvailabilityForProducts(products = [], options = {}) {
+async function supplierAvailabilityForProducts(products = []) {
   const map = new Map();
-  const prodRefs = new Map();
-  const telegramRefs = new Set();
+  if (!prodseller.configured()) return map;
+  const refs = new Map();
   (products || []).forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) (direct.source === 'prodseller' ? prodRefs.set(direct.productId, { product, variant: null }) : telegramRefs.add(direct.productId));
+    if (direct) refs.set(direct.productId, { product, variant: null });
     activeVariantsWithIndex(product).forEach(({ variant }) => {
       const ref = supplierSelection(product, variant);
-      if (ref) (ref.source === 'prodseller' ? prodRefs.set(ref.productId, { product, variant }) : telegramRefs.add(ref.productId));
+      if (ref) refs.set(ref.productId, { product, variant });
     });
   });
-  if (prodRefs.size && prodseller.configured()) {
-    const balanceData = await prodseller.getBalance().catch(() => null);
-    if (balanceData) {
-      const rows = await Promise.allSettled([...prodRefs.entries()].map(async ([productId, meta]) => {
-        try { const live = await prodseller.getProduct(productId); return [productId, prodseller.availabilityFrom({ balanceData, product: live })]; }
-        catch (_) { return [productId, prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) })]; }
-      }));
-      rows.forEach((row) => { if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]); });
+  if (!refs.size) return map;
+
+  const balanceData = await prodseller.getBalance().catch(() => null);
+  if (!balanceData) return map;
+  const rows = await Promise.allSettled([...refs.entries()].map(async ([productId, meta]) => {
+    try {
+      const live = await prodseller.getProduct(productId);
+      return [productId, prodseller.availabilityFrom({ balanceData, product: live })];
+    } catch (_) {
+      return [productId, prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) })];
     }
-  }
-  if (telegramRefs.size) {
-    if (options.liveTelegram === true && telegramRefs.size === 1) {
-      const ref = [...telegramRefs][0];
-      try { map.set(String(ref), await telegramSupplier.getAvailability(ref, { live: true, force: false, allowCached: true, waitMs: 8000 })); }
-      catch (_) {
-        const telegramMap = await telegramSupplier.getAvailabilityMap([ref]).catch(() => new Map());
-        telegramMap.forEach((value, key) => map.set(String(key), value));
-      }
-    } else {
-      const telegramMap = await telegramSupplier.getAvailabilityMap([...telegramRefs]).catch(() => new Map());
-      telegramMap.forEach((value, key) => map.set(String(key), value));
-    }
-  }
+  }));
+  rows.forEach((row) => {
+    if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]);
+  });
   return map;
 }
 
@@ -907,7 +947,6 @@ function supplierStockForSelection(product, selection = null, availabilityMap = 
   if (!ref) return null;
   const found = availabilityMap instanceof Map ? availabilityMap.get(ref.productId) : null;
   if (found) return Math.max(0, Math.floor(Number(found.availableStock || 0)));
-  if (ref.source === 'telegram_userbot') return 0;
   const variant = ref.variant || (selection && selection.variant_key !== undefined ? selectedVariant(product, selection) : null);
   const stored = storedSupplierProduct(product, variant);
   if (stored.price <= 0 || stored.stock === 0) return 0;
@@ -994,11 +1033,8 @@ function productButtons(products, page = 0, totalPages = 1, availabilityMap = ne
     const suffix = variants.length ? ` | ${variants.length} varian` : '';
     const summary = productDeliverySummary(p);
     const readyStock = readyStockForProduct(p, availabilityMap);
-    const availability = summary === 'po' ? 'PRE-ORDER' : (summary === 'mixed' ? `Stok ${readyStock} + PO` : `Stok ${readyStock}`);
-    const active = activeVariantsWithIndex(p).map((item) => item.variant);
-    const hasManualPo = active.length ? active.some((v) => !isSupplierProduct(p, v) && isPoProduct(p, v)) : (!isSupplierProduct(p) && isPoProduct(p));
-    const soldOut = readyStock <= 0 && !hasManualPo;
-    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, soldOut ? 'danger' : 'primary')];
+    const availability = summary === 'workflow' ? 'Otomatis' : (summary === 'po' ? 'PRE-ORDER' : (summary === 'mixed' ? `Stok ${readyStock} + PO` : (summary === 'mixed_supplier' ? 'Otomatis' : `Stok ${readyStock}`)));
+    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, 'primary')];
   });
   if (totalPages > 1) {
     const nav = [];
@@ -1040,11 +1076,11 @@ async function sendStock(chatId, query = null) {
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const summary = productDeliverySummary(p);
     const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => {
-      const state = isPoProduct(p, v) && !isSupplierProduct(p, v) ? '*PRE-ORDER*' : `*${readyStockForVariant(p, v, availabilityMap)}* stok`;
+      const state = isWorkflowSupplierProduct(p, v) ? '*OTOMATIS*' : (isPoProduct(p, v) && !isSupplierProduct(p, v) ? '*PRE-ORDER*' : `*${readyStockForVariant(p, v, availabilityMap)}* stok`);
       return `   - ${escapeMarkdownText(v.name)}: ${state} | ${formatRupiah(variantPrice(p, v))}`;
     }).join('\n');
     const readyStock = readyStockForProduct(p, availabilityMap);
-    const mainState = summary === 'po' ? 'Status: *PRE-ORDER*' : (summary === 'mixed' ? `Stok Ready: *${readyStock}* + varian PO` : `Total Stok: *${readyStock}*`);
+    const mainState = summary === 'workflow' ? 'Status: *OTOMATIS*' : (summary === 'po' ? 'Status: *PRE-ORDER*' : (summary === 'mixed' ? `Stok Ready: *${readyStock}* + varian PO` : (summary === 'mixed_supplier' ? 'Status: *OTOMATIS*' : `Total Stok: *${readyStock}*`)));
     return `${i + 1}. *${escapeMarkdownText(p.nama)}*\n   ${mainState} | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[styledButton('🔙 Kembali', { callback_data:'kembaliawal' }, 'primary')]] } };
@@ -1075,7 +1111,7 @@ async function sendHistory(chatId, userId, query = null) {
 
 async function sendHelp(chatId, from) {
   const ownerLine = isOwner(from.id)
-    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/reseller - Buka Admin Dashboard\n/debugowner - Cek konfigurasi owner\n/lisensi - Cek masa aktif bot\n/rekap - Rekap penjualan bulanan'
+    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/dashboard - Buka Dashboard Owner\n/reseller - Alias Dashboard Owner\n/debugowner - Cek konfigurasi owner\n/lisensi - Cek masa aktif bot\n/rekap - Rekap penjualan bulanan'
     : '';
   const text = `❓ *BANTUAN BOT*\n` +
     `=======================\n` +
@@ -1173,7 +1209,7 @@ ${bulk}
 ` +
     `-----------------------
 ` +
-    (isSupplierProduct(product, order) ? `Stok Tersedia: *${Math.max(0, Number(supplierAvailableStock || 0))}*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`)) +
+    (isWorkflowSupplierProduct(product, order) ? `Sistem Pengiriman: *OTOMATIS*\n` : (isSupplierProduct(product, order) ? `Stok Tersedia: *${Math.max(0, Number(supplierAvailableStock || 0))}*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`))) +
     `Jumlah Pesanan: *${quantity}*
 ` +
     `Subtotal: *${formatRupiah(subtotal)}*${promoLine}
@@ -1223,7 +1259,8 @@ async function sendOwnerMenu(chatId) {
     `/editvoucher *( Edit Voucher Bot )*\n` +
     `/delvoucher *( Hapus Voucher Bot )*\n` +
     `/rekap *( Rekap Bulanan )*\n` +
-    `/reseller *( Reseller Panel Mini App )*\n` +
+    `/dashboard *( Dashboard Owner Mini App )*\n` +
+    `/reseller *( Alias Dashboard Owner )*\n` +
     `/lisensi *( Cek masa aktif bot )*\n` +
     `=======================\n\n` +
     `*Format cepat:*\n` +
@@ -1242,7 +1279,9 @@ async function sendOwnerMenu(chatId) {
     `/bcphoto URL_GAMBAR|Caption\n` +
     `/bcsticker FILE_ID_STIKER\n` +
     `/bcpoll reply polling / klik tombol preview`;
-  return tg.sendMessage(chatId, text);
+  const miniAppUrl = getMiniAppUrl();
+  const rows = miniAppUrl ? [[{ text: '⚙️ Buka Dashboard Owner', web_app: { url: miniAppUrl } }]] : [];
+  return tg.sendMessage(chatId, text, rows.length ? { reply_markup: { inline_keyboard: rows } } : {});
 }
 
 async function handleTextMessage(msg, req) {
@@ -1287,7 +1326,8 @@ File ID: \`${escapeMarkdownText(msg.sticker.file_id)}\``, { parse_mode: 'Markdow
     const lic = await getRentalLicense(true);
     return tg.sendMessage(chatId, `DEBUG OWNER
 User ID: ${from.id}
-OWNER_ID env: ${config.ownerId}
+OWNER_ID aktif: ${config.ownerId}
+OWNER_IDS aktif: ${(config.ownerIds || []).join(', ') || '-'}
 Is owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}
 BOT_USERNAME env: ${config.botUsername || '-'}
 LICENSE_BOT_USERNAME env: ${config.licenseBotUsername || '-'}
@@ -1305,82 +1345,39 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     return sendOwnerMenu(chatId);
   }
-  if (lower.startsWith('/reseller')) {
+  if (lower.startsWith('/dashboard') || lower.startsWith('/reseller')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const miniAppUrl = getMiniAppUrl(req);
-    if (!miniAppUrl) return tg.sendMessage(chatId, '⚠️ MINIAPP_URL / PUBLIC_URL belum diatur di Vercel.');
-    return tg.sendMessage(chatId, `Reseller Panel Mini App\n\nBuka panel untuk mengelola dashboard, produk, stok, voucher, users, broadcast, gambar toko, dan grafik.`, {
-      reply_markup: { inline_keyboard: [[{ text: 'Buka Reseller Panel', web_app: { url: miniAppUrl } }], [{ text: 'Buka Link Panel', url: miniAppUrl }]] }
+    if (!miniAppUrl) return tg.sendMessage(chatId, '⚠️ URL Dashboard belum tersedia. Isi PUBLIC_URL, atau MINIAPP_URL / DASHBOARD_URL di Vercel.');
+    return tg.sendMessage(chatId, `⚙️ <b>Dashboard Owner</b>\n\nKelola produk, stok, penjualan, user, broadcast, promo, reseller, pengaturan toko, dan laporan dari Mini App.`, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '⚙️ Buka Dashboard Owner', web_app: { url: miniAppUrl } }]] }
     });
   }
 
   if (lower.startsWith('/start') || lower.startsWith('/menu')) {
     if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
-    const settings = await cachedSettings().catch(() => ({}));
-    if (!(await ensureRequiredChannelJoin(chatId, from, settings))) return;
+    const settings = await cachedSettings(true).catch(() => ({}));
     const refCode = lower.startsWith('/start') ? startReferralCode(text) : '';
-    try {
-      const registration = await db.registerUserWithReferral(from, refCode, settings);
-      const reward = registration?.referral_reward;
-      if (registration?.referral_state === 'pending') {
-        await tg.sendMessage(chatId,
-          `✅ <b>REFERRAL BERHASIL TERHUBUNG</b>
-Bonus untuk pengundang akan masuk setelah kamu menyelesaikan pembelian pertama.`,
-          { parse_mode: 'HTML' }
-        ).catch(() => null);
-      }
-      if (reward?.telegram_id && Number(reward.amount || 0) > 0) {
-        await tg.sendMessage(chatId,
-          `✅ <b>REFERRAL BERHASIL DIGUNAKAN</b>
-Pengundang langsung menerima bonus ${escapeHtml(formatRupiah(reward.amount))}.`,
-          { parse_mode: 'HTML' }
-        ).catch(() => null);
-        const [wallet, referrer] = await Promise.all([
-          db.getWalletSummary(reward.telegram_id, 1).catch(() => null),
-          db.getUserByTelegramId(reward.telegram_id).catch(() => null)
-        ]);
-        const inviteeLabel = reward.invitee_username
-          ? '@' + String(reward.invitee_username).replace(/^@/, '')
-          : (reward.invitee_name || from.first_name || String(from.id));
-        await tg.sendMessage(reward.telegram_id,
-          `🎁 <b>BONUS REFERRAL MASUK</b>
-` +
-          `=======================
-` +
-          `Pengguna yang kamu undang (${escapeHtml(inviteeLabel)}) baru membuka bot melalui link referral kamu.
-
-` +
-          `Bonus: <b>${escapeHtml(formatRupiah(reward.amount))}</b>
-` +
-          `Saldo Referral: <b>${escapeHtml(formatRupiah(wallet?.balance_referral || 0))}</b>`,
-          { parse_mode: 'HTML' }
-        ).catch(() => null);
-        await walletNotifications.notifyReferralReward({
-          referrer: referrer || {
-            telegram_id: reward.telegram_id,
-            first_name: reward.referrer_name,
-            username: reward.referrer_username
-          },
-          referrerId: reward.telegram_id,
-          invitee: registration?.user || from,
-          inviteeId: reward.invitee_id || from.id,
-          amount: reward.amount,
-          balanceReferral: wallet?.balance_referral || 0,
-          mode: 'signup'
-        });
-      }
-    } catch (error) {
-      console.error('Registrasi referral gagal:', error.message || error);
-      await db.upsertUser(from).catch(() => null);
+    const joinState = await requiredChannelState(from.id, settings);
+    if (joinState.required && !joinState.joined) {
+      return sendJoinRequired(chatId, from, settings, { state: joinState, refCode });
     }
+    await registerStartReferral(from, refCode, settings, chatId);
     return sendHome(chatId, from, req, { skipUpsert: true });
   }
-  if (!(await ensureLicenseActive(chatId))) return;
-  const accessSettings = await cachedSettings().catch(() => ({}));
-  if (!(await ensureRequiredChannelJoin(chatId, from, accessSettings))) return;
 
+  if (!isOwner(from.id)) {
+    const settings = await cachedSettings(true).catch(() => ({}));
+    const joinState = await requiredChannelState(from.id, settings);
+    if (joinState.required && !joinState.joined) {
+      return sendJoinRequired(chatId, from, settings, { state: joinState });
+    }
+  }
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
   if (lower.startsWith('/cekorder') || lower.startsWith('/cekpesanan') || lower.startsWith('/riwayat')) return sendCheckOrder(chatId, from.id);
+
+  if (!(await ensureLicenseActive(chatId))) return;
 
   if (lower.startsWith('/polling')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
@@ -1639,9 +1636,11 @@ async function handleProductSelection(query, code, listPage = 0) {
   const variants = activeVariantsWithIndex(product);
   if (variants.length) {
     const rows = variants.map(({ variant, index }) => {
-      const stockText = isPoProduct(product, variant) && !isSupplierProduct(product, variant)
-        ? 'PRE-ORDER'
-        : `Stok ${readyStockForVariant(product, variant, availabilityMap)}`;
+      const stockText = isWorkflowSupplierProduct(product, variant)
+        ? 'Otomatis'
+        : (isPoProduct(product, variant) && !isSupplierProduct(product, variant)
+          ? 'PRE-ORDER'
+          : `Stok ${readyStockForVariant(product, variant, availabilityMap)}`);
       return [styledButton(`${variant.name} | ${formatRupiah(variantPrice(product, variant))} | ${stockText}`, { callback_data: `variant:${product.kode}:${index}:${Math.max(0, Number(listPage || 0))}` }, 'primary')];
     });
     rows.push([styledButton('🔙 Kembali', { callback_data: `produkpage:${Math.max(0, Number(listPage || 0))}` }, 'primary')]);
@@ -1653,13 +1652,13 @@ Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi produk 
     });
   }
   if (Array.isArray(product.variants) && product.variants.length) {
-    return tg.answerCallbackQuery(query.id, { text: 'Semua varian produk ini sedang OFF.', show_alert: true });
+    return answerCallback(query, { text: 'Semua varian produk ini sedang OFF.', show_alert: true });
   }
   if (isSupplierProduct(product) && readyStockForProduct(product, availabilityMap) < 1) {
-    return tg.answerCallbackQuery(query.id, { text: 'Stok produk sedang kosong.', show_alert: true });
+    return answerCallback(query, { text: 'Stok produk sedang kosong.', show_alert: true });
   }
   if (!isSupplierProduct(product) && !isPoProduct(product) && productStockTotal(product) < 1) {
-    return tg.answerCallbackQuery(query.id, { text: 'Stok produk sedang kosong.', show_alert: true });
+    return answerCallback(query, { text: 'Stok produk sedang kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, null, -1);
 }
@@ -1690,12 +1689,12 @@ async function handleVariantSelection(query, code, indexText) {
   const index = Number(indexText);
   const variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
-  if (!isVariantActive(variant)) return tg.answerCallbackQuery(query.id, { text: 'Varian ini sedang OFF.', show_alert: true });
+  if (!isVariantActive(variant)) return answerCallback(query, { text: 'Varian ini sedang OFF.', show_alert: true });
   if (isSupplierProduct(product, variant)) {
     const availabilityMap = await supplierAvailabilityForProducts([product]).catch(() => new Map());
-    if (readyStockForVariant(product, variant, availabilityMap) < 1) return tg.answerCallbackQuery(query.id, { text: 'Stok varian kosong.', show_alert: true });
+    if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   } else if (!isPoProduct(product, variant) && stockOfVariant(variant).length < 1) {
-    return tg.answerCallbackQuery(query.id, { text: 'Stok varian kosong.', show_alert: true });
+    return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, variant, index);
 }
@@ -1711,7 +1710,7 @@ async function showConfirmation(query, edit = false) {
   const subtotal = Number(order.quantity || 1) * orderUnitPrice(product, order);
   const promoPromise = db.getBestAutoPromo(product.kode, userId, Number(order.quantity || 1), subtotal, order.variant_key).catch(() => null);
   const availabilityPromise = isSupplierProduct(product, order)
-    ? supplierAvailabilityForProducts([product], { liveTelegram: true }).catch(() => new Map())
+    ? supplierAvailabilityForProducts([product]).catch(() => new Map())
     : Promise.resolve(new Map());
   const [promo, availabilityMap] = await Promise.all([promoPromise, availabilityPromise]);
   const supplierAvailableStock = isSupplierProduct(product, order) ? supplierStockForSelection(product, order, availabilityMap) : null;
@@ -1731,83 +1730,62 @@ async function changeQuantity(query, delta, reset = false) {
   let quantity = reset ? 1 : Number(order.quantity || 1) + Number(delta || 0);
   if (quantity < 1) quantity = 1;
   if (isSupplierProduct(product, order)) {
-    if (quantity > 100) return tg.answerCallbackQuery(query.id, { text: 'Maksimal 100 item per pesanan.', show_alert: true });
+    if (quantity > 100) return answerCallback(query, { text: 'Maksimal 100 item per pesanan.', show_alert: true });
     const availabilityMap = await supplierAvailabilityForProducts([product]).catch(() => new Map());
     const available = Math.max(0, Number(supplierStockForSelection(product, order, availabilityMap) || 0));
-    if (quantity > available) return tg.answerCallbackQuery(query.id, { text: `⚠️ Stok tersedia hanya ${available}`, show_alert: true });
+    if (quantity > available) return answerCallback(query, { text: `⚠️ Stok tersedia hanya ${available}`, show_alert: true });
   } else if (isPoOrder(product, order)) {
-    if (quantity > 100) return tg.answerCallbackQuery(query.id, { text: 'Maksimal 100 item per pesanan PRE-ORDER.', show_alert: true });
+    if (quantity > 100) return answerCallback(query, { text: 'Maksimal 100 item per pesanan PRE-ORDER.', show_alert: true });
   } else if (quantity > availableStockForOrder(product, order)) {
-    return tg.answerCallbackQuery(query.id, { text: '⚠️ Stok produk/varian tidak mencukupi', show_alert: true });
+    return answerCallback(query, { text: '⚠️ Stok produk/varian tidak mencukupi', show_alert: true });
   }
   await db.upsertPendingOrder({ ...order, quantity, status: order.status || 'draft' });
   return showConfirmation(query, true);
 }
 
 
-function telegramAvailabilityCacheAgeMs(availability = {}) {
-  const checkedAt = availability?.product?.stock_checked_at;
-  if (!checkedAt) return Infinity;
-  const ts = new Date(checkedAt).getTime();
-  return Number.isFinite(ts) ? Math.max(0, Date.now() - ts) : Infinity;
-}
-
-async function telegramAvailabilityForCheckout(productId) {
-  // Checkout should reuse a freshly verified stock result instead of forcing a second
-  // MTProto interaction on the voucher/payment-method step. If cache is stale,
-  // getAvailability() will try to refresh it; when that refresh fails we only accept
-  // the cached result for a short grace window.
-  const availability = await telegramSupplier.getAvailability(productId, {
-    live: true,
-    force: false,
-    allowCached: true,
-    waitMs: 8000
-  });
-  const supplierProduct = availability?.product || {};
-  const hasStockFlow = Array.isArray(supplierProduct.stock_flow) && supplierProduct.stock_flow.length > 0;
-  if (hasStockFlow) {
-    if (availability.supplierStock == null || supplierProduct.stock_checked_at == null) {
-      const error = new Error('Stok supplier belum berhasil diverifikasi. Buka produk lagi atau coba beberapa saat lagi.');
-      error.code = 'TELEGRAM_SUPPLIER_STOCK_UNVERIFIED';
-      throw error;
-    }
-    const ttlMs = Math.max(5000, Math.min(600000, Number(supplierProduct.stock_cache_seconds || 60) * 1000));
-    const graceMs = Math.max(180000, ttlMs * 3);
-    if (telegramAvailabilityCacheAgeMs(availability) > graceMs) {
-      const error = new Error('Data stok supplier sudah terlalu lama dan belum berhasil diperbarui. Buka produk lagi untuk cek stok terbaru.');
-      error.code = 'TELEGRAM_SUPPLIER_STOCK_STALE';
-      throw error;
-    }
-  }
-  return availability;
-}
-
 async function calculateCheckoutPricing(userId, order, product) {
   const unit = orderUnitPrice(product, order);
   const quantity = Math.max(1, Number(order.quantity || 1));
   let costUnit = db.orderUnitCost(product, order);
   if (isSupplierProduct(product, order)) {
+    if (!prodseller.configured()) {
+      const error = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.');
+      error.code = 'SUPPLIER_NOT_CONFIGURED';
+      throw error;
+    }
     try {
       const supplier = supplierSelection(product, order);
-      const availability = supplier.source === 'prodseller'
-        ? (prodseller.configured() ? await prodseller.getAvailability(supplier.productId, { force: true }) : (() => { const e = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.'); e.code='SUPPLIER_NOT_CONFIGURED'; throw e; })())
-        : await telegramAvailabilityForCheckout(supplier.productId);
+      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
       if (availability.availableStock < quantity) {
         const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
         throw error;
       }
-      if (supplier.source === 'telegram_userbot') {
-        if (availability.currency === 'IDR' && availability.unitCost > 0) costUnit = Math.max(0, Math.round(availability.unitCost));
-      } else if (availability.unitPrice > 0) {
+      if (availability.unitPrice > 0) {
         const settings = await db.getShopSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
         costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         const found = db.findVariant(product, order.variant_key || '');
         if (found.variant && isSupplierProduct(product, found.variant)) {
-          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === found.index ? { ...variant, cost_price: costUnit, supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString() } : variant);
+          const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === found.index ? {
+            ...variant,
+            cost_price: costUnit,
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString()
+          } : variant);
           db.updateProductByCode(product.kode, { variants: nextVariants }).catch(() => null);
-        } else db.updateProductByCode(product.kode, { supplier_price_usdt: availability.unitPrice, supplier_public_price_usdt: availability.publicPrice, supplier_stock: availability.supplierStock, supplier_synced_at: new Date().toISOString(), cost_price: costUnit }).catch(() => null);
+        } else {
+          db.updateProductByCode(product.kode, {
+            supplier_price_usdt: availability.unitPrice,
+            supplier_public_price_usdt: availability.publicPrice,
+            supplier_stock: availability.supplierStock,
+            supplier_synced_at: new Date().toISOString(),
+            cost_price: costUnit
+          }).catch(() => null);
+        }
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
@@ -1882,17 +1860,17 @@ async function createWalletPayment(query) {
     db.getWalletSummary(userId, 1)
   ]);
   if (!settingEnabled(settings.wallet_payment_enabled, true)) {
-    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran dengan saldo sedang dinonaktifkan.', show_alert: true });
+    return answerCallback(query, { text: 'Pembayaran dengan saldo sedang dinonaktifkan.', show_alert: true });
   }
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
   const product = await db.getProductByCode(order.product_code);
   if (!product || product.active === false) return tg.sendMessage(userId, '⚠️ Produk tidak tersedia.');
-  if (!isSupplierProduct(product, order) && !isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
+  if (!isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
   let price;
   try { price = await calculateCheckoutPricing(userId, order, product); }
   catch (error) { return tg.sendMessage(userId, `⚠️ ${error.message || 'Produk sedang tidak tersedia.'}`); }
   if (Number(wallet?.balance_total || 0) < price.finalPrice) {
-    return tg.answerCallbackQuery(query.id, { text: `Saldo kurang ${formatRupiah(price.finalPrice - Number(wallet?.balance_total || 0))}.`, show_alert: true });
+    return answerCallback(query, { text: `Saldo kurang ${formatRupiah(price.finalPrice - Number(wallet?.balance_total || 0))}.`, show_alert: true });
   }
   const invoiceRef = `WALLET-${randomRef()}`;
   const savedOrder = await db.upsertPendingOrder({
@@ -1919,6 +1897,7 @@ async function createWalletPayment(query) {
 }
 
 async function createPayment(query) {
+  await answerCallback(query, { text: 'Menyiapkan QRIS...' });
   if (!paymentService.paymentConfigured()) {
     return tg.sendMessage(query.from.id, `⚠️ Konfigurasi pembayaran ${paymentService.paymentProviderLabel()} belum lengkap di Vercel.`);
   }
@@ -1929,7 +1908,7 @@ async function createPayment(query) {
   const product = await db.getProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
-  if (!isSupplierProduct(product, order) && !isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
+  if (!isPoOrder(product, order) && availableStockForOrder(product, order) < Number(order.quantity || 1)) return tg.sendMessage(userId, '⚠️ Stok produk/varian tidak mencukupi!');
 
   let price;
   try { price = await calculateCheckoutPricing(userId, order, product); }
@@ -1940,7 +1919,8 @@ async function createPayment(query) {
   const requestedInvoice = randomRef();
   const totalAmount = harga + fee;
   const gatewayPayment = await paymentService.createPaymentTransaction({ amount: totalAmount, invoiceRef: requestedInvoice });
-  const invoiceRef = gatewayPayment.order_id || requestedInvoice;
+  // Invoice lokal tetap dipakai seperti Link Auto Order; order_id AutoGoPay tidak dijadikan invoice bot.
+  const invoiceRef = requestedInvoice;
   const expiresAt = gatewayPayment.expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const qrText = gatewayPayment.qr_string;
   await db.upsertPendingOrder({
@@ -1968,20 +1948,34 @@ async function createPayment(query) {
     : (promoApplied
       ? `Promo Otomatis: *${escapeMarkdownText(promoApplied.name || promoApplied.code)}* (-${formatRupiah(appliedDiscount)})\n`
       : '');
-  const caption = `💸 *PEMBAYARAN OTOMATIS*\n` +
-    `=======================\n` +
-    `Invoice: *${escapeMarkdownText(paymentService.displayPaymentReference(invoiceRef))}*\n` +
-    `Produk: *${escapeMarkdownText(product.nama)}${order.variant_name ? ' - ' + escapeMarkdownText(order.variant_name) : ''}*\n` +
-    `Harga Satuan: *${formatRupiah(unit)}*\n` +
-    `Jumlah Beli: *${quantity}*\n` +
-    `Subtotal: *${formatRupiah(subtotal)}*\n` +
+  const caption = `💳 *PEMBAYARAN QRIS*
+` +
+    `=======================
+` +
+    `Invoice: *${escapeMarkdownText(paymentService.displayPaymentReference(invoiceRef))}*
+` +
+    `Produk: *${escapeMarkdownText(product.nama)}${order.variant_name ? ' - ' + escapeMarkdownText(order.variant_name) : ''}*
+` +
+    `Harga Satuan: *${formatRupiah(unit)}*
+` +
+    `Jumlah Beli: *${quantity}*
+` +
+    `Subtotal: *${formatRupiah(subtotal)}*
+` +
     discountLine +
-    (appliedDiscount > 0 ? `Setelah Diskon: *${formatRupiah(harga)}*\n` : '') +
-    `Fee: *${formatRupiah(fee)}*\n` +
-    `Total Bayar: *${formatRupiah(totalAmount)}*\n` +
-    `Expired: *${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))} menit*\n` +
-    `=======================\n` +
-    `Pembayaran akan terdeteksi otomatis melalui ${paymentService.paymentProviderLabel({ payment_provider: gatewayPayment.provider })}. ${isSupplierProduct(product, order) ? 'Pesanan diproses otomatis setelah pembayaran dan produk dikirim ke chat Telegram setelah tersedia.' : (isPoOrder(product, order) ? 'Pesanan PRE-ORDER masuk setelah pembayaran dan produk akan dikirim seller melalui chat setelah disiapkan.' : 'Produk langsung dikirim setelah pembayaran berhasil.')} Tombol di bawah hanya untuk pengecekan manual jika notifikasi terlambat.`;
+    (appliedDiscount > 0 ? `Setelah Diskon: *${formatRupiah(harga)}*
+` : '') +
+    `Fee: *${formatRupiah(fee)}*
+` +
+    `Total Bayar: *${formatRupiah(totalAmount)}*
+` +
+    `Metode: *QRIS*
+` +
+    `Expired: *${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))} menit*
+` +
+    `=======================
+` +
+    `Setelah membayar, tekan tombol *Cek Pembayaran* agar pesanan segera diproses.`;
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id);
   const paymentMessage = await tg.sendPhoto(userId, buffer, {
@@ -1989,23 +1983,15 @@ async function createPayment(query) {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
-        ...(gatewayPayment.checkout_url ? [[{ text: '🌐 Buka Halaman Pembayaran', url: gatewayPayment.checkout_url }]] : []),
-        [styledButton('🔄 Cek Pembayaran Sekarang', { callback_data: `cekbayar:${invoiceRef}` }, 'primary')],
+        [styledButton('🔄 Cek Pembayaran', { callback_data: `cekbayar:${invoiceRef}` }, 'primary')],
         [styledButton('❌ Batal', { callback_data: 'batalbeli' }, 'danger')]
       ]
     }
   });
 
-  // Selain webhook payment gateway, jalankan watcher latar belakang selama beberapa menit.
-  // Ini menjadi cadangan otomatis bila notifikasi webhook terlambat atau URL webhook
-  // di dashboard payment gateway belum tersimpan dengan benar.
-  const watcherScheduled = paymentService.schedulePaymentWatcher({
-    invoiceRef,
-    telegramId: userId
-  });
-  if (!watcherScheduled) {
-    console.warn(`Watcher pembayaran ${invoiceRef} tidak aktif; mengandalkan webhook payment gateway.`);
-  }
+  // Pembayaran mengikuti Link Auto Order: QRIS tampil langsung di Telegram,
+  // callback AutoGoPay tidak wajib, dan status dicek berdasarkan transaction_id.
+  paymentPoll.scheduleOrderPolling(invoiceRef);
 
   return paymentMessage;
 }
@@ -2016,13 +2002,13 @@ async function checkPayment(query, invoiceFromButton) {
   const order = await db.getPendingOrder(userId);
   if (!order || order.status !== 'awaiting_payment') {
     const existing = invoiceFromButton ? await db.getTransactionByOrderRef(invoiceFromButton).catch(() => null) : null;
-    return tg.answerCallbackQuery(query.id, {
+    return answerCallback(query, {
       text: existing ? 'Pembayaran sudah diproses dan produk telah dikirim.' : 'Tidak ada pembayaran aktif.',
       show_alert: true
     });
   }
   if (invoiceFromButton && order.invoice_ref && invoiceFromButton !== order.invoice_ref) {
-    return tg.answerCallbackQuery(query.id, { text: 'Invoice tidak cocok.', show_alert: true });
+    return answerCallback(query, { text: 'Invoice tidak cocok.', show_alert: true });
   }
   if (order.expires_at && Date.now() > new Date(order.expires_at).getTime()) {
     await db.deletePendingOrder(userId, order.invoice_ref);
@@ -2032,15 +2018,16 @@ async function checkPayment(query, invoiceFromButton) {
 
   const transaction = await paymentService.verifyPaymentTransaction(order);
   if (transaction.status !== 'completed') {
-    return tg.answerCallbackQuery(query.id, {
-      text: `Pembayaran belum masuk. Sistem tetap memeriksa otomatis melalui webhook ${paymentService.paymentProviderLabel(order)}.`,
+    return answerCallback(query, {
+      text: 'Pembayaran belum terdeteksi. Jika sudah membayar, tunggu beberapa saat lalu tekan Cek Pembayaran kembali.',
       show_alert: true
     });
   }
 
+  await answerCallback(query, { text: 'Pembayaran ditemukan. Pesanan sedang diproses.' });
   const result = await paymentService.fulfillPaidOrder({ order, buyer: query.from, source: 'manual-check' });
   if (result.state === 'processing') {
-    return tg.answerCallbackQuery(query.id, { text: 'Pembayaran sedang diproses otomatis. Produk akan segera dikirim.', show_alert: true });
+    return answerCallback(query, { text: 'Pembayaran sedang diproses otomatis. Produk akan segera dikirim.', show_alert: true });
   }
 
   await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
@@ -2049,17 +2036,15 @@ async function checkPayment(query, invoiceFromButton) {
 
 async function handleCallbackQuery(query, req) {
   const cmd = String(query.data || '');
-  await tg.answerCallbackQuery(query.id).catch(() => null);
-
   if (cmd === 'bcpoll_cancel') {
-    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
     return editMessage(query, '❌ Broadcast polling dibatalkan. Polling tidak dikirim ke user.');
   }
   if (cmd.startsWith('bcpoll_send:')) {
-    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
     const pollId = cmd.slice('bcpoll_send:'.length);
     const pollRecord = await db.getBroadcastPoll(pollId);
-    if (!pollRecord) return tg.answerCallbackQuery(query.id, { text: 'Polling tidak ditemukan.', show_alert: true });
+    if (!pollRecord) return answerCallback(query, { text: 'Polling tidak ditemukan.', show_alert: true });
     if (String(pollRecord.status || '').toLowerCase() === 'sent') {
       return editMessage(query, `✅ Polling ini sudah pernah dibroadcast.\nTerkirim: ${pollRecord.total_sent || 0}\nGagal: ${pollRecord.total_failed || 0}\n\nBot menolak pengiriman ulang agar polling tidak terkirim berulang.`);
     }
@@ -2075,30 +2060,48 @@ async function handleCallbackQuery(query, req) {
     return editMessage(query, `✅ Broadcast polling selesai.\nTerkirim: ${result.sent}\nGagal: ${result.failed}\n${modeInfo}\n\nKetik /polling untuk melihat hasil dan menghapus data polling.`);
   }
   if (cmd.startsWith('poll_result:')) {
-    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
     const id = cmd.slice('poll_result:'.length);
     const result = await db.getBroadcastPollResult(id);
     return editMessage(query, pollResultText(result), { reply_markup: { inline_keyboard: [[{ text: '🔄 Refresh', callback_data: `poll_result:${id}` }, { text: '🗑 Hapus', callback_data: `poll_delete:${id}` }], [{ text: '📊 Daftar Polling', callback_data: 'poll_list' }]] } });
   }
   if (cmd.startsWith('poll_delete:')) {
-    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
     const id = cmd.slice('poll_delete:'.length);
     await db.deleteBroadcastPoll(id);
     return editMessage(query, '✅ Data polling sudah dihapus dari database.');
   }
   if (cmd === 'poll_list') {
-    if (!isOwner(query.from.id)) return tg.sendMessage(query.message.chat.id, ownerOnlyMessage());
+    if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
+    await answerCallback(query);
     await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
     return sendPollingList(query.message.chat.id);
   }
 
   if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
-  const accessSettings = await cachedSettings().catch(() => ({}));
-  if (cmd === 'checkjoin') {
-    if (!(await ensureRequiredChannelJoin(query.message.chat.id, query.from, accessSettings, { query, force: true }))) return;
+
+  if (cmd === 'checkjoin' || cmd.startsWith('checkjoin:')) {
+    const settings = await cachedSettings(true).catch(() => ({}));
+    const joinState = await requiredChannelState(query.from.id, settings);
+    if (joinState.required && !joinState.joined) {
+      return sendJoinRequired(query.message.chat.id, query.from, settings, {
+        query,
+        state: joinState,
+        refCode: cmd.startsWith('checkjoin:') ? cmd.slice('checkjoin:'.length) : ''
+      });
+    }
+    const refCode = cmd.startsWith('checkjoin:') ? cmd.slice('checkjoin:'.length) : '';
+    await registerStartReferral(query.from, refCode, settings, query.message.chat.id);
     return editHome(query, req);
   }
-  if (!(await ensureRequiredChannelJoin(query.message.chat.id, query.from, accessSettings, { query }))) return;
+
+  if (!isOwner(query.from.id)) {
+    const settings = await cachedSettings(true).catch(() => ({}));
+    const joinState = await requiredChannelState(query.from.id, settings);
+    if (joinState.required && !joinState.joined) {
+      return sendJoinRequired(query.message.chat.id, query.from, settings, { query, state: joinState });
+    }
+  }
 
   if (cmd === 'wallet') return sendWalletPage(query.message.chat.id, query.from, query);
   if (cmd === 'topup') return beginTopup(query);
@@ -2124,7 +2127,7 @@ async function handleCallbackQuery(query, req) {
         '5. Periksa detail pesanan lalu klik *Konfirmasi*\n' +
         '6. Pilih metode pembayaran yang tersedia\n' +
         '7. Jika menggunakan QRIS, scan QR dan bayar sesuai nominal yang tampil\n' +
-        '8. Tunggu pembayaran terdeteksi atau klik *Cek Pembayaran Sekarang* jika diperlukan\n' +
+        '8. Tunggu pembayaran terdeteksi atau klik *Cek Pembayaran* jika diperlukan\n' +
         '9. Produk ready diproses otomatis setelah pembayaran; produk PRE-ORDER dikirim seller setelah disiapkan.';
     } else {
       guide = '❓ *CARA ORDER*\n=======================\n' +
@@ -2172,6 +2175,7 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'bayarsaldo') return createWalletPayment(query);
   if (cmd.startsWith('cekbayar:')) return checkPayment(query, cmd.split(':')[1]);
   if (cmd === 'batalbeli') {
+    await answerCallback(query, { text: 'Pesanan dibatalkan.' });
     const activeOrder = await db.getPendingOrder(query.from.id).catch(() => null);
     if (activeOrder?.status === 'awaiting_payment') {
       await paymentService.cancelPaymentTransaction(activeOrder).catch((error) => {
@@ -2188,13 +2192,35 @@ async function handleCallbackQuery(query, req) {
     }
     return sendHome(query.from.id, query.from, req);
   }
+  return answerCallback(query, { text: 'Tombol ini sudah tidak berlaku. Buka /start lalu coba lagi.', show_alert: true });
 }
 
 async function handleUpdate(update, req) {
   if (update.poll_answer) return db.recordPollAnswer(update.poll_answer).catch((e) => console.error('Gagal simpan poll answer:', e.message));
   if (update.poll) return db.recordPollUpdate(update.poll).catch((e) => console.error('Gagal update poll:', e.message));
   if (update.message) return handleTextMessage(update.message, req);
-  if (update.callback_query) return handleCallbackQuery(update.callback_query, req);
+  if (update.callback_query) {
+    try {
+      return await handleCallbackQuery(update.callback_query, req);
+    } catch (error) {
+      console.error('callback handler error:', error);
+      const query = update.callback_query;
+      const message = String(error?.message || 'Terjadi gangguan saat memproses tombol.');
+      if (!query.__callbackAnswered) {
+        await answerCallback(query, { text: 'Terjadi gangguan saat memproses tombol. Silakan coba lagi.', show_alert: true });
+      } else if (query?.message?.chat?.id && query?.message?.message_id) {
+        await editMessage(query,
+          `⚠️ <b>Terjadi gangguan</b>
+
+${escapeHtml(message.slice(0, 500))}
+
+Tekan kembali ke menu utama lalu coba lagi.`,
+          { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[styledButton('🔙 Menu Utama', { callback_data: 'kembaliawal' }, 'primary')]] } }
+        ).catch(() => null);
+      }
+      return null;
+    }
+  }
 }
 
 module.exports = { handleUpdate };

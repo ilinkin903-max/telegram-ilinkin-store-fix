@@ -1,3 +1,9 @@
+# CATATAN v80
+
+Dokumen di bawah adalah catatan legacy. Pada v80, callback AutoGoPay **tidak wajib**. Gunakan polling `transaction_id` setiap 30 detik seperti dijelaskan di `AUTOGOPAY-SETUP.md`. Jangan mengubah callback jika API key yang sama dipakai bot lain.
+
+---
+
 # AutoGoPay Callback — v62
 
 Endpoint callback:

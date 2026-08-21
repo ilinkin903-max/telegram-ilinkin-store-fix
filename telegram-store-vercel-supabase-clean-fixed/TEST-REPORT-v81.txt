@@ -1,0 +1,346 @@
+TAP version 13
+# Subtest: reseller kembali ke UI klasik dan navigasi berada di bawah
+ok 1 - reseller kembali ke UI klasik dan navigasi berada di bawah
+  ---
+  duration_ms: 1.228448
+  type: 'test'
+  ...
+# Subtest: marketplace memakai visual klasik yang sama dan bottom navigation
+ok 2 - marketplace memakai visual klasik yang sama dan bottom navigation
+  ---
+  duration_ms: 0.321408
+  type: 'test'
+  ...
+# Subtest: fitur penting marketplace dan PO tetap ada
+ok 3 - fitur penting marketplace dan PO tetap ada
+  ---
+  duration_ms: 0.220068
+  type: 'test'
+  ...
+# Subtest: grafik menaruh omzet tepat di atas batang
+ok 4 - grafik menaruh omzet tepat di atas batang
+  ---
+  duration_ms: 0.71179
+  type: 'test'
+  ...
+# Subtest: menu reseller desktop dipusatkan dan users satu kolom rapi
+ok 5 - menu reseller desktop dipusatkan dan users satu kolom rapi
+  ---
+  duration_ms: 0.38334
+  type: 'test'
+  ...
+# Subtest: promo mempertahankan judul rapi dan diskon tidak mudah overflow
+ok 6 - promo mempertahankan judul rapi dan diskon tidak mudah overflow
+  ---
+  duration_ms: 0.424431
+  type: 'test'
+  ...
+# Subtest: marketplace search ikut scroll, katalog turun, close tetap terlihat
+ok 7 - marketplace search ikut scroll, katalog turun, close tetap terlihat
+  ---
+  duration_ms: 0.742896
+  type: 'test'
+  ...
+# Subtest: promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+ok 8 - promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+  ---
+  duration_ms: 0.731869
+  type: 'test'
+  ...
+# Subtest: dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+ok 9 - dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+  ---
+  duration_ms: 0.585862
+  type: 'test'
+  ...
+# Subtest: marketplace merender banner bawaan dan banner gambar dalam satu carousel
+ok 10 - marketplace merender banner bawaan dan banner gambar dalam satu carousel
+  ---
+  duration_ms: 0.164365
+  type: 'test'
+  ...
+# Subtest: Cara Order marketplace mengikuti mode tombol toko
+ok 11 - Cara Order marketplace mengikuti mode tombol toko
+  ---
+  duration_ms: 0.14126
+  type: 'test'
+  ...
+# Subtest: banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+ok 12 - banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+  ---
+  duration_ms: 1.030234
+  type: 'test'
+  ...
+# Subtest: marketplace banner mendukung swipe pointer dan drag
+ok 13 - marketplace banner mendukung swipe pointer dan drag
+  ---
+  duration_ms: 0.288569
+  type: 'test'
+  ...
+# Subtest: indikator banner lebih transparan
+ok 14 - indikator banner lebih transparan
+  ---
+  duration_ms: 0.16125
+  type: 'test'
+  ...
+# Subtest: Cara Order bot tetap tersedia dan memberi panduan pembelian
+ok 15 - Cara Order bot tetap tersedia dan memberi panduan pembelian
+  ---
+  duration_ms: 0.218034
+  type: 'test'
+  ...
+# Subtest: tombol Cara Order selalu ada di menu bot
+ok 16 - tombol Cara Order selalu ada di menu bot
+  ---
+  duration_ms: 0.986548
+  type: 'test'
+  ...
+# Subtest: panduan Cara Order memakai alur Marketplace saat marketplace aktif
+ok 17 - panduan Cara Order memakai alur Marketplace saat marketplace aktif
+  ---
+  duration_ms: 0.321409
+  type: 'test'
+  ...
+# Subtest: panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+ok 18 - panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+  ---
+  duration_ms: 0.273307
+  type: 'test'
+  ...
+# Subtest: v76 menambahkan konfigurasi ProdSeller hanya di server
+ok 19 - v76 menambahkan konfigurasi ProdSeller hanya di server
+  ---
+  duration_ms: 1.078324
+  type: 'test'
+  ...
+# Subtest: service ProdSeller memakai X-API-Key dan Idempotency-Key
+ok 20 - service ProdSeller memakai X-API-Key dan Idempotency-Key
+  ---
+  duration_ms: 0.301059
+  type: 'test'
+  ...
+# Subtest: produk supplier dipilih satu per satu dari dashboard
+ok 21 - produk supplier dipilih satu per satu dari dashboard
+  ---
+  duration_ms: 1.794541
+  type: 'test'
+  ...
+# Subtest: checkout memverifikasi stok supplier sebelum pelanggan membayar
+ok 22 - checkout memverifikasi stok supplier sebelum pelanggan membayar
+  ---
+  duration_ms: 0.910235
+  type: 'test'
+  ...
+# Subtest: fulfillment supplier hanya setelah order lunas dan aman untuk retry
+ok 23 - fulfillment supplier hanya setelah order lunas dan aman untuk retry
+  ---
+  duration_ms: 0.34905
+  type: 'test'
+  ...
+# Subtest: migration v76 menyimpan metadata produk dan order supplier
+ok 24 - migration v76 menyimpan metadata produk dan order supplier
+  ---
+  duration_ms: 0.262881
+  type: 'test'
+  ...
+# Subtest: pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO
+ok 25 - pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO
+  ---
+  duration_ms: 0.842154
+  type: 'test'
+  ...
+# Subtest: popup dashboard menutup menu bawah dan berada di lapisan teratas
+ok 26 - popup dashboard menutup menu bawah dan berada di lapisan teratas
+  ---
+  duration_ms: 0.783346
+  type: 'test'
+  ...
+# Subtest: stok supplier dihitung dari saldo dan stok aktual supplier
+ok 27 - stok supplier dihitung dari saldo dan stok aktual supplier
+  ---
+  duration_ms: 0.921472
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+ok 28 - marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+  ---
+  duration_ms: 0.33634
+  type: 'test'
+  ...
+# Subtest: produk supplier tidak dicampur ke menu Pesanan PO
+ok 29 - produk supplier tidak dicampur ke menu Pesanan PO
+  ---
+  duration_ms: 0.89379
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan loadSupplier
+ok 30 - dashboard v78 mendefinisikan loadSupplier
+  ---
+  duration_ms: 0.8131
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan renderStats
+ok 31 - dashboard v78 mendefinisikan renderStats
+  ---
+  duration_ms: 0.246307
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan renderCharts
+ok 32 - dashboard v78 mendefinisikan renderCharts
+  ---
+  duration_ms: 0.214709
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan productMatches
+ok 33 - dashboard v78 mendefinisikan productMatches
+  ---
+  duration_ms: 0.21522
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan productInitial
+ok 34 - dashboard v78 mendefinisikan productInitial
+  ---
+  duration_ms: 0.215762
+  type: 'test'
+  ...
+# Subtest: metadata ProdSeller dapat disimpan pada masing-masing varian
+ok 35 - metadata ProdSeller dapat disimpan pada masing-masing varian
+  ---
+  duration_ms: 1.086337
+  type: 'test'
+  ...
+# Subtest: dashboard dapat memilih produk baru atau varian produk yang sudah ada
+ok 36 - dashboard dapat memilih produk baru atau varian produk yang sudah ada
+  ---
+  duration_ms: 1.184003
+  type: 'test'
+  ...
+# Subtest: import reseller ke varian mempertahankan produk lama sebagai varian Utama bila perlu
+ok 37 - import reseller ke varian mempertahankan produk lama sebagai varian Utama bila perlu
+  ---
+  duration_ms: 1.505651
+  type: 'test'
+  ...
+# Subtest: marketplace menghitung stok live per Product ID supplier pada varian
+ok 38 - marketplace menghitung stok live per Product ID supplier pada varian
+  ---
+  duration_ms: 0.409108
+  type: 'test'
+  ...
+# Subtest: checkout dan fulfillment memakai Product ID milik varian yang dipilih
+ok 39 - checkout dan fulfillment memakai Product ID milik varian yang dipilih
+  ---
+  duration_ms: 0.573293
+  type: 'test'
+  ...
+# Subtest: varian supplier tidak masuk PO manual dan stok lokalnya tidak dapat diedit
+ok 40 - varian supplier tidak masuk PO manual dan stok lokalnya tidak dapat diedit
+  ---
+  duration_ms: 1.047088
+  type: 'test'
+  ...
+# Subtest: produk campuran lokal dan supplier tetap didukung
+ok 41 - produk campuran lokal dan supplier tetap didukung
+  ---
+  duration_ms: 0.45047
+  type: 'test'
+  ...
+# Subtest: daftar produk bot memakai pagination 10 produk per halaman
+ok 42 - daftar produk bot memakai pagination 10 produk per halaman
+  ---
+  duration_ms: 1.140678
+  type: 'test'
+  ...
+# Subtest: produk supplier di bot tampil sebagai stok ready berdasarkan saldo dan stok ProdSeller
+ok 43 - produk supplier di bot tampil sebagai stok ready berdasarkan saldo dan stok ProdSeller
+  ---
+  duration_ms: 0.522007
+  type: 'test'
+  ...
+# Subtest: varian supplier tidak lagi memakai array stok lokal untuk menentukan stok
+ok 44 - varian supplier tidak lagi memakai array stok lokal untuk menentukan stok
+  ---
+  duration_ms: 0.400115
+  type: 'test'
+  ...
+# Subtest: tombol bot menggunakan style warna resmi Telegram
+ok 45 - tombol bot menggunakan style warna resmi Telegram
+  ---
+  duration_ms: 0.500825
+  type: 'test'
+  ...
+# Subtest: read berat bot diberi cache singkat dan start tidak mengulang upsert setelah registrasi referral
+ok 46 - read berat bot diberi cache singkat dan start tidak mengulang upsert setelah registrasi referral
+  ---
+  duration_ms: 5.651542
+  type: 'test'
+  ...
+# Subtest: bot QRIS tidak menampilkan tombol halaman pembayaran
+ok 47 - bot QRIS tidak menampilkan tombol halaman pembayaran
+  ---
+  duration_ms: 1.368386
+  type: 'test'
+  ...
+# Subtest: invoice bot tetap memakai referensi lokal
+ok 48 - invoice bot tetap memakai referensi lokal
+  ---
+  duration_ms: 0.55139
+  type: 'test'
+  ...
+# Subtest: pembayaran otomatis memakai polling 30 detik tanpa callback wajib
+ok 49 - pembayaran otomatis memakai polling 30 detik tanpa callback wajib
+  ---
+  duration_ms: 0.276632
+  type: 'test'
+  ...
+# Subtest: marketplace tidak menampilkan link checkout eksternal
+ok 50 - marketplace tidak menampilkan link checkout eksternal
+  ---
+  duration_ms: 0.518812
+  type: 'test'
+  ...
+# Subtest: label provider pada UI adalah QRIS
+ok 51 - label provider pada UI adalah QRIS
+  ---
+  duration_ms: 1.253666
+  type: 'test'
+  ...
+# Subtest: owner compatibility accepts OWNER_ID, OWNER_IDS and DEV_OWNER_ID
+ok 52 - owner compatibility accepts OWNER_ID, OWNER_IDS and DEV_OWNER_ID
+  ---
+  duration_ms: 1.241027
+  type: 'test'
+  ...
+# Subtest: dashboard owner button and command are available
+ok 53 - dashboard owner button and command are available
+  ---
+  duration_ms: 0.633843
+  type: 'test'
+  ...
+# Subtest: legacy Link Auto Account environment aliases remain supported
+ok 54 - legacy Link Auto Account environment aliases remain supported
+  ---
+  duration_ms: 0.185526
+  type: 'test'
+  ...
+# Subtest: callback router no longer answers every callback before validation
+ok 55 - callback router no longer answers every callback before validation
+  ---
+  duration_ms: 0.406124
+  type: 'test'
+  ...
+# Subtest: dashboard Mini App owner authentication uses all configured owner IDs
+ok 56 - dashboard Mini App owner authentication uses all configured owner IDs
+  ---
+  duration_ms: 0.184625
+  type: 'test'
+  ...
+1..56
+# tests 56
+# suites 0
+# pass 56
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 192.544668

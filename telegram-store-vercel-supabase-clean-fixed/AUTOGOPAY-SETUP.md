@@ -1,27 +1,38 @@
-# Setup AutoGoPay v62
+# Setup AutoGoPay — Mode Link Auto Order (tanpa callback wajib)
 
-1. Untuk database yang sudah memakai v60/v61, jalankan `supabase/update-v62-security-reliability.sql`.
-2. Tambahkan `PAYMENT_PROVIDER=autogopay`, `AUTOGOPAY_API_KEY`, `WEBHOOK_SECRET`, `CRON_SECRET`, dan URL publik pada Vercel Production.
-3. Pastikan `MINIAPP_DEV_MODE=false` atau hapus dari Production.
-4. Deploy v62 dan buka `/api/payment-webhook`.
-5. Pastikan versi `v63-marketplace-dashboard-polish` dan provider `autogopay`.
-6. Daftarkan callback melalui:
+Versi v80 tidak mewajibkan callback AutoGoPay. Ini cocok bila satu API key AutoGoPay dipakai oleh lebih dari satu bot dan callback tidak dapat diganti.
 
-```text
-/api/setup-autogopay?secret=WEBHOOK_SECRET_ANDA
+## Environment Variables Vercel
+```env
+PAYMENT_PROVIDER=autogopay
+AUTOGOPAY_API_KEY=API_KEY_ANDA
+AUTOGOPAY_BASE_URL=https://v1-gateway.autogopay.site
+
+PUBLIC_URL=https://domain-project.vercel.app
+WEBHOOK_SECRET=rahasia_webhook
+JOB_RUNNER_SECRET=rahasia_worker_lain
+CRON_SECRET=rahasia_cron_lain
+
+PAYMENT_POLL_INTERVAL_SECONDS=30
+PAYMENT_POLL_MAX_ATTEMPTS=30
 ```
 
-Callback menggunakan:
+## Cara kerja
+1. Bot membuat QRIS melalui AutoGoPay.
+2. QRIS dikirim sebagai gambar langsung di Telegram.
+3. `transaction_id` AutoGoPay disimpan di `pending_orders` atau `wallet_topups`.
+4. `/api/payment-poll` memeriksa `/qris/status` setiap 30 detik.
+5. User juga dapat menekan tombol **Cek Pembayaran** kapan saja.
+6. Jika status sudah dibayar, order diproses atau saldo top up dikreditkan.
+
+## Callback
+Jangan membuka `/api/setup-autogopay` bila API key yang sama digunakan bot lain. Endpoint webhook tetap ada untuk kompatibilitas, tetapi alur utama tidak bergantung padanya.
+
+## Recovery
+Endpoint `/api/payment-cron` tetap dapat dipanggil oleh scheduler eksternal dengan:
 
 ```text
-/api/payment-webhook?provider=autogopay&verify=1
+Authorization: Bearer CRON_SECRET
 ```
 
-Request probe dibalas HTTP 200 tanpa memproses order. Payload pembayaran asli tetap harus lolos signature HMAC dan diverifikasi ulang ke gateway sebelum fulfillment.
-
-Untuk pemulihan pembayaran yang webhook-nya terlambat/gagal, panggil setiap 1–2 menit:
-
-```text
-POST /api/payment-cron
-Authorization: Bearer CRON_SECRET_ANDA
-```
+Endpoint ini memeriksa ulang invoice/top up pending bila rantai polling sempat terputus.

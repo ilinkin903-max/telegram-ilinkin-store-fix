@@ -112,10 +112,9 @@ test('Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah te
 });
 
 
-test('v55 menampilkan link halaman pembayaran AutoGoPay bila tersedia', () => {
-  assert.match(html, /id="paymentCheckoutLink"/);
-  assert.match(js, /payment\.checkout_url/);
-  assert.match(js, /Buka Halaman Pembayaran|paymentCheckoutLink/);
+test('pembayaran Link Auto Order tidak menampilkan link checkout eksternal', () => {
+  assert.doesNotMatch(html, /id="paymentCheckoutLink"/);
+  assert.doesNotMatch(js, /Buka Halaman Pembayaran/);
 });
 
 
@@ -224,7 +223,7 @@ test('pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslas
   const homeStart = bot.indexOf('async function buildHomeText');
   const homeEnd = bot.indexOf('function variantKey', homeStart);
   const home = bot.slice(homeStart, homeEnd);
-  assert.match(home, /escapeHtml\(config\.botName\)/);
+  assert.match(home, /escapeHtml\(String\(settings\.store_name \|\| config\.botName/);
   assert.match(home, /parse_mode: 'HTML'/);
   assert.doesNotMatch(home, /escapeMarkdownText\(config\.botName\)/);
 });

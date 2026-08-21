@@ -1,0 +1,26 @@
+Link Auto Order v81.4 - Test Report
+==================================
+
+Scope:
+- Syntax check seluruh file JavaScript di api/, lib/, public/, scripts/, tests/.
+- Regression test dashboard owner v81.
+- Regression test channel/join/formatting v81.3.
+- Test baru v81.4 untuk channel notification, copy product, dan store/bot name.
+
+Hasil:
+- ALL_JS_SYNTAX_OK
+- 14/14 targeted regression tests PASSED
+- 0 failed
+
+Perbaikan yang diverifikasi:
+1. claim_job_lock_v62 mempunyai fallback ke public.job_locks.
+2. Notifikasi transaksi selesai tidak bergantung pada receipt pembeli.
+3. Retry channel sampai 3 kali tersedia.
+4. Pemulihan notifikasi 30 transaksi tersedia dari Dashboard/API dan payment-cron.
+5. Produk yang dikirim memiliki tombol Telegram copy_text / Salin Produk.
+6. store_name dipakai pada /start dan wajib join.
+7. store_name disinkronkan ke nama tampilan bot Telegram dengan setMyName.
+
+Catatan:
+- Tidak ada migration SQL baru untuk v81.4.
+- Uji akhir channel Telegram nyata tetap perlu dilakukan setelah deploy karena kredensial bot/channel produksi tidak tersedia di lingkungan build.

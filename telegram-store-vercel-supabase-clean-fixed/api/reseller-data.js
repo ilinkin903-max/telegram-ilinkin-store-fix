@@ -3,8 +3,7 @@ const db = require('../lib/db');
 const tg = require('../lib/telegram');
 const paymentService = require('../lib/paymentService');
 const prodseller = require('../lib/prodsellerService');
-const telegramSupplier = require('../lib/telegramSupplierService');
-const aiFlow = require('../lib/aiFlowService');
+const workflowUserbot = require('../lib/userbotWorkflowService');
 const crypto = require('crypto');
 const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
@@ -205,10 +204,63 @@ function prodsellerCode(productId) {
   return `PS${shortHash(String(productId || '')).slice(0, 8).toUpperCase()}`;
 }
 
+
+function workflowLinkSnapshot(product, variantKeyValue = '') {
+  const key = String(variantKeyValue || '').trim().toUpperCase();
+  const found = key ? db.findVariant(product, key) : { variant: null };
+  const item = found?.variant || product || {};
+  return {
+    target: key ? 'variant' : 'product',
+    variant_key: key,
+    delivery_mode: String(item.delivery_mode || product?.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
+    supplier_source: String(item.supplier_source || '').trim().toLowerCase(),
+    supplier_product_id: String(item.supplier_product_id || '').trim(),
+    supplier_price_usdt: Number(item.supplier_price_usdt || 0),
+    supplier_public_price_usdt: Number(item.supplier_public_price_usdt || 0),
+    supplier_stock: item.supplier_stock == null ? null : Number(item.supplier_stock),
+    supplier_synced_at: item.supplier_synced_at || null
+  };
+}
+
+async function originalWorkflowLinkSnapshot(product, variantKeyValue = '') {
+  const snapshot = workflowLinkSnapshot(product, variantKeyValue);
+  if (snapshot.supplier_source !== 'telegram_workflow' || !snapshot.supplier_product_id) return snapshot;
+  const previousWorkflow = await db.getResellerWorkflow(snapshot.supplier_product_id).catch(() => null);
+  const inherited = previousWorkflow?.previous_link_snapshot;
+  if (inherited && typeof inherited === 'object' && Object.keys(inherited).length) return inherited;
+  return { ...snapshot, supplier_source: '', supplier_product_id: '', supplier_price_usdt: 0, supplier_public_price_usdt: 0, supplier_stock: null, supplier_synced_at: null };
+}
+
+async function restoreWorkflowProductLink(workflow) {
+  if (!workflow) return null;
+  const product = await db.getProductByCode(workflow.product_code).catch(() => null);
+  if (!product) return null;
+  const previous = workflow.previous_link_snapshot && typeof workflow.previous_link_snapshot === 'object' ? workflow.previous_link_snapshot : {};
+  const restore = {
+    delivery_mode: String(previous.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
+    supplier_source: String(previous.supplier_source || '').trim().toLowerCase(),
+    supplier_product_id: String(previous.supplier_product_id || '').trim(),
+    supplier_price_usdt: Number(previous.supplier_price_usdt || 0),
+    supplier_public_price_usdt: Number(previous.supplier_public_price_usdt || 0),
+    supplier_stock: previous.supplier_stock == null ? null : Number(previous.supplier_stock),
+    supplier_synced_at: previous.supplier_synced_at || null
+  };
+  if (workflow.variant_key) {
+    const variants = (product.variants || []).map((variant, index) => {
+      if (db.variantKey(variant, index) !== workflow.variant_key) return variant;
+      if (String(variant.supplier_source || '').toLowerCase() !== 'telegram_workflow' || String(variant.supplier_product_id || '') !== String(workflow.id)) return variant;
+      return { ...variant, ...restore };
+    });
+    return db.updateProductByCode(product.kode, { variants });
+  }
+  if (String(product.supplier_source || '').toLowerCase() !== 'telegram_workflow' || String(product.supplier_product_id || '') !== String(workflow.id)) return product;
+  return db.updateProductByCode(product.kode, restore);
+}
+
 function supplierLinkOf(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (!['prodseller','telegram_userbot'].includes(source) || !productId) return null;
+  if (source !== 'prodseller' || !productId) return null;
   return {
     source,
     productId,
@@ -217,6 +269,14 @@ function supplierLinkOf(product, variant = null) {
     stock: (variant?.supplier_stock ?? product?.supplier_stock) == null ? null : Number(variant?.supplier_stock ?? product?.supplier_stock),
     syncedAt: variant?.supplier_synced_at || product?.supplier_synced_at || null
   };
+}
+
+function automatedSupplierLinkOf(product, variant = null) {
+  const item = variant || product || {};
+  const source = String(item.supplier_source || '').trim().toLowerCase();
+  const productId = String(item.supplier_product_id || '').trim();
+  if (!['prodseller', 'telegram_workflow'].includes(source) || !productId) return null;
+  return { source, productId };
 }
 
 function localSupplierLinks(products = []) {
@@ -234,7 +294,7 @@ function localSupplierLinks(products = []) {
 
 async function getProdSellerStatus() {
   const localProducts = await db.listProducts().catch(() => []);
-  const selected = localSupplierLinks(localProducts).filter((link) => link.source === 'prodseller');
+  const selected = localSupplierLinks(localProducts);
   if (!prodseller.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length };
   const balance = await prodseller.getBalance();
   return {
@@ -254,7 +314,7 @@ async function getProdSellerCatalog() {
     db.getShopSettings()
   ]);
   const localBySupplierId = new Map();
-  localSupplierLinks(localProducts).filter((link) => link.source === 'prodseller').forEach((link) => {
+  localSupplierLinks(localProducts).forEach((link) => {
     const id = String(link.productId || '');
     if (id && !localBySupplierId.has(id)) localBySupplierId.set(id, link);
   });
@@ -332,7 +392,7 @@ async function importProdSellerProduct(body = {}) {
 
     const linkedIndex = variants.findIndex((variant) => {
       const link = supplierLinkOf(target, variant);
-      return link && link.source === 'prodseller' && String(link.productId) === productId;
+      return link && String(link.productId) === productId;
     });
     const variantName = String(body.variant_name || body.variantName || detail.name || 'Varian Supplier').trim();
     const supplierVariant = {
@@ -400,111 +460,6 @@ async function importProdSellerProduct(body = {}) {
     image_url: String(detail.imageUrl || ''),
     category: String(body.category || settings.prodseller_default_category || 'Produk Digital'),
     stock: []
-  });
-}
-
-
-function telegramSupplierCode(productRef) {
-  return `TG${shortHash(String(productRef || '')).slice(0, 8).toUpperCase()}`;
-}
-
-async function getTelegramSuppliersDashboard() {
-  const [connectors, products, localProducts] = await Promise.all([
-    db.listTelegramSupplierConnectors(),
-    db.listTelegramSupplierProducts(),
-    db.listProducts()
-  ]);
-  const localLinks = localSupplierLinks(localProducts).filter((link) => link.source === 'telegram_userbot');
-  const localByRef = new Map();
-  localLinks.forEach((link) => { if (!localByRef.has(String(link.productId))) localByRef.set(String(link.productId), link); });
-  const connectorMap = new Map(connectors.map((c) => [String(c.id), c]));
-  return {
-    connectors,
-    products: products.map((row) => {
-      const connector = connectorMap.get(String(row.connector_id)) || null;
-      const link = localByRef.get(String(row.id)) || null;
-      return {
-        ...row,
-        connector_name: connector?.name || '',
-        connector_code: connector?.code || '',
-        bot_username: connector?.bot_username || '',
-        connector_status: connector?.status || 'offline',
-        connector_balance: connector?.balance ?? null,
-        selected: Boolean(link),
-        link_type: link?.link_type || '',
-        local_code: link?.product?.kode || '',
-        local_name: link?.product?.nama || '',
-        local_variant_name: link?.variant?.name || '',
-        local_price: Number(link?.variant?.price || link?.product?.harga || 0)
-      };
-    })
-  };
-}
-
-async function importTelegramSupplierProduct(body = {}) {
-  const ref = String(body.supplier_product_ref || body.product_id || '').trim();
-  if (!ref) throw new Error('Pilih produk Telegram supplier terlebih dahulu.');
-  const [supplierProduct, localProducts] = await Promise.all([db.getTelegramSupplierProduct(ref), db.listProducts()]);
-  if (!supplierProduct || supplierProduct.active === false) throw new Error('Produk Telegram supplier tidak ditemukan atau nonaktif.');
-  const connector = await db.getTelegramSupplierConnector(supplierProduct.connector_id);
-  if (!connector) throw new Error('Connector Telegram supplier tidak ditemukan.');
-  const sellingPrice = Math.max(1000, Number(body.selling_price || body.harga || 0));
-  if (!sellingPrice) throw new Error('Harga jual iLink wajib diisi.');
-  const costIdr = String(supplierProduct.currency || connector.currency || '').toUpperCase() === 'IDR' ? Math.max(0, Math.round(Number(supplierProduct.cost_amount || 0))) : Math.max(0, Number(body.cost_price_idr || 0));
-  const targetMode = String(body.target_mode || 'product').toLowerCase() === 'variant' ? 'variant' : 'product';
-  const supplierLabel = `Supplier otomatis Telegram · ${connector.name || connector.bot_username}`;
-
-  if (targetMode === 'variant') {
-    const targetCode = String(body.target_product_code || '').trim().toUpperCase();
-    if (!targetCode) throw new Error('Pilih produk induk iLink.');
-    const target = localProducts.find((p) => String(p.kode || '').trim().toUpperCase() === targetCode);
-    if (!target) throw new Error('Produk induk iLink tidak ditemukan.');
-    if (supplierLinkOf(target, null)) throw new Error('Produk supplier mandiri tidak dapat dijadikan produk induk. Pilih produk iLink biasa.');
-    let variants = Array.isArray(target.variants) ? target.variants.map((v) => ({ ...v })) : [];
-    let clearBaseStock = false;
-    if (!variants.length) {
-      variants.push({
-        name: 'Utama', price: Number(target.harga || 0), cost_price: Number(target.cost_price || 0),
-        sku: `${String(target.kode || 'PROD').trim().toUpperCase()}-UTAMA`, note: '', description: String(target.deskripsi || ''), snk: String(target.snk || ''),
-        delivery_mode: String(target.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto', active: true,
-        stock: Array.isArray(target.data) ? target.data : [], bulk_prices: Array.isArray(target.bulk_prices) ? target.bulk_prices : []
-      });
-      clearBaseStock = true;
-    }
-    const linkedIndex = variants.findIndex((variant) => {
-      const link = supplierLinkOf(target, variant);
-      return link && link.source === 'telegram_userbot' && String(link.productId) === ref;
-    });
-    const supplierVariant = {
-      ...(linkedIndex >= 0 ? variants[linkedIndex] : {}),
-      name: String(body.variant_name || supplierProduct.name || 'Varian Supplier').trim(),
-      price: sellingPrice,
-      cost_price: costIdr,
-      sku: linkedIndex >= 0 ? String(variants[linkedIndex].sku || telegramSupplierCode(ref)).trim().toUpperCase() : `${telegramSupplierCode(ref)}-V`,
-      note: supplierLabel,
-      description: String(body.description || target.deskripsi || 'Produk dikirim otomatis melalui supplier Telegram setelah pembayaran.'),
-      snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
-      delivery_mode: 'po', active: true, stock: [], bulk_prices: linkedIndex >= 0 ? (variants[linkedIndex].bulk_prices || []) : [],
-      supplier_source: 'telegram_userbot', supplier_product_id: ref,
-      supplier_price_usdt: 0, supplier_public_price_usdt: 0, supplier_stock: null, supplier_synced_at: new Date().toISOString()
-    };
-    if (linkedIndex >= 0) variants[linkedIndex] = supplierVariant; else variants.push(supplierVariant);
-    const updated = await db.updateProductByCode(target.kode, { variants, ...(clearBaseStock ? { data: [] } : {}) });
-    return { ...updated, reseller_target: 'variant', reseller_variant: supplierVariant };
-  }
-
-  const existingLink = localSupplierLinks(localProducts).find((link) => link.source === 'telegram_userbot' && String(link.productId) === ref && link.link_type === 'product');
-  const base = {
-    harga: sellingPrice, cost_price: costIdr, supplier_source: 'telegram_userbot', supplier_product_id: ref,
-    supplier_price_usdt: 0, supplier_public_price_usdt: 0, supplier_stock: null, supplier_synced_at: new Date().toISOString(),
-    delivery_mode: 'po', display_scope: 'both', active: true, data: []
-  };
-  if (existingLink?.product) return db.updateProductByCode(existingLink.product.kode, base);
-  return db.addProduct({
-    ...base, nama: String(body.name || supplierProduct.name).trim(), kode: telegramSupplierCode(ref),
-    deskripsi: String(body.description || 'Produk digital dikirim otomatis melalui supplier Telegram setelah pembayaran.'),
-    snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
-    image_url: '', category: String(body.category || 'Produk Digital'), stock: []
   });
 }
 
@@ -587,7 +542,7 @@ module.exports = async function handler(req, res) {
         const product = productMap.get(String(order.product_code || '').trim().toUpperCase());
         if (!product) return true;
         const variant = db.findVariant(product, String(order.variant_key || '')).variant;
-        return !supplierLinkOf(product, variant || null);
+        return !automatedSupplierLinkOf(product, variant || null);
       });
       return json(res, 200, { ok: true, data: visibleOrders });
     }
@@ -597,10 +552,16 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
-    if (req.method === 'GET' && action === 'telegram-suppliers') return json(res, 200, { ok: true, data: await getTelegramSuppliersDashboard() });
-    if (req.method === 'GET' && action === 'supplier-ai-config') return json(res, 200, { ok: true, data: await aiFlow.getPublicConfig() });
-    if (req.method === 'GET' && action === 'supplier-ai-models') return json(res, 200, { ok: true, data: await aiFlow.listAvailableModels() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
+    if (req.method === 'GET' && action === 'workflow-userbot-status') return json(res, 200, { ok: true, data: await workflowUserbot.checkStatus(String(req.query?.live || '') === '1') });
+    if (req.method === 'GET' && action === 'workflow-list') return json(res, 200, { ok: true, data: await db.listResellerWorkflows(200) });
+    if (req.method === 'GET' && action === 'workflow-runs') return json(res, 200, { ok: true, data: await db.listResellerWorkflowRuns(100) });
+    if (req.method === 'GET' && action === 'workflow-detail') {
+      const workflow = await db.getResellerWorkflow(req.query?.id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      return json(res, 200, { ok: true, data: { workflow, steps } });
+    }
     if (req.method === 'GET' && action === 'analytics') return json(res, 200, { ok: true, data: await db.getAnalytics(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'polls') return json(res, 200, { ok: true, data: await db.listBroadcastPolls(100) });
     if (req.method === 'GET' && action === 'maintenance-stats') return json(res, 200, { ok: true, data: await db.getMaintenanceStats() });
@@ -630,63 +591,6 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data });
     }
 
-    if (action === 'supplier-ai-config-save') {
-      const body = bodyOf(req);
-      const data = await aiFlow.saveConfig(body);
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'supplier-ai-test') {
-      const data = await aiFlow.testConnection();
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'supplier-ai-generate-flow') {
-      const body = bodyOf(req);
-      const data = await aiFlow.generateFlow(body);
-      return json(res, 200, { ok: true, data });
-    }
-
-    if (action === 'telegram-supplier-save') {
-      const body = bodyOf(req);
-      let flowConfig = body.flow_config;
-      if (typeof flowConfig === 'string') {
-        try { flowConfig = JSON.parse(flowConfig || '{}'); } catch (_) { return json(res, 400, { ok: false, error: 'Flow config supplier harus JSON valid.' }); }
-      }
-      const data = await db.saveTelegramSupplierConnector({ ...body, flow_config: flowConfig || {} });
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'telegram-supplier-delete') {
-      const body = bodyOf(req);
-      await db.deleteTelegramSupplierConnector(body.id);
-      return json(res, 200, { ok: true });
-    }
-    if (action === 'telegram-supplier-product-save') {
-      const body = bodyOf(req);
-      const data = await db.saveTelegramSupplierProduct(body);
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'telegram-supplier-stock-check') {
-      const body = bodyOf(req);
-      const id = String(body.id || body.product_id || '').trim();
-      if (!id) return json(res, 400, { ok: false, error: 'ID produk supplier wajib diisi.' });
-      const data = await telegramSupplier.getAvailability(id, { live: true, force: true, allowCached: false, waitMs: 12000 });
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'telegram-supplier-product-delete') {
-      const body = bodyOf(req);
-      await db.deleteTelegramSupplierProduct(body.id);
-      return json(res, 200, { ok: true });
-    }
-    if (action === 'telegram-supplier-import') {
-      const body = bodyOf(req);
-      const data = await importTelegramSupplierProduct(body);
-      return json(res, 200, { ok: true, data });
-    }
-    if (action === 'telegram-supplier-retry') {
-      const body = bodyOf(req);
-      const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' });
-      return json(res, 200, { ok: true, data });
-    }
-
     if (action === 'prodseller-retry') {
       const body = bodyOf(req);
       const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' });
@@ -694,6 +598,169 @@ module.exports = async function handler(req, res) {
     }
 
     const body = bodyOf(req);
+
+    if (action === 'workflow-create') {
+      const productCode = String(body.product_code || '').trim().toUpperCase();
+      const variantKey = String(body.variant_key || '').trim().toUpperCase();
+      const product = await db.getProductByCode(productCode);
+      if (!product) return json(res, 404, { ok: false, error: 'Produk yang dipilih tidak ditemukan.' });
+      if (variantKey && !db.findVariant(product, variantKey).variant) return json(res, 404, { ok: false, error: 'Varian yang dipilih tidak ditemukan.' });
+      const previousLinkSnapshot = await originalWorkflowLinkSnapshot(product, variantKey);
+      const workflow = await db.createResellerWorkflow({
+        name: body.name || `Order ${product.nama}${variantKey ? ' - ' + variantKey : ''}`,
+        product_code: productCode,
+        variant_key: variantKey,
+        target_username: workflowUserbot.normalizeTarget(body.target_username || ''),
+        sample_quantity: Math.max(1, Number(body.sample_quantity || 1)),
+        step_timeout_ms: Math.max(1500, Math.min(30000, Number(body.step_timeout_ms || config.userbotStepTimeoutMs || 7000))),
+        previous_link_snapshot: previousLinkSnapshot,
+        created_by: Number(owner?.id || owner?.user?.id || config.ownerId || 0),
+        active: false
+      });
+      return json(res, 200, { ok: true, data: { workflow, steps: [] } });
+    }
+
+    if (action === 'workflow-action') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow sedang aktif. Nonaktifkan/edit dengan membuat rekaman baru agar order berjalan aman.' });
+      const context = {
+        quantity: Math.max(1, Number(workflow.sample_quantity || 1)),
+        invoice: 'TEST-' + Date.now(),
+        telegram_id: Number(owner?.id || owner?.user?.id || config.ownerId || 0),
+        username: owner?.username || 'owner',
+        custom_input: String(body.sample_custom_input || '')
+      };
+      const result = await workflowUserbot.executeRecorderAction({
+        target: workflow.target_username,
+        action_type: body.action_type,
+        action_value: body.action_value,
+        message_id: workflow.last_message_id || null,
+        timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+        context
+      });
+      const step = await db.addResellerWorkflowStep(workflow.id, {
+        action_type: result.action_type,
+        action_value: result.action_value,
+        preview_value: result.preview_value,
+        response_snapshot: result.response || {},
+        capture_result: false
+      });
+      const updated = await db.updateResellerWorkflow(workflow.id, {
+        last_message_id: result.response?.id || workflow.last_message_id || null,
+        last_message_snapshot: result.response || workflow.last_message_snapshot || {}
+      });
+      return json(res, 200, { ok: true, data: { workflow: updated, step, response: result.response, response_changed: result.response_changed } });
+    }
+
+    if (action === 'workflow-refresh') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      const snapshot = await workflowUserbot.refreshSupplierMessage(workflow.target_username);
+      const updated = await db.updateResellerWorkflow(workflow.id, { last_message_id: snapshot?.id || null, last_message_snapshot: snapshot || {} });
+      return json(res, 200, { ok: true, data: { workflow: updated, response: snapshot } });
+    }
+
+    if (action === 'workflow-mark-result') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      const stepId = String(body.step_id || steps[steps.length - 1]?.id || '').trim();
+      if (!stepId) return json(res, 400, { ok: false, error: 'Belum ada step yang dapat dijadikan hasil produk.' });
+      const latestSnapshot = workflow.last_message_snapshot && typeof workflow.last_message_snapshot === 'object' ? workflow.last_message_snapshot : null;
+      if (!latestSnapshot || !String(latestSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Balasan supplier terakhir belum berisi teks produk. Tekan Refresh Balasan sampai produk tampil, lalu tandai sebagai Hasil Produk.' });
+      const step = await db.setResellerWorkflowResultStep(workflow.id, stepId, latestSnapshot);
+      return json(res, 200, { ok: true, data: step });
+    }
+
+    if (action === 'workflow-undo') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow aktif tidak dapat diubah. Buat rekaman baru atau nonaktifkan terlebih dahulu.' });
+      const removed = await db.deleteLastResellerWorkflowStep(workflow.id);
+      const remaining = await db.listResellerWorkflowSteps(workflow.id);
+      const last = remaining[remaining.length - 1];
+      const updated = await db.updateResellerWorkflow(workflow.id, {
+        last_message_id: last?.response_snapshot?.id || null,
+        last_message_snapshot: last?.response_snapshot || {}
+      });
+      return json(res, 200, { ok: true, data: { removed, workflow: updated, steps: remaining } });
+    }
+
+    if (action === 'workflow-activate') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      if (!steps.length) return json(res, 400, { ok: false, error: 'Workflow belum memiliki step.' });
+      if (!steps.some((step) => step.capture_result === true)) return json(res, 400, { ok: false, error: 'Tandai balasan hasil supplier sebagai Hasil Produk terlebih dahulu.' });
+      const product = await db.getProductByCode(workflow.product_code);
+      if (!product) return json(res, 404, { ok: false, error: 'Produk workflow tidak ditemukan.' });
+      const all = await db.listResellerWorkflows(500);
+      for (const other of all) {
+        if (other.id !== workflow.id && other.product_code === workflow.product_code && String(other.variant_key || '') === String(workflow.variant_key || '') && other.active) {
+          await db.updateResellerWorkflow(other.id, { active: false });
+        }
+      }
+      let updatedProduct;
+      if (workflow.variant_key) {
+        const variants = (product.variants || []).map((variant, index) => {
+          const key = db.variantKey(variant, index);
+          if (key !== workflow.variant_key) return variant;
+          return { ...variant, delivery_mode: 'po', supplier_source: 'telegram_workflow', supplier_product_id: workflow.id, supplier_stock: null, supplier_synced_at: new Date().toISOString() };
+        });
+        updatedProduct = await db.updateProductByCode(product.kode, { variants });
+      } else {
+        updatedProduct = await db.updateProductByCode(product.kode, {
+          delivery_mode: 'po', supplier_source: 'telegram_workflow', supplier_product_id: workflow.id,
+          supplier_stock: null, supplier_synced_at: new Date().toISOString()
+        });
+      }
+      const updated = await db.updateResellerWorkflow(workflow.id, { active: true });
+      return json(res, 200, { ok: true, data: { workflow: updated, product: updatedProduct } });
+    }
+
+    if (action === 'workflow-deactivate') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      const updated = await db.updateResellerWorkflow(workflow.id, { active: false });
+      await restoreWorkflowProductLink(workflow).catch((error) => console.error('restore workflow link gagal:', error.message || error));
+      return json(res, 200, { ok: true, data: updated });
+    }
+
+    if (action === 'workflow-delete') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      await restoreWorkflowProductLink(workflow).catch((error) => console.error('restore workflow link saat hapus gagal:', error.message || error));
+      await db.deleteResellerWorkflow(workflow.id);
+      return json(res, 200, { ok: true });
+    }
+
+    if (action === 'workflow-retry-order') {
+      const data = await paymentService.retryWorkflowOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' }, { forceRestart: body.force_restart === true });
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'test-transaction-channel') {
+      const settings = await db.getShopSettings();
+      const target = String(body.transaction_channel_id || settings.transaction_channel_id || config.channelLog || '').trim();
+      if (!target) return json(res, 400, { ok: false, error: 'Channel notifikasi transaksi belum diisi.' });
+      await tg.sendMessage(target, `✅ TES NOTIFIKASI TRANSAKSI\n=======================\nBot berhasil mengirim pesan ke channel.\nChannel: ${target}`);
+      return json(res, 200, { ok: true, data: { target } });
+    }
+
+    if (action === 'retry-transaction-notifications') {
+      const data = await paymentService.recoverTransactionNotifications(Math.max(1, Math.min(100, Number(body.limit || 30))));
+      const sent = (data || []).filter((item) => item.sent).length;
+      return json(res, 200, { ok: true, data: { checked: (data || []).length, sent, items: data || [] } });
+    }
+
+    if (action === 'test-required-channel') {
+      const settings = await db.getShopSettings();
+      const target = String(body.required_channel_id || settings.required_channel_id || '').trim();
+      if (!target) return json(res, 400, { ok: false, error: 'ID/username channel wajib join belum diisi.' });
+      const member = await tg.getChatMember(target, Number(owner.id || owner.user?.id || config.ownerId));
+      return json(res, 200, { ok: true, data: { target, status: member?.status || '-', is_member: member?.is_member !== false } });
+    }
 
     if (action === 'backup-send') {
       const backup = await db.exportBackupData();
@@ -759,10 +826,12 @@ module.exports = async function handler(req, res) {
         customer_service_link: body.customer_service_link,
         group_link: body.group_link,
         bot_menu_mode: body.bot_menu_mode,
-        join_channel_required: body.join_channel_required,
-        join_channel_id: body.join_channel_id,
-        join_channel_link: body.join_channel_link,
-        bot_show_total_users: body.bot_show_total_users,
+        show_total_users: body.show_total_users,
+        join_required_enabled: body.join_required_enabled,
+        required_channel_id: body.required_channel_id,
+        required_channel_link: body.required_channel_link,
+        transaction_notifications_enabled: body.transaction_notifications_enabled,
+        transaction_channel_id: body.transaction_channel_id,
         referral_enabled: body.referral_enabled,
         referral_reward_amount: body.referral_reward_amount,
         referral_reward_mode: body.referral_reward_mode,
@@ -774,7 +843,18 @@ module.exports = async function handler(req, res) {
         prodseller_markup_percent: body.prodseller_markup_percent,
         prodseller_default_category: body.prodseller_default_category
       });
-      return json(res, 200, { ok: true, data });
+      let bot_name_sync = { ok: true, skipped: true };
+      const requestedBotName = String(body.store_name || '').trim();
+      if (requestedBotName) {
+        try {
+          await tg.setMyName(requestedBotName.slice(0, 64));
+          bot_name_sync = { ok: true, skipped: false, name: requestedBotName.slice(0, 64) };
+        } catch (syncError) {
+          console.error('Sinkron nama bot Telegram gagal:', syncError.message || syncError);
+          bot_name_sync = { ok: false, skipped: false, error: syncError.message || String(syncError) };
+        }
+      }
+      return json(res, 200, { ok: true, data, bot_name_sync });
     }
 
     if (action === 'add-product') {
@@ -848,9 +928,13 @@ module.exports = async function handler(req, res) {
       if (body.stock_text !== undefined) updates.stock = splitStock(body.stock_text || '');
       if (body.field && body.value !== undefined) updates[body.field] = ['harga','cost_price','modal','harga_modal'].includes(body.field) ? numberOf(body.value) : String(body.value || '').trim();
       const currentProduct = await db.getProductByCode(code);
-      if (['prodseller','telegram_userbot'].includes(String(currentProduct?.supplier_source || '').toLowerCase())) {
+      const currentSupplierSource = String(currentProduct?.supplier_source || '').toLowerCase();
+      if (['prodseller', 'telegram_workflow'].includes(currentSupplierSource)) {
         updates.delivery_mode = 'po';
-        updates.stock = [];
+        // ProdSeller tidak memakai stok lokal. Workflow Telegram sengaja mempertahankan
+        // stok lama agar saat workflow dinonaktifkan produk dapat kembali seperti semula.
+        if (currentSupplierSource === 'prodseller') updates.stock = [];
+        else delete updates.stock;
       }
       const product = await db.updateProductByCode(code, updates);
       if (!product) return json(res, 404, { ok: false, error: 'Produk tidak ditemukan.' });
@@ -868,8 +952,10 @@ module.exports = async function handler(req, res) {
       if (String(po.status || '') !== 'waiting_delivery') return json(res, 409, { ok: false, error: 'Pesanan PO ini tidak sedang menunggu pengiriman.' });
       const poProduct = await db.getProductByCode(po.product_code).catch(() => null);
       const poVariant = poProduct ? db.findVariant(poProduct, po.variant_key || '').variant : null;
-      if (supplierLinkOf(poProduct, poVariant || null)) {
-        return json(res, 409, { ok: false, error: 'Pesanan supplier otomatis diproses melalui Supplier / Reseller dan tidak dapat dikirim sebagai PO manual.' });
+      const poSupplierLink = automatedSupplierLinkOf(poProduct, poVariant || null);
+      if (poSupplierLink) {
+        const label = poSupplierLink.source === 'telegram_workflow' ? 'Workflow Reseller' : 'ProdSeller';
+        return json(res, 409, { ok: false, error: `Pesanan ${label} diproses otomatis melalui sistem reseller dan tidak dapat dikirim sebagai PO manual.` });
       }
       const transactionBeforeSend = await db.getTransactionByOrderRef(orderRef).catch(() => null);
       if (String(transactionBeforeSend?.status || 'completed').toLowerCase() === 'canceled') {
@@ -1023,6 +1109,15 @@ module.exports = async function handler(req, res) {
     return json(res, 404, { ok: false, error: 'Action tidak ditemukan.' });
   } catch (error) {
     console.error(error);
+    const raw = String(error?.message || '');
+    const schemaMissing = String(error?.code || '') === 'PGRST205' || /public\.products.*schema cache|could not find.*products.*schema cache/i.test(raw);
+    if (schemaMissing) {
+      return json(res, 503, {
+        ok: false,
+        error: 'Database bot belum kompatibel dengan v81. Jalankan supabase/v81.2-database-compat.sql di Supabase SQL Editor, lalu redeploy Vercel.',
+        code: 'DATABASE_SCHEMA_NOT_READY'
+      });
+    }
     return json(res, error.statusCode || 500, { ok: false, error: error.message });
   }
 };
