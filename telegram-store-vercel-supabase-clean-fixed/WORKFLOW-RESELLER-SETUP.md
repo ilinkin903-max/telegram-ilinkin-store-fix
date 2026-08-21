@@ -1,10 +1,14 @@
-# Setup Workflow Reseller v82
+# Setup Workflow Reseller v82.1
 
 ## 1. Jalankan migration Supabase
 
 Buka Supabase → SQL Editor → New query, lalu jalankan seluruh isi:
 
 `supabase/update-v82-workflow-recorder.sql`
+
+Jika sebelumnya sudah menjalankan v82.0, cukup jalankan migration tambahan:
+
+`supabase/update-v82.1-multi-message-recorder.sql`
 
 Migration ini aman untuk database v81.2.1+ dan tidak menghapus data lama.
 
@@ -56,15 +60,18 @@ Jika status `GAGAL TERHUBUNG`, jangan mulai merekam sampai konfigurasi userbot b
 2. Pilih **Varian** bila workflow hanya untuk varian tertentu.
 3. Isi **Bot Supplier**, misalnya `@Vinnstore_bot`.
 4. Isi nama workflow.
-5. Isi jumlah contoh. Jika workflow memakai `{quantity}`, angka contoh ini yang dikirim ketika merekam.
+5. Isi **Jumlah Contoh Saat Rekam**. Angka ini hanya dipakai saat latihan untuk step kategori Jumlah Pembelian.
 6. Tekan **Mulai Rekam Workflow**.
-7. Ketik `/start`, lalu **Kirim Teks & Rekam**.
-8. Setelah balasan muncul, pilih salah satu tombol supplier yang ditampilkan, atau ketik teks sendiri.
-9. Ulangi sampai proses order supplier selesai.
-10. Jika supplier masih menulis “sedang diproses”, tekan **Refresh Balasan** sampai produk final benar-benar muncul.
-11. Tekan **Balasan Ini = Hasil Produk**.
-12. Periksa daftar step.
-13. Tekan **Selesai & Aktifkan**.
+7. Pada **Kategori Step Teks**, pilih **Teks / Perintah Lainnya**, ketik `/start`, lalu **Kirim Teks & Rekam**.
+8. Jika supplier mengirim satu pesan, pesan itu otomatis dipilih. Jika supplier mengirim **2 pesan atau lebih**, semua pesan ditampilkan sebagai Pesan 1, Pesan 2, dst. Tekan **Pilih Pesan Ini** pada pesan yang benar.
+9. Jika pesan yang benar mempunyai tombol, Anda boleh langsung menekan tombol tersebut; sistem otomatis menjadikan pesan itu sebagai balasan resmi step sebelumnya lalu merekam klik tombol sebagai step baru.
+10. Bila supplier meminta jumlah, ubah **Kategori Step Teks → Jumlah Pembelian** lalu tekan **Kirim Jumlah Pembelian & Rekam**. Sistem otomatis menyimpan `{quantity}` dan mengirim Jumlah Contoh saat latihan.
+11. Untuk jawaban seperti `Tidak`, `/start`, email, atau kode, gunakan kategori **Teks / Perintah Lainnya**.
+12. Ulangi sampai proses order supplier selesai.
+13. Jika hasil datang beberapa detik kemudian, tekan **Refresh Pesan Supplier**. Pilih pesan yang benar-benar berisi produk.
+14. Tekan **Pesan Terpilih = Hasil Produk**.
+15. Periksa daftar step. Step dengan banyak balasan harus sudah menunjukkan pesan yang dipilih.
+16. Tekan **Selesai & Aktifkan**.
 
 Contoh workflow:
 
@@ -72,14 +79,51 @@ Contoh workflow:
 1. KIRIM TEKS    /start
 2. KLIK TOMBOL   Produk
 3. KLIK TOMBOL   Alight Motion
-4. KIRIM TEKS    {quantity}
+4. JUMLAH BELI   {quantity}
 5. KLIK TOMBOL   Beli (Saldo)
 6. KIRIM TEKS    Tidak
 7. KLIK TOMBOL   Konfirmasi & proses
 8. HASIL PRODUK  balasan akun/data dari supplier
 ```
 
-## 5. Placeholder
+
+## 5. Memilih balasan ketika supplier mengirim beberapa pesan
+
+Contoh supplier membalas satu aksi dengan:
+
+```text
+Pesan 1: Saldo Anda Rp50.000
+Pesan 2: Pilih Produk [Alight Motion] [Canva]
+```
+
+Recorder menampilkan keduanya. Untuk melanjutkan lewat tombol produk, pilih **Pesan 2** atau langsung klik tombol pada Pesan 2. Hanya pesan yang dipilih yang dipakai sebagai pola replay untuk step tersebut.
+
+Jika belum memilih salah satu dari beberapa pesan, workflow tidak dapat diaktifkan. Ini mencegah replay menekan tombol dari pesan yang salah.
+
+## 6. Kategori Step Teks
+
+### Jumlah Pembelian
+Pilih kategori ini ketika supplier meminta jumlah/order quantity. Anda tidak perlu mengetik `{quantity}`. Sistem menyimpannya otomatis.
+
+```text
+Saat rekam, Jumlah Contoh = 5 → supplier menerima 5
+Saat customer order 17 → supplier menerima 17
+```
+
+### Teks / Perintah Lainnya
+Gunakan untuk teks tetap atau placeholder lain, misalnya:
+
+```text
+/start
+Tidak
+Skip
+{invoice}
+{username}
+{telegram_id}
+{custom_input}
+```
+
+## 7. Placeholder
 
 Teks step dapat memakai:
 
@@ -93,7 +137,7 @@ Teks step dapat memakai:
 
 Contoh `Jumlah: {quantity}` akan berubah menjadi `Jumlah: 15` untuk order qty 15.
 
-## 6. Tes order
+## 8. Tes order
 
 Lakukan satu pembelian murah menggunakan akun pelanggan test:
 
@@ -103,7 +147,7 @@ Lakukan satu pembelian murah menggunakan akun pelanggan test:
 4. Periksa chat akun userbot dengan bot supplier.
 5. Pastikan hasil yang diterima supplier sama dengan hasil yang diteruskan ke pembeli.
 
-## 7. Status order workflow
+## 9. Status order workflow
 
 - `QUEUED`: menunggu supplier bot kosong; retry otomatis aman.
 - `RUNNING`: sedang menjalankan step.

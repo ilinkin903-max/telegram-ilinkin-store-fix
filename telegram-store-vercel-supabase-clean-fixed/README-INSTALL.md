@@ -93,3 +93,12 @@ Untuk menggunakan reseller berbasis rekam langkah bot supplier:
 6. Rekam `/start` → tombol/teks per langkah → tandai hasil → aktifkan.
 
 Panduan lengkap: `WORKFLOW-RESELLER-SETUP.md`.
+
+
+## v82.1.0 — Multi-message Recorder
+
+Setelah v82.0 terpasang, jalankan `supabase/update-v82.1-multi-message-recorder.sql`, lalu redeploy source v82.1.
+
+Recorder sekarang menyimpan semua balasan baru supplier dan meminta admin memilih pesan yang benar bila muncul lebih dari satu. Step teks juga dipisah menjadi **Jumlah Pembelian** (otomatis `{quantity}`) dan **Teks / Perintah Lainnya**.
+
+Lihat `UPDATE-v82.1.md` dan `WORKFLOW-RESELLER-SETUP.md`.

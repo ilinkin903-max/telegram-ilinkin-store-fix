@@ -2130,7 +2130,7 @@ async function createResellerWorkflow(input = {}) {
 async function updateResellerWorkflow(id, updates = {}) {
   const value = String(id || '').trim();
   if (!value) throw new Error('Workflow tidak ditemukan.');
-  const allowed = ['name','product_code','variant_key','target_username','active','sample_quantity','step_timeout_ms','last_message_id','last_message_snapshot','previous_link_snapshot'];
+  const allowed = ['name','product_code','variant_key','target_username','active','sample_quantity','step_timeout_ms','last_message_id','last_message_snapshot','recent_message_snapshots','previous_link_snapshot'];
   const payload = { updated_at: new Date().toISOString() };
   allowed.forEach((key) => {
     if (updates[key] === undefined) return;
@@ -2139,6 +2139,7 @@ async function updateResellerWorkflow(id, updates = {}) {
     else if (key === 'sample_quantity') payload[key] = Math.max(1, Number(updates[key] || 1));
     else if (key === 'step_timeout_ms') payload[key] = Math.max(1500, Math.min(30000, Number(updates[key] || 7000)));
     else if (key === 'last_message_id') payload[key] = updates[key] ? Number(updates[key]) : null;
+    else if (key === 'recent_message_snapshots') payload[key] = Array.isArray(updates[key]) ? updates[key] : [];
     else payload[key] = updates[key];
   });
   const { data, error } = await sb().from('reseller_workflows').update(payload).eq('id', value).select('*').maybeSingle();
@@ -2177,11 +2178,37 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     action_value: String(input.action_value || '').trim(),
     preview_value: String(input.preview_value || '').trim(),
     response_snapshot: input.response_snapshot && typeof input.response_snapshot === 'object' ? input.response_snapshot : {},
+    response_snapshots: Array.isArray(input.response_snapshots) ? input.response_snapshots : [],
+    response_selection_index: Number.isInteger(Number(input.response_selection_index)) ? Number(input.response_selection_index) : 0,
+    text_category: ['quantity','other'].includes(String(input.text_category || '').toLowerCase()) ? String(input.text_category).toLowerCase() : 'other',
     capture_result: input.capture_result === true
   };
   const { data, error } = await sb().from('reseller_workflow_steps').insert(payload).select('*').single();
   if (error) throw error;
   return data;
+}
+
+async function selectResellerWorkflowStepResponse(workflowId, stepId, messageId, candidateSnapshots = null) {
+  const workflow = String(workflowId || '').trim();
+  const step = String(stepId || '').trim();
+  const wantedId = Number(messageId || 0);
+  if (!workflow || !step || !wantedId) throw new Error('Pesan balasan yang dipilih tidak valid.');
+  const rows = await listResellerWorkflowSteps(workflow);
+  const current = rows.find((row) => String(row.id) === step);
+  if (!current) throw new Error('Step workflow tidak ditemukan.');
+  const candidates = Array.isArray(candidateSnapshots) && candidateSnapshots.length
+    ? candidateSnapshots
+    : (Array.isArray(current.response_snapshots) && current.response_snapshots.length ? current.response_snapshots : [current.response_snapshot].filter(Boolean));
+  const selectedIndex = candidates.findIndex((snap) => Number(snap?.id || 0) === wantedId);
+  if (selectedIndex < 0) throw new Error('Pesan yang dipilih tidak ditemukan pada daftar balasan supplier. Tekan Refresh Balasan lalu coba lagi.');
+  const selected = candidates[selectedIndex];
+  const { data, error } = await sb().from('reseller_workflow_steps').update({
+    response_snapshot: selected,
+    response_snapshots: candidates,
+    response_selection_index: selectedIndex
+  }).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
 }
 
 async function deleteLastResellerWorkflowStep(workflowId) {
@@ -2370,6 +2397,7 @@ module.exports = {
   deleteResellerWorkflow,
   listResellerWorkflowSteps,
   addResellerWorkflowStep,
+  selectResellerWorkflowStepResponse,
   deleteLastResellerWorkflowStep,
   setResellerWorkflowResultStep,
   getResellerWorkflowRun,

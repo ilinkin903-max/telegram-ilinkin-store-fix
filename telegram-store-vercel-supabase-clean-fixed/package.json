@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.17.0",
+  "version": "4.18.0",
   "private": true,
-  "description": "Link Auto Order v82.0 workflow recorder reseller: record supplier bot text/button steps and replay automatically after payment.",
+  "description": "Link Auto Order v82.1 workflow recorder reseller: multi-message response selection plus quantity/other text categories.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

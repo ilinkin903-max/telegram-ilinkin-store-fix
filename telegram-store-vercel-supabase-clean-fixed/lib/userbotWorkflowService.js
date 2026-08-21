@@ -177,6 +177,18 @@ async function latestSupplierMessage(client, target) {
   return incoming;
 }
 
+async function recentSupplierMessages(client, target, limit = 12) {
+  const messages = await listRecent(client, target, limit);
+  return Array.from(messages || [])
+    .filter((message) => !message?.out)
+    .sort((a, b) => safeNumber(a?.id) - safeNumber(b?.id));
+}
+
+async function recentSupplierSnapshots(client, target, limit = 12) {
+  const messages = await recentSupplierMessages(client, target, limit);
+  return messages.map(snapshotMessage).filter(Boolean);
+}
+
 async function getMessageById(client, target, messageId) {
   const id = Number(messageId || 0);
   if (!id) return null;
@@ -189,22 +201,48 @@ async function getMessageById(client, target, messageId) {
   }
 }
 
-async function waitForSupplierChange(client, target, beforeSnapshot, timeoutMs = 7000) {
+async function waitForSupplierResponses(client, target, beforeSnapshots = [], timeoutMs = 7000) {
+  const timeout = Math.max(1200, Number(timeoutMs || 7000));
   const start = Date.now();
-  const beforeSig = snapshotSignature(beforeSnapshot);
-  let latest = null;
-  while (Date.now() - start < Math.max(1200, Number(timeoutMs || 7000))) {
-    await sleep(Date.now() - start < 1200 ? 450 : 650);
-    const message = await latestSupplierMessage(client, target);
-    latest = snapshotMessage(message);
-    if (latest && snapshotSignature(latest) !== beforeSig) return { message, snapshot: latest, changed: true };
+  const quietWindowMs = Math.min(2500, Math.max(1600, Math.round(timeout * 0.28)));
+  const beforeMap = new Map((beforeSnapshots || []).filter(Boolean).map((snap) => [Number(snap.id || 0), snapshotSignature(snap)]));
+  const collected = new Map();
+  let lastChangeAt = 0;
+  let latestSnapshots = [];
+
+  while (Date.now() - start < timeout) {
+    await sleep(Date.now() - start < 1200 ? 350 : 500);
+    latestSnapshots = await recentSupplierSnapshots(client, target, 20).catch(() => []);
+    let changedThisPoll = false;
+    for (const snap of latestSnapshots) {
+      const id = Number(snap?.id || 0);
+      if (!id) continue;
+      const signature = snapshotSignature(snap);
+      const oldSignature = beforeMap.get(id);
+      if (!oldSignature || oldSignature !== signature) {
+        const previous = collected.get(id);
+        if (!previous || snapshotSignature(previous) !== signature) {
+          collected.set(id, snap);
+          changedThisPoll = true;
+        }
+      }
+    }
+    if (changedThisPoll) lastChangeAt = Date.now();
+    if (collected.size && lastChangeAt && Date.now() - lastChangeAt >= quietWindowMs) break;
   }
-  if (!latest) {
-    const message = await latestSupplierMessage(client, target).catch(() => null);
-    latest = snapshotMessage(message);
-    return { message, snapshot: latest, changed: false };
-  }
-  return { message: null, snapshot: latest, changed: false };
+
+  const responses = Array.from(collected.values()).sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+  const fallback = latestSnapshots[latestSnapshots.length - 1] || null;
+  return {
+    responses,
+    response: responses[responses.length - 1] || fallback,
+    changed: responses.length > 0
+  };
+}
+
+async function waitForSupplierChange(client, target, beforeSnapshot, timeoutMs = 7000) {
+  const result = await waitForSupplierResponses(client, target, beforeSnapshot ? [beforeSnapshot] : [], timeoutMs);
+  return { message: null, snapshot: result.response, changed: result.changed, responses: result.responses };
 }
 
 function normalizedResultHint(snapshot) {
@@ -229,25 +267,52 @@ function responseLooksLikeExpected(actual, expected) {
   return normalizedActual.includes(hint);
 }
 
-async function waitForCaptureResult(client, target, firstSnapshot, expectedSnapshot, timeoutMs) {
-  if (responseLooksLikeExpected(firstSnapshot, expectedSnapshot)) return firstSnapshot;
-  const totalWait = Math.max(4000, Math.min(15000, Number(timeoutMs || 7000) * 2));
-  const start = Date.now();
-  let latest = firstSnapshot || null;
-  let signature = snapshotSignature(latest);
-  while (Date.now() - start < totalWait) {
-    await sleep(700);
-    const message = await latestSupplierMessage(client, target).catch(() => null);
-    const snap = snapshotMessage(message);
-    if (!snap) continue;
-    const nextSignature = snapshotSignature(snap);
-    if (nextSignature !== signature) {
-      latest = snap;
-      signature = nextSignature;
-      if (responseLooksLikeExpected(latest, expectedSnapshot)) return latest;
-    }
+function buttonSignature(snapshot) {
+  return (snapshot?.buttons || []).map((button) => String(button?.text || '').trim().toLowerCase()).filter(Boolean).join('|');
+}
+
+function responseMatchesRecorded(actual, expected) {
+  if (!actual || !expected) return false;
+  const expectedButtons = buttonSignature(expected);
+  const actualButtons = buttonSignature(actual);
+  if (expectedButtons) {
+    if (expectedButtons !== actualButtons) return false;
+    const expectedText = String(expected?.text || '').trim();
+    return !expectedText || responseLooksLikeExpected(actual, expected) || expectedButtons === actualButtons;
   }
-  return latest;
+  return responseLooksLikeExpected(actual, expected);
+}
+
+function selectResponseForStep(responses = [], step = {}) {
+  const rows = Array.isArray(responses) ? responses.filter(Boolean) : [];
+  if (!rows.length) return null;
+  const expected = step?.response_snapshot || null;
+  if (expected && Object.keys(expected).length) {
+    const matched = rows.find((row) => responseMatchesRecorded(row, expected));
+    if (matched) return matched;
+  }
+  const index = Number(step?.response_selection_index);
+  if (Number.isInteger(index) && index >= 0 && index < rows.length) return rows[index];
+  return rows[rows.length - 1];
+}
+
+async function waitForCaptureResult(client, target, initialResponses, expectedSnapshot, timeoutMs, selectionIndex = -1) {
+  const initial = Array.isArray(initialResponses) ? initialResponses.filter(Boolean) : (initialResponses ? [initialResponses] : []);
+  const matchedInitial = initial.find((snap) => responseMatchesRecorded(snap, expectedSnapshot));
+  if (matchedInitial) return matchedInitial;
+  if (!expectedSnapshot || !Object.keys(expectedSnapshot || {}).length) {
+    if (selectionIndex >= 0 && selectionIndex < initial.length) return initial[selectionIndex];
+    if (initial.length) return initial[initial.length - 1];
+  }
+
+  const totalWait = Math.max(4000, Math.min(18000, Number(timeoutMs || 7000) * 2));
+  const before = await recentSupplierSnapshots(client, target, 20).catch(() => initial);
+  const later = await waitForSupplierResponses(client, target, before, totalWait);
+  const combined = initial.concat(later.responses || []);
+  const matched = combined.find((snap) => responseMatchesRecorded(snap, expectedSnapshot));
+  if (matched) return matched;
+  if (selectionIndex >= 0 && selectionIndex < combined.length) return combined[selectionIndex];
+  return combined[combined.length - 1] || later.response || null;
 }
 
 function renderTemplate(value, context = {}) {
@@ -280,7 +345,9 @@ async function executeActionWithClient(client, options = {}) {
   if (!['text', 'button'].includes(actionType)) throw new Error('Jenis step harus text atau button.');
   if (!actionValue) throw new Error(actionType === 'button' ? 'Pilih tombol supplier.' : 'Teks yang dikirim tidak boleh kosong.');
 
-  const beforeMessage = await latestSupplierMessage(client, target).catch(() => null);
+  const beforeMessages = await recentSupplierMessages(client, target, 20).catch(() => []);
+  const beforeSnapshots = beforeMessages.map(snapshotMessage).filter(Boolean);
+  const beforeMessage = beforeMessages[beforeMessages.length - 1] || null;
   const before = snapshotMessage(beforeMessage);
   let previewValue = actionValue;
 
@@ -294,14 +361,15 @@ async function executeActionWithClient(client, options = {}) {
     await clickMessageButton(clickable, actionValue);
   }
 
-  const waited = await waitForSupplierChange(client, target, before, options.timeout_ms || options.timeoutMs || 7000);
+  const waited = await waitForSupplierResponses(client, target, beforeSnapshots, options.timeout_ms || options.timeoutMs || 7000);
   return {
     target,
     action_type: actionType,
     action_value: actionValue,
     preview_value: previewValue,
     before,
-    response: waited.snapshot,
+    responses: waited.responses || [],
+    response: waited.response || null,
     response_changed: waited.changed
   };
 }
@@ -315,15 +383,19 @@ async function executeRecorderAction(options = {}) {
   }
 }
 
-async function refreshSupplierMessage(target) {
+async function refreshSupplierMessages(target, limit = 8) {
   const client = await openClient();
   try {
     const normalized = normalizeTarget(target);
-    const message = await latestSupplierMessage(client, normalized);
-    return snapshotMessage(message);
+    return await recentSupplierSnapshots(client, normalized, Math.max(2, Math.min(20, Number(limit || 8))));
   } finally {
     await closeClient(client);
   }
+}
+
+async function refreshSupplierMessage(target) {
+  const rows = await refreshSupplierMessages(target, 8);
+  return rows[rows.length - 1] || null;
 }
 
 async function checkStatus(live = false) {
@@ -374,7 +446,7 @@ async function runWorkflowSteps(options = {}) {
         timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
         context
       });
-      if (!action.response_changed || !action.response) {
+      if (!action.response_changed || !(action.responses || []).length) {
         const error = new Error(`Supplier belum memberi balasan baru setelah step ${index + 1}: ${step.action_type === 'button' ? 'klik ' : 'kirim '}${step.action_value}`);
         error.code = 'SUPPLIER_RESPONSE_TIMEOUT';
         error.step_index = index;
@@ -382,14 +454,15 @@ async function runWorkflowSteps(options = {}) {
         error.last_response = action.response || lastResponse;
         throw error;
       }
-      lastResponse = action.response;
+      lastResponse = selectResponseForStep(action.responses || [], step) || action.response;
       if (step.capture_result) {
         lastResponse = await waitForCaptureResult(
           client,
           target,
-          lastResponse,
+          action.responses || [],
           step.response_snapshot || null,
-          Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000)
+          Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+          Number(step.response_selection_index ?? -1)
         );
       }
       if (typeof options.on_step === 'function') await options.on_step({ index, step, action, response: lastResponse });
@@ -423,6 +496,8 @@ module.exports = {
   renderTemplate,
   executeRecorderAction,
   refreshSupplierMessage,
+  refreshSupplierMessages,
+  selectResponseForStep,
   runWorkflowSteps,
   __setClientFactoryForTests
 };

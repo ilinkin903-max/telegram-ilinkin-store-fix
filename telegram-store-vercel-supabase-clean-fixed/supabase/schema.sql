@@ -1816,6 +1816,7 @@ create table if not exists public.reseller_workflows (
   step_timeout_ms integer not null default 7000,
   last_message_id bigint,
   last_message_snapshot jsonb not null default '{}'::jsonb,
+  recent_message_snapshots jsonb not null default '[]'::jsonb,
   previous_link_snapshot jsonb not null default '{}'::jsonb,
   created_by bigint,
   created_at timestamptz not null default now(),
@@ -1823,6 +1824,7 @@ create table if not exists public.reseller_workflows (
 );
 
 alter table public.reseller_workflows add column if not exists previous_link_snapshot jsonb not null default '{}'::jsonb;
+alter table public.reseller_workflows add column if not exists recent_message_snapshots jsonb not null default '[]'::jsonb;
 
 create index if not exists reseller_workflows_product_idx
   on public.reseller_workflows (product_code, variant_key, active, updated_at desc);
@@ -1837,10 +1839,17 @@ create table if not exists public.reseller_workflow_steps (
   action_value text not null default '',
   preview_value text not null default '',
   response_snapshot jsonb not null default '{}'::jsonb,
+  response_snapshots jsonb not null default '[]'::jsonb,
+  response_selection_index integer not null default 0,
+  text_category text not null default 'other',
   capture_result boolean not null default false,
   created_at timestamptz not null default now(),
   unique(workflow_id, step_order)
 );
+
+alter table public.reseller_workflow_steps add column if not exists response_snapshots jsonb not null default '[]'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
+alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
 
 create index if not exists reseller_workflow_steps_workflow_idx
   on public.reseller_workflow_steps (workflow_id, step_order);
@@ -1883,4 +1892,12 @@ values
   ('workflow_step_timeout_ms', to_jsonb('7000'::text))
 on conflict (key) do nothing;
 
+notify pgrst, 'reload schema';
+
+
+-- v82.1 - multi-message recorder + text category
+alter table public.reseller_workflows add column if not exists recent_message_snapshots jsonb not null default '[]'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists response_snapshots jsonb not null default '[]'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
+alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
 notify pgrst, 'reload schema';

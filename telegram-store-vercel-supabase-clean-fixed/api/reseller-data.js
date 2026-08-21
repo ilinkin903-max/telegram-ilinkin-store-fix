@@ -621,9 +621,43 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'workflow-action') {
-      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      let workflow = await db.getResellerWorkflow(body.workflow_id || '');
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
       if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow sedang aktif. Nonaktifkan/edit dengan membuat rekaman baru agar order berjalan aman.' });
+
+      const existingSteps = await db.listResellerWorkflowSteps(workflow.id);
+      const previousStep = existingSteps[existingSteps.length - 1] || null;
+      const requestedMessageId = Number(body.message_id || 0);
+      if (previousStep && requestedMessageId) {
+        const mergedCandidates = [];
+        const seen = new Set();
+        [
+          ...(Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots : []),
+          ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
+        ].forEach((snap) => {
+          const id = Number(snap?.id || 0);
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          mergedCandidates.push(snap);
+        });
+        const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, previousStep.id, requestedMessageId, mergedCandidates);
+        workflow = await db.updateResellerWorkflow(workflow.id, {
+          last_message_id: selectedStep?.response_snapshot?.id || requestedMessageId,
+          last_message_snapshot: selectedStep?.response_snapshot || {},
+          recent_message_snapshots: mergedCandidates
+        }) || workflow;
+      } else if (previousStep) {
+        const previousCandidates = Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots : [];
+        if (previousCandidates.length > 1 && !Number(previousStep.response_snapshot?.id || 0)) {
+          return json(res, 409, { ok: false, error: 'Supplier mengirim beberapa pesan. Pilih dulu pesan mana yang direkam untuk step sebelumnya sebelum melanjutkan.' });
+        }
+      }
+
+      const actionType = String(body.action_type || '').trim().toLowerCase();
+      const textCategory = actionType === 'text' && String(body.text_category || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'other';
+      const actionValue = actionType === 'text' && textCategory === 'quantity'
+        ? '{quantity}'
+        : String(body.action_value || '').trim();
       const context = {
         quantity: Math.max(1, Number(workflow.sample_quantity || 1)),
         invoice: 'TEST-' + Date.now(),
@@ -633,43 +667,115 @@ module.exports = async function handler(req, res) {
       };
       const result = await workflowUserbot.executeRecorderAction({
         target: workflow.target_username,
-        action_type: body.action_type,
-        action_value: body.action_value,
-        message_id: workflow.last_message_id || null,
+        action_type: actionType,
+        action_value: actionValue,
+        message_id: requestedMessageId || workflow.last_message_id || null,
         timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
         context
       });
+      const responses = Array.isArray(result.responses) ? result.responses : [];
+      const autoSelected = responses.length === 1 ? responses[0] : null;
       const step = await db.addResellerWorkflowStep(workflow.id, {
         action_type: result.action_type,
         action_value: result.action_value,
         preview_value: result.preview_value,
-        response_snapshot: result.response || {},
+        text_category: textCategory,
+        response_snapshot: autoSelected || {},
+        response_snapshots: responses,
+        response_selection_index: autoSelected ? 0 : -1,
         capture_result: false
       });
       const updated = await db.updateResellerWorkflow(workflow.id, {
-        last_message_id: result.response?.id || workflow.last_message_id || null,
-        last_message_snapshot: result.response || workflow.last_message_snapshot || {}
+        last_message_id: autoSelected?.id || null,
+        last_message_snapshot: autoSelected || {},
+        recent_message_snapshots: responses
       });
-      return json(res, 200, { ok: true, data: { workflow: updated, step, response: result.response, response_changed: result.response_changed } });
+      return json(res, 200, {
+        ok: true,
+        data: {
+          workflow: updated,
+          step,
+          responses,
+          response: autoSelected,
+          response_changed: result.response_changed,
+          selection_required: responses.length > 1
+        }
+      });
     }
 
     if (action === 'workflow-refresh') {
       const workflow = await db.getResellerWorkflow(body.workflow_id || '');
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
-      const snapshot = await workflowUserbot.refreshSupplierMessage(workflow.target_username);
-      const updated = await db.updateResellerWorkflow(workflow.id, { last_message_id: snapshot?.id || null, last_message_snapshot: snapshot || {} });
-      return json(res, 200, { ok: true, data: { workflow: updated, response: snapshot } });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      const lastStep = steps[steps.length - 1] || null;
+      const existingCandidates = Array.isArray(lastStep?.response_snapshots) ? lastStep.response_snapshots.filter((snap) => Number(snap?.id || 0) > 0) : [];
+      const allRecent = await workflowUserbot.refreshSupplierMessages(workflow.target_username, 16);
+      const firstCurrentId = existingCandidates.length ? Math.min(...existingCandidates.map((snap) => Number(snap.id))) : 0;
+      const snapshots = firstCurrentId ? allRecent.filter((snap) => Number(snap?.id || 0) >= firstCurrentId) : allRecent.slice(-10);
+      const selectedId = Number(workflow.last_message_id || 0);
+      const selected = snapshots.find((snap) => Number(snap?.id || 0) === selectedId) || null;
+      const effectiveSelected = selected || (snapshots.length === 1 ? snapshots[0] : null);
+      const updated = await db.updateResellerWorkflow(workflow.id, {
+        last_message_id: effectiveSelected?.id || null,
+        last_message_snapshot: effectiveSelected || {},
+        recent_message_snapshots: snapshots
+      });
+      return json(res, 200, { ok: true, data: { workflow: updated, responses: snapshots, response: effectiveSelected, selection_required: snapshots.length > 1 && !effectiveSelected } });
+    }
+
+    if (action === 'workflow-select-message') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow aktif tidak dapat diubah.' });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      const targetStep = steps.find((step) => String(step.id) === String(body.step_id || '')) || steps[steps.length - 1];
+      if (!targetStep) return json(res, 400, { ok: false, error: 'Belum ada step yang dapat dipilih balasannya.' });
+      const messageId = Number(body.message_id || 0);
+      if (!messageId) return json(res, 400, { ok: false, error: 'Pilih salah satu pesan supplier.' });
+      const candidates = [];
+      const seen = new Set();
+      [
+        ...(Array.isArray(targetStep.response_snapshots) ? targetStep.response_snapshots : []),
+        ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
+      ].forEach((snap) => {
+        const id = Number(snap?.id || 0);
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        candidates.push(snap);
+      });
+      const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, targetStep.id, messageId, candidates);
+      const selected = selectedStep?.response_snapshot || candidates.find((snap) => Number(snap?.id || 0) === messageId) || null;
+      const updated = await db.updateResellerWorkflow(workflow.id, {
+        last_message_id: selected?.id || null,
+        last_message_snapshot: selected || {},
+        recent_message_snapshots: candidates
+      });
+      return json(res, 200, { ok: true, data: { workflow: updated, step: selectedStep, response: selected, responses: candidates } });
     }
 
     if (action === 'workflow-mark-result') {
-      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      let workflow = await db.getResellerWorkflow(body.workflow_id || '');
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
       const steps = await db.listResellerWorkflowSteps(workflow.id);
       const stepId = String(body.step_id || steps[steps.length - 1]?.id || '').trim();
       if (!stepId) return json(res, 400, { ok: false, error: 'Belum ada step yang dapat dijadikan hasil produk.' });
-      const latestSnapshot = workflow.last_message_snapshot && typeof workflow.last_message_snapshot === 'object' ? workflow.last_message_snapshot : null;
-      if (!latestSnapshot || !String(latestSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Balasan supplier terakhir belum berisi teks produk. Tekan Refresh Balasan sampai produk tampil, lalu tandai sebagai Hasil Produk.' });
-      const step = await db.setResellerWorkflowResultStep(workflow.id, stepId, latestSnapshot);
+      const messageId = Number(body.message_id || workflow.last_message_id || 0);
+      if (messageId && Number(workflow.last_message_id || 0) !== messageId) {
+        const targetStep = steps.find((step) => String(step.id) === stepId);
+        const candidates = [
+          ...(Array.isArray(targetStep?.response_snapshots) ? targetStep.response_snapshots : []),
+          ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
+        ];
+        const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, stepId, messageId, candidates);
+        workflow = await db.updateResellerWorkflow(workflow.id, {
+          last_message_id: selectedStep?.response_snapshot?.id || messageId,
+          last_message_snapshot: selectedStep?.response_snapshot || {},
+          recent_message_snapshots: candidates
+        }) || workflow;
+      }
+      const selectedSnapshot = workflow.last_message_snapshot && typeof workflow.last_message_snapshot === 'object' ? workflow.last_message_snapshot : null;
+      if (!selectedSnapshot || !String(selectedSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Pilih dulu pesan supplier yang benar, lalu tandai pesan tersebut sebagai Hasil Produk.' });
+      const step = await db.setResellerWorkflowResultStep(workflow.id, stepId, selectedSnapshot);
       return json(res, 200, { ok: true, data: step });
     }
 
@@ -680,9 +786,11 @@ module.exports = async function handler(req, res) {
       const removed = await db.deleteLastResellerWorkflowStep(workflow.id);
       const remaining = await db.listResellerWorkflowSteps(workflow.id);
       const last = remaining[remaining.length - 1];
+      const recent = Array.isArray(last?.response_snapshots) && last.response_snapshots.length ? last.response_snapshots : (last?.response_snapshot?.id ? [last.response_snapshot] : []);
       const updated = await db.updateResellerWorkflow(workflow.id, {
         last_message_id: last?.response_snapshot?.id || null,
-        last_message_snapshot: last?.response_snapshot || {}
+        last_message_snapshot: last?.response_snapshot || {},
+        recent_message_snapshots: recent
       });
       return json(res, 200, { ok: true, data: { removed, workflow: updated, steps: remaining } });
     }
@@ -692,6 +800,8 @@ module.exports = async function handler(req, res) {
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
       const steps = await db.listResellerWorkflowSteps(workflow.id);
       if (!steps.length) return json(res, 400, { ok: false, error: 'Workflow belum memiliki step.' });
+      const unresolvedStep = steps.find((step) => Array.isArray(step.response_snapshots) && step.response_snapshots.length > 1 && !Number(step.response_snapshot?.id || 0));
+      if (unresolvedStep) return json(res, 400, { ok: false, error: `Step ${unresolvedStep.step_order} menerima beberapa pesan supplier. Pilih dulu pesan yang direkam untuk step tersebut.` });
       if (!steps.some((step) => step.capture_result === true)) return json(res, 400, { ok: false, error: 'Tandai balasan hasil supplier sebagai Hasil Produk terlebih dahulu.' });
       const product = await db.getProductByCode(workflow.product_code);
       if (!product) return json(res, 404, { ok: false, error: 'Produk workflow tidak ditemukan.' });
