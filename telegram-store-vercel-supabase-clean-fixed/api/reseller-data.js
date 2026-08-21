@@ -257,6 +257,75 @@ async function restoreWorkflowProductLink(workflow) {
   return db.updateProductByCode(product.kode, restore);
 }
 
+
+async function resolveWorkflowTarget(productCode, variantKeyValue = '') {
+  const productCodeValue = String(productCode || '').trim().toUpperCase();
+  const variantKey = String(variantKeyValue || '').trim().toUpperCase();
+  const product = await db.getProductByCode(productCodeValue);
+  if (!product) throw Object.assign(new Error('Produk yang dipilih tidak ditemukan.'), { statusCode: 404 });
+  const variants = Array.isArray(product.variants) ? product.variants.filter((variant) => Number(variant?.price || variant?.harga || 0) > 0) : [];
+  if (variants.length && !variantKey) throw Object.assign(new Error('Produk ini mempunyai varian. Pilih varian yang dituju.'), { statusCode: 400 });
+  const selectedVariant = variantKey ? db.findVariant(product, variantKey).variant : null;
+  if (variantKey && !selectedVariant) throw Object.assign(new Error('Varian yang dipilih tidak ditemukan.'), { statusCode: 404 });
+  return { product, selectedVariant, productCode: productCodeValue, variantKey };
+}
+
+async function resolveWorkflowSupplier(input = {}, fallbackWorkflow = null) {
+  const supplierId = String(input.supplier_id || fallbackWorkflow?.supplier_id || '').trim();
+  if (supplierId) {
+    const supplier = await db.getResellerSupplier(supplierId);
+    if (!supplier) throw Object.assign(new Error('Supplier yang dipilih tidak ditemukan.'), { statusCode: 404 });
+    if (supplier.active === false) throw Object.assign(new Error('Supplier sedang nonaktif.'), { statusCode: 409 });
+    return supplier;
+  }
+  const target = workflowUserbot.normalizeTarget(input.target_username || fallbackWorkflow?.target_username || '');
+  let supplier = await db.getResellerSupplierByTarget(target).catch(() => null);
+  if (!supplier) {
+    const all = await db.listResellerSuppliers(500).catch(() => []);
+    supplier = await db.createResellerSupplier({
+      name: String(input.supplier_name || '').trim() || `Supplier ${all.length + 1}`,
+      target_username: target,
+      manual_balance_idr: Math.max(0, Number(input.manual_balance_idr || 0)),
+      active: true
+    });
+  }
+  return supplier;
+}
+
+async function resellerSupplierSummary() {
+  const [suppliers, workflows, products] = await Promise.all([
+    db.listResellerSuppliers(300),
+    db.listResellerWorkflows(500),
+    db.listProducts()
+  ]);
+  const productMap = new Map((products || []).map((product) => [String(product.kode || '').toUpperCase(), product]));
+  return suppliers.map((supplier) => {
+    const linked = workflows.filter((workflow) => String(workflow.supplier_id || '') === String(supplier.id));
+    const items = linked.map((workflow) => {
+      const product = productMap.get(String(workflow.product_code || '').toUpperCase());
+      const variant = workflow.variant_key ? db.findVariant(product, workflow.variant_key).variant : null;
+      return {
+        workflow_id: workflow.id,
+        workflow_name: workflow.name,
+        product_code: workflow.product_code,
+        product_name: product?.nama || workflow.product_code,
+        variant_key: workflow.variant_key || '',
+        variant_name: variant?.name || '',
+        unit_cost_idr: Math.max(0, Number(workflow.unit_cost_idr || 0)),
+        estimated_stock: db.workflowEstimatedStock(workflow, supplier),
+        active: workflow.active === true
+      };
+    });
+    return {
+      ...supplier,
+      workflow_count: linked.length,
+      variant_count: items.length,
+      estimated_stock_total: items.reduce((sum, item) => sum + Number(item.estimated_stock || 0), 0),
+      products: items
+    };
+  });
+}
+
 function supplierLinkOf(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
@@ -553,6 +622,8 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
+    if (req.method === 'GET' && action === 'reseller-suppliers') return json(res, 200, { ok: true, data: await resellerSupplierSummary() });
+    if (req.method === 'GET' && action === 'reseller-supplier-ledger') return json(res, 200, { ok: true, data: await db.listResellerSupplierLedger(req.query?.id || '', 100) });
     if (req.method === 'GET' && action === 'workflow-userbot-status') return json(res, 200, { ok: true, data: await workflowUserbot.checkStatus(String(req.query?.live || '') === '1') });
     if (req.method === 'GET' && action === 'workflow-list') return json(res, 200, { ok: true, data: await db.listResellerWorkflows(200) });
     if (req.method === 'GET' && action === 'workflow-runs') return json(res, 200, { ok: true, data: await db.listResellerWorkflowRuns(100) });
@@ -599,21 +670,129 @@ module.exports = async function handler(req, res) {
 
     const body = bodyOf(req);
 
+    if (action === 'reseller-supplier-save') {
+      const id = String(body.id || '').trim();
+      const target = workflowUserbot.normalizeTarget(body.target_username || '');
+      const beforeSupplier = id ? await db.getResellerSupplier(id).catch(() => null) : null;
+      let supplier;
+      if (id) supplier = await db.updateResellerSupplier(id, {
+        name: body.name,
+        target_username: target,
+        manual_balance_idr: numberOf(body.manual_balance_idr),
+        active: boolOf(body.active),
+        notes: body.notes
+      });
+      else supplier = await db.createResellerSupplier({
+        name: body.name || `Supplier ${(await db.listResellerSuppliers(500)).length + 1}`,
+        target_username: target,
+        manual_balance_idr: numberOf(body.manual_balance_idr),
+        active: boolOf(body.active),
+        notes: body.notes
+      });
+      if (supplier && beforeSupplier && Number(beforeSupplier.manual_balance_idr || 0) !== Number(supplier.manual_balance_idr || 0)) {
+        await db.recordResellerSupplierAdjustment(supplier.id, beforeSupplier.manual_balance_idr, supplier.manual_balance_idr, 'Saldo manual diubah dari Dashboard').catch(() => null);
+      }
+      const linkedWorkflows = (await db.listResellerWorkflows(500)).filter((workflow) => String(workflow.supplier_id || '') === String(supplier.id));
+      for (const workflow of linkedWorkflows) {
+        if (String(workflow.target_username || '') !== String(supplier.target_username || '')) {
+          await db.updateResellerWorkflow(workflow.id, { target_username: workflowUserbot.normalizeTarget(supplier.target_username) }).catch(() => null);
+        }
+      }
+      await db.syncSupplierWorkflowStocks(supplier.id).catch(() => null);
+      return json(res, 200, { ok: true, data: supplier });
+    }
+
+    if (action === 'reseller-supplier-delete') {
+      await db.deleteResellerSupplier(body.id || '');
+      return json(res, 200, { ok: true });
+    }
+
+    if (action === 'workflow-update') {
+      const current = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!current) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      // Edit workflow aktif selalu masuk mode draft dahulu agar order baru tidak membaca langkah setengah diedit.
+      if (current.active) {
+        await restoreWorkflowProductLink(current).catch(() => null);
+        await db.updateResellerWorkflow(current.id, { active: false });
+      }
+      const target = await resolveWorkflowTarget(body.product_code ?? current.product_code, body.variant_key ?? current.variant_key);
+      const supplier = await resolveWorkflowSupplier(body, current);
+      const targetChanged = target.productCode !== current.product_code || target.variantKey !== String(current.variant_key || '');
+      const previousLinkSnapshot = targetChanged ? await originalWorkflowLinkSnapshot(target.product, target.variantKey) : current.previous_link_snapshot;
+      const updated = await db.updateResellerWorkflow(current.id, {
+        name: body.name ?? current.name,
+        product_code: target.productCode,
+        variant_key: target.variantKey,
+        supplier_id: supplier.id,
+        target_username: workflowUserbot.normalizeTarget(supplier.target_username),
+        unit_cost_idr: body.unit_cost_idr !== undefined ? numberOf(body.unit_cost_idr) : current.unit_cost_idr,
+        sample_quantity: body.sample_quantity !== undefined ? Math.max(1, Number(body.sample_quantity || 1)) : current.sample_quantity,
+        step_timeout_ms: body.step_timeout_ms !== undefined ? Math.max(1500, Math.min(30000, Number(body.step_timeout_ms || 7000))) : current.step_timeout_ms,
+        previous_link_snapshot: previousLinkSnapshot,
+        active: false
+      });
+      await db.syncWorkflowSupplierStock(updated).catch(() => null);
+      return json(res, 200, { ok: true, data: { workflow: updated, steps: await db.listResellerWorkflowSteps(updated.id) } });
+    }
+
+    if (action === 'workflow-copy') {
+      const source = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!source) return json(res, 404, { ok: false, error: 'Workflow sumber tidak ditemukan.' });
+      const target = await resolveWorkflowTarget(body.product_code ?? source.product_code, body.variant_key ?? source.variant_key);
+      const supplier = await resolveWorkflowSupplier(body, source);
+      const previousLinkSnapshot = await originalWorkflowLinkSnapshot(target.product, target.variantKey);
+      const copied = await db.cloneResellerWorkflow(source.id, {
+        name: body.name || `${source.name || source.product_code} - Salinan`,
+        product_code: target.productCode,
+        variant_key: target.variantKey,
+        supplier_id: supplier.id,
+        target_username: workflowUserbot.normalizeTarget(supplier.target_username),
+        unit_cost_idr: body.unit_cost_idr !== undefined ? numberOf(body.unit_cost_idr) : source.unit_cost_idr,
+        sample_quantity: body.sample_quantity !== undefined ? Number(body.sample_quantity || 1) : source.sample_quantity,
+        step_timeout_ms: body.step_timeout_ms !== undefined ? Number(body.step_timeout_ms || 7000) : source.step_timeout_ms,
+        previous_link_snapshot: previousLinkSnapshot,
+        created_by: Number(owner?.id || owner?.user?.id || config.ownerId || 0)
+      });
+      return json(res, 200, { ok: true, data: copied });
+    }
+
+    if (action === 'workflow-step-update') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) {
+        await restoreWorkflowProductLink(workflow).catch(() => null);
+        await db.updateResellerWorkflow(workflow.id, { active: false });
+      }
+      const actionType = String(body.action_type || '').trim().toLowerCase();
+      const textCategory = actionType === 'text' && String(body.text_category || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'other';
+      const actionValue = actionType === 'text' && textCategory === 'quantity' ? '{quantity}' : String(body.action_value || '').trim();
+      if (!actionValue) return json(res, 400, { ok: false, error: actionType === 'button' ? 'Teks tombol wajib diisi.' : 'Teks step wajib diisi.' });
+      const step = await db.updateResellerWorkflowStep(workflow.id, body.step_id || '', { action_type: actionType, text_category: textCategory, action_value: actionValue });
+      return json(res, 200, { ok: true, data: step });
+    }
+
+    if (action === 'workflow-step-delete') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) {
+        await restoreWorkflowProductLink(workflow).catch(() => null);
+        await db.updateResellerWorkflow(workflow.id, { active: false });
+      }
+      await db.deleteResellerWorkflowStep(workflow.id, body.step_id || '');
+      return json(res, 200, { ok: true, data: await db.listResellerWorkflowSteps(workflow.id) });
+    }
+
     if (action === 'workflow-create') {
-      const productCode = String(body.product_code || '').trim().toUpperCase();
-      const variantKey = String(body.variant_key || '').trim().toUpperCase();
-      const product = await db.getProductByCode(productCode);
-      if (!product) return json(res, 404, { ok: false, error: 'Produk yang dipilih tidak ditemukan.' });
-      const variants = Array.isArray(product.variants) ? product.variants.filter((variant) => Number(variant?.price || variant?.harga || 0) > 0) : [];
-      if (variants.length && !variantKey) return json(res, 400, { ok: false, error: 'Produk ini mempunyai varian. Pilih varian yang dituju agar workflow tidak terhubung ke produk yang salah.' });
-      const selectedVariant = variantKey ? db.findVariant(product, variantKey).variant : null;
-      if (variantKey && !selectedVariant) return json(res, 404, { ok: false, error: 'Varian yang dipilih tidak ditemukan.' });
-      const previousLinkSnapshot = await originalWorkflowLinkSnapshot(product, variantKey);
+      const target = await resolveWorkflowTarget(body.product_code, body.variant_key);
+      const supplier = await resolveWorkflowSupplier(body);
+      const previousLinkSnapshot = await originalWorkflowLinkSnapshot(target.product, target.variantKey);
       const workflow = await db.createResellerWorkflow({
-        name: body.name || `Order ${product.nama}${selectedVariant ? ' - ' + (selectedVariant.name || selectedVariant.nama || variantKey) : ''}`,
-        product_code: productCode,
-        variant_key: variantKey,
-        target_username: workflowUserbot.normalizeTarget(body.target_username || ''),
+        name: body.name || `Order ${target.product.nama}${target.selectedVariant ? ' - ' + (target.selectedVariant.name || target.selectedVariant.nama || target.variantKey) : ''}`,
+        product_code: target.productCode,
+        variant_key: target.variantKey,
+        target_username: workflowUserbot.normalizeTarget(supplier.target_username),
+        supplier_id: supplier.id,
+        unit_cost_idr: Math.max(0, numberOf(body.unit_cost_idr || body.cost_price || 0)),
         sample_quantity: Math.max(1, Number(body.sample_quantity || 1)),
         step_timeout_ms: Math.max(1500, Math.min(30000, Number(body.step_timeout_ms || config.userbotStepTimeoutMs || 7000))),
         previous_link_snapshot: previousLinkSnapshot,
@@ -819,17 +998,18 @@ module.exports = async function handler(req, res) {
         const variants = (product.variants || []).map((variant, index) => {
           const key = db.variantKey(variant, index);
           if (key !== workflow.variant_key) return variant;
-          return { ...variant, delivery_mode: 'po', supplier_source: 'telegram_workflow', supplier_product_id: workflow.id, supplier_stock: null, supplier_synced_at: new Date().toISOString() };
+          return { ...variant, delivery_mode: 'po', supplier_source: 'telegram_workflow', supplier_product_id: workflow.id, cost_price: Math.max(0, Number(workflow.unit_cost_idr || 0)), supplier_stock: 0, supplier_synced_at: new Date().toISOString() };
         });
         updatedProduct = await db.updateProductByCode(product.kode, { variants });
       } else {
         updatedProduct = await db.updateProductByCode(product.kode, {
           delivery_mode: 'po', supplier_source: 'telegram_workflow', supplier_product_id: workflow.id,
-          supplier_stock: null, supplier_synced_at: new Date().toISOString()
+          cost_price: Math.max(0, Number(workflow.unit_cost_idr || 0)), supplier_stock: 0, supplier_synced_at: new Date().toISOString()
         });
       }
       const updated = await db.updateResellerWorkflow(workflow.id, { active: true });
-      return json(res, 200, { ok: true, data: { workflow: updated, product: updatedProduct } });
+      const stockSync = await db.syncWorkflowSupplierStock(updated).catch(() => null);
+      return json(res, 200, { ok: true, data: { workflow: updated, product: stockSync?.product || updatedProduct, estimated_stock: stockSync?.stock ?? 0 } });
     }
 
     if (action === 'workflow-deactivate') {

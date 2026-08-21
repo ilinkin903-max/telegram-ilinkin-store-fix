@@ -872,6 +872,14 @@ function isWorkflowSupplierProduct(product, selection = null) {
   return Boolean(workflowSupplierSelection(product, selection));
 }
 
+function workflowStockForSelection(product, selection = null) {
+  const ref = workflowSupplierSelection(product, selection);
+  if (!ref) return null;
+  const variant = ref.variant || (selection && selection.variant_key !== undefined ? selectedVariant(product, selection) : null);
+  const raw = variant?.supplier_stock ?? product?.supplier_stock;
+  return raw == null ? 0 : Math.max(0, Math.floor(Number(raw || 0)));
+}
+
 function isPoOrder(product, order = {}) {
   return isPoProduct(product, selectedVariant(product, order));
 }
@@ -954,6 +962,8 @@ function supplierStockForSelection(product, selection = null, availabilityMap = 
 }
 
 function readyStockForVariant(product, variant, availabilityMap = null) {
+  const workflowStock = workflowStockForSelection(product, variant);
+  if (workflowStock !== null) return workflowStock;
   const supplierStock = supplierStockForSelection(product, variant, availabilityMap);
   if (supplierStock !== null) return supplierStock;
   if (isPoProduct(product, variant)) return 0;
@@ -961,9 +971,11 @@ function readyStockForVariant(product, variant, availabilityMap = null) {
 }
 
 function readyStockForProduct(product, availabilityMap = null) {
+  const directWorkflowStock = workflowStockForSelection(product, null);
   const directSupplierStock = supplierStockForSelection(product, null, availabilityMap);
   const variants = activeVariantsWithIndex(product);
   if (!variants.length) {
+    if (directWorkflowStock !== null) return directWorkflowStock;
     if (directSupplierStock !== null) return directSupplierStock;
     return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
   }
@@ -1076,11 +1088,11 @@ async function sendStock(chatId, query = null) {
   const text = '*STOK PRODUK*\n=======================\n' + products.map((p, i) => {
     const summary = productDeliverySummary(p);
     const variantLines = activeVariantsWithIndex(p).map(({ variant: v }) => {
-      const state = isWorkflowSupplierProduct(p, v) ? '*OTOMATIS*' : (isPoProduct(p, v) && !isSupplierProduct(p, v) ? '*PRE-ORDER*' : `*${readyStockForVariant(p, v, availabilityMap)}* stok`);
+      const state = isWorkflowSupplierProduct(p, v) ? `*${readyStockForVariant(p, v, availabilityMap)}* stok` : (isPoProduct(p, v) && !isSupplierProduct(p, v) ? '*PRE-ORDER*' : `*${readyStockForVariant(p, v, availabilityMap)}* stok`);
       return `   - ${escapeMarkdownText(v.name)}: ${state} | ${formatRupiah(variantPrice(p, v))}`;
     }).join('\n');
     const readyStock = readyStockForProduct(p, availabilityMap);
-    const mainState = summary === 'workflow' ? 'Status: *OTOMATIS*' : (summary === 'po' ? 'Status: *PRE-ORDER*' : (summary === 'mixed' ? `Stok Ready: *${readyStock}* + varian PO` : (summary === 'mixed_supplier' ? 'Status: *OTOMATIS*' : `Total Stok: *${readyStock}*`)));
+    const mainState = summary === 'workflow' ? `Total Stok: *${readyStock}*` : (summary === 'po' ? 'Status: *PRE-ORDER*' : (summary === 'mixed' ? `Stok Ready: *${readyStock}* + varian PO` : (summary === 'mixed_supplier' ? 'Status: *OTOMATIS*' : `Total Stok: *${readyStock}*`)));
     return `${i + 1}. *${escapeMarkdownText(p.nama)}*\n   ${mainState} | Terjual: *${p.terjual}*${variantLines ? '\n' + variantLines : ''}`;
   }).join('\n\n');
   const options={ parse_mode: 'Markdown', reply_markup:{ inline_keyboard:[[styledButton('🔙 Kembali', { callback_data:'kembaliawal' }, 'primary')]] } };
@@ -1209,7 +1221,7 @@ ${bulk}
 ` +
     `-----------------------
 ` +
-    (isWorkflowSupplierProduct(product, order) ? `Sistem Pengiriman: *OTOMATIS*\n` : (isSupplierProduct(product, order) ? `Stok Tersedia: *${Math.max(0, Number(supplierAvailableStock || 0))}*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`))) +
+    (isWorkflowSupplierProduct(product, order) ? `Stok Tersedia: *${Math.max(0, Number(workflowStockForSelection(product, order) || 0))}*\n` : (isSupplierProduct(product, order) ? `Stok Tersedia: *${Math.max(0, Number(supplierAvailableStock || 0))}*\n` : (isPoOrder(product, order) ? `Sistem Pengiriman: *PRE-ORDER*\n` : `Stok Tersedia: *${availableStockForOrder(product, order)}*\n`))) +
     `Jumlah Pesanan: *${quantity}*
 ` +
     `Subtotal: *${formatRupiah(subtotal)}*${promoLine}
@@ -1637,7 +1649,7 @@ async function handleProductSelection(query, code, listPage = 0) {
   if (variants.length) {
     const rows = variants.map(({ variant, index }) => {
       const stockText = isWorkflowSupplierProduct(product, variant)
-        ? 'Otomatis'
+        ? `Stok ${readyStockForVariant(product, variant, availabilityMap)}`
         : (isPoProduct(product, variant) && !isSupplierProduct(product, variant)
           ? 'PRE-ORDER'
           : `Stok ${readyStockForVariant(product, variant, availabilityMap)}`);
@@ -1654,10 +1666,10 @@ Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi produk 
   if (Array.isArray(product.variants) && product.variants.length) {
     return answerCallback(query, { text: 'Semua varian produk ini sedang OFF.', show_alert: true });
   }
-  if (isSupplierProduct(product) && readyStockForProduct(product, availabilityMap) < 1) {
+  if ((isSupplierProduct(product) || isWorkflowSupplierProduct(product)) && readyStockForProduct(product, availabilityMap) < 1) {
     return answerCallback(query, { text: 'Stok produk sedang kosong.', show_alert: true });
   }
-  if (!isSupplierProduct(product) && !isPoProduct(product) && productStockTotal(product) < 1) {
+  if (!isSupplierProduct(product) && !isWorkflowSupplierProduct(product) && !isPoProduct(product) && productStockTotal(product) < 1) {
     return answerCallback(query, { text: 'Stok produk sedang kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, null, -1);
@@ -1690,8 +1702,8 @@ async function handleVariantSelection(query, code, indexText) {
   const variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
   if (!isVariantActive(variant)) return answerCallback(query, { text: 'Varian ini sedang OFF.', show_alert: true });
-  if (isSupplierProduct(product, variant)) {
-    const availabilityMap = await supplierAvailabilityForProducts([product]).catch(() => new Map());
+  if (isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant)) {
+    const availabilityMap = isSupplierProduct(product, variant) ? await supplierAvailabilityForProducts([product]).catch(() => new Map()) : new Map();
     if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   } else if (!isPoProduct(product, variant) && stockOfVariant(variant).length < 1) {
     return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
@@ -1729,7 +1741,11 @@ async function changeQuantity(query, delta, reset = false) {
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan!');
   let quantity = reset ? 1 : Number(order.quantity || 1) + Number(delta || 0);
   if (quantity < 1) quantity = 1;
-  if (isSupplierProduct(product, order)) {
+  if (isWorkflowSupplierProduct(product, order)) {
+    if (quantity > 100) return answerCallback(query, { text: 'Maksimal 100 item per pesanan.', show_alert: true });
+    const available = Math.max(0, Number(workflowStockForSelection(product, order) || 0));
+    if (quantity > available) return answerCallback(query, { text: `⚠️ Stok tersedia hanya ${available}`, show_alert: true });
+  } else if (isSupplierProduct(product, order)) {
     if (quantity > 100) return answerCallback(query, { text: 'Maksimal 100 item per pesanan.', show_alert: true });
     const availabilityMap = await supplierAvailabilityForProducts([product]).catch(() => new Map());
     const available = Math.max(0, Number(supplierStockForSelection(product, order, availabilityMap) || 0));
@@ -1748,7 +1764,19 @@ async function calculateCheckoutPricing(userId, order, product) {
   const unit = orderUnitPrice(product, order);
   const quantity = Math.max(1, Number(order.quantity || 1));
   let costUnit = db.orderUnitCost(product, order);
-  if (isSupplierProduct(product, order)) {
+  if (isWorkflowSupplierProduct(product, order)) {
+    const available = Math.max(0, Number(workflowStockForSelection(product, order) || 0));
+    if (available < quantity) {
+      const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${available}.`);
+      error.code = 'SUPPLIER_STOCK';
+      throw error;
+    }
+    if (!(costUnit > 0)) {
+      const error = new Error('Modal produk reseller belum diisi. Produk sementara tidak dapat dibeli.');
+      error.code = 'SUPPLIER_UNAVAILABLE';
+      throw error;
+    }
+  } else if (isSupplierProduct(product, order)) {
     if (!prodseller.configured()) {
       const error = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.');
       error.code = 'SUPPLIER_NOT_CONFIGURED';

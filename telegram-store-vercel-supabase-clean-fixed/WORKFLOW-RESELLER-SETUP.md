@@ -170,3 +170,14 @@ Pada field **Produk yang Dituju**, produk yang memiliki varian tampil langsung s
 
 ## Format produk ke pembeli
 Produk akhir dikirim dalam blok kode Telegram di bawah receipt `PEMBAYARAN BERHASIL`. Tombol `Salin Produk 1/2/3` sudah dihapus.
+
+## v82.3 - Edit/Salin Workflow & Supplier Manual
+
+- Buat Supplier dari **Pengaturan → Supplier / Reseller** dan isi saldo bot secara manual.
+- Setiap workflow wajib memilih Supplier dan mengisi **Modal Produk / Item**.
+- Estimasi stok = `floor(saldo manual / modal)`; saldo tidak dibaca dari bot supplier.
+- Setelah order workflow berhasil memperoleh produk, modal × quantity mengurangi saldo manual satu kali per invoice.
+- Tombol **Edit Workflow** dapat mengubah target produk/varian, supplier, modal, jumlah contoh, timeout, dan nama.
+- Tombol **Salin Workflow** menyalin semua step sebagai draft baru.
+- Setiap kartu step mempunyai **Edit** dan **Hapus**. Edit dapat mengganti `Klik Tombol` ↔ `Kirim Teks`, teks tombol/perintah, serta kategori `Jumlah Pembelian`.
+- Workflow aktif otomatis menjadi draft saat diedit. Setelah selesai, periksa lalu aktifkan kembali.

@@ -1,0 +1,28 @@
+Link Auto Order v82.3.0 - TEST REPORT
+===================================
+
+Static JavaScript syntax check:
+- 32 project JavaScript files in api/lib/public/scripts checked
+- PASS
+
+Targeted v82.3 tests:
+- 7/7 PASS
+- Covers migration supplier balance, workflow copy/edit, step edit/delete,
+  stock = floor(balance/modal), balance debit, compact supplier UI,
+  variant target selection, and safe draft-on-edit behavior.
+
+Full regression suite:
+- 213/213 PASS
+- 0 failed
+
+Test environment note:
+- Working container does not contain project node_modules.
+- Full regression was run with local no-network stubs only for axios/dotenv/qrcode
+  so modules can load; network/API calls were not executed.
+- Vercel will install the real pinned dependencies from package.json.
+
+Manual/live tests still required after deployment:
+- real Telegram userbot session
+- real supplier bot button/text flow
+- one low-cost workflow order
+- manual supplier balance deduction after successful delivery

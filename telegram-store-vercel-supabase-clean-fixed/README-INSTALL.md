@@ -106,3 +106,7 @@ Lihat `UPDATE-v82.1.md` dan `WORKFLOW-RESELLER-SETUP.md`.
 
 ## v82.2.0 — Anti Loop Workflow & Receipt Produk
 Jika update dari v82.1, jalankan `supabase/update-v82.2-workflow-guard-receipt.sql`, upload patch, lalu redeploy. Versi ini menambahkan guard persisten per invoice+step untuk mencegah workflow mengulang order supplier, target workflow langsung per-varian, menghapus tombol Salin Produk, dan menyeragamkan pesan produk akhir ke format PEMBAYARAN BERHASIL. Lihat `UPDATE-v82.2.md` dan `V82.2-CHANGES.md`.
+
+## v82.3 - Workflow Editor & Supplier Balance Manual
+
+Jalankan `supabase/update-v82.3-workflow-editor-supplier-balance.sql`, lalu redeploy. Supplier Telegram sekarang memakai saldo manual dan modal per workflow untuk menghitung stok. Workflow/step dapat diedit dan workflow dapat disalin. Lihat `UPDATE-v82.3.md` dan `V82.3-CHANGES.md`.

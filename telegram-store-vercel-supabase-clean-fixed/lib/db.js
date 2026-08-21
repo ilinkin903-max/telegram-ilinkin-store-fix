@@ -75,6 +75,19 @@ async function markClaimDone(rawKey, meta = {}) {
 
 async function releaseClaim(rawKey) {
   const key = String(rawKey || '').trim().slice(0, 220);
+  if (!key) return true;
+  try {
+    const { error } = await sb().from('job_locks').delete().eq('key', key);
+    if (error && !isMissingTableError(error)) throw error;
+    return true;
+  } catch (error) {
+    console.error('releaseClaim gagal:', error.message || error);
+    return false;
+  }
+}
+
+async function releaseClaim(rawKey) {
+  const key = String(rawKey || '').trim().slice(0, 220);
   if (!key) return;
   const { error } = await sb().from('job_locks').delete().eq('key', key);
   if (error && !isMissingTableError(error)) console.error('releaseClaim gagal:', error.message || error);
@@ -1788,7 +1801,7 @@ async function listSupplierOrders(limit = 100) {
   return data || [];
 }
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs','reseller_workflow_run_steps'];
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_suppliers','reseller_supplier_ledger','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs','reseller_workflow_run_steps'];
 
 async function safeSelectAll(table) {
   try {
@@ -2071,6 +2084,175 @@ async function getDeepStats() {
 }
 
 
+
+async function listResellerSuppliers(limit = 200) {
+  const { data, error } = await sb().from('reseller_suppliers').select('*').order('updated_at', { ascending: false }).limit(Math.max(1, Math.min(500, Number(limit || 200))));
+  if (error) {
+    if (isMissingTableError(error)) return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function getResellerSupplier(id) {
+  const value = String(id || '').trim();
+  if (!value) return null;
+  const { data, error } = await sb().from('reseller_suppliers').select('*').eq('id', value).maybeSingle();
+  if (error) {
+    if (isMissingTableError(error)) return null;
+    throw error;
+  }
+  return data || null;
+}
+
+async function getResellerSupplierByTarget(targetUsername) {
+  const target = String(targetUsername || '').trim().toLowerCase();
+  if (!target) return null;
+  const rows = await listResellerSuppliers(500);
+  return rows.find((row) => String(row.target_username || '').trim().toLowerCase() === target) || null;
+}
+
+async function createResellerSupplier(input = {}) {
+  const target = String(input.target_username || '').trim();
+  if (!target) throw new Error('Username bot supplier wajib diisi.');
+  const payload = {
+    name: String(input.name || '').trim() || 'Supplier',
+    target_username: target,
+    manual_balance_idr: Math.max(0, Number(input.manual_balance_idr || input.balance || 0)),
+    active: input.active === false ? false : true,
+    notes: String(input.notes || '').trim(),
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('reseller_suppliers').insert(payload).select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+async function updateResellerSupplier(id, updates = {}) {
+  const value = String(id || '').trim();
+  if (!value) throw new Error('Supplier tidak ditemukan.');
+  const payload = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = String(updates.name || '').trim();
+  if (updates.target_username !== undefined) payload.target_username = String(updates.target_username || '').trim();
+  if (updates.manual_balance_idr !== undefined || updates.balance !== undefined) payload.manual_balance_idr = Math.max(0, Number(updates.manual_balance_idr ?? updates.balance ?? 0));
+  if (updates.active !== undefined) payload.active = updates.active !== false;
+  if (updates.notes !== undefined) payload.notes = String(updates.notes || '').trim();
+  const { data, error } = await sb().from('reseller_suppliers').update(payload).eq('id', value).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function deleteResellerSupplier(id) {
+  const value = String(id || '').trim();
+  if (!value) return false;
+  const workflows = await listResellerWorkflows(500);
+  if (workflows.some((row) => String(row.supplier_id || '') === value)) throw new Error('Supplier masih dipakai workflow. Pindahkan atau hapus workflow terlebih dahulu.');
+  const { error } = await sb().from('reseller_suppliers').delete().eq('id', value);
+  if (error) throw error;
+  return true;
+}
+
+function workflowEstimatedStock(workflow = {}, supplier = {}) {
+  const balance = Math.max(0, Number(supplier?.manual_balance_idr || 0));
+  const cost = Math.max(0, Number(workflow?.unit_cost_idr || 0));
+  if (!(cost > 0)) return 0;
+  return Math.max(0, Math.floor(balance / cost));
+}
+
+async function syncWorkflowSupplierStock(workflowOrId) {
+  const workflow = typeof workflowOrId === 'object' && workflowOrId ? workflowOrId : await getResellerWorkflow(workflowOrId);
+  if (!workflow) return null;
+  const supplier = workflow.supplier_id ? await getResellerSupplier(workflow.supplier_id) : await getResellerSupplierByTarget(workflow.target_username);
+  const stock = supplier && supplier.active !== false ? workflowEstimatedStock(workflow, supplier) : 0;
+  const product = await getProductByCode(workflow.product_code);
+  if (!product) return { workflow, supplier, stock, product: null };
+  const cost = Math.max(0, Number(workflow.unit_cost_idr || 0));
+  let updatedProduct = product;
+  if (String(workflow.variant_key || '').trim()) {
+    const key = String(workflow.variant_key || '').trim().toUpperCase();
+    const variants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => {
+      if (variantKey(variant, index) !== key) return variant;
+      if (String(variant.supplier_source || '').toLowerCase() !== 'telegram_workflow' || String(variant.supplier_product_id || '') !== String(workflow.id)) return variant;
+      return { ...variant, cost_price: cost, supplier_stock: stock, supplier_synced_at: new Date().toISOString() };
+    });
+    updatedProduct = await updateProductByCode(product.kode, { variants });
+  } else if (String(product.supplier_source || '').toLowerCase() === 'telegram_workflow' && String(product.supplier_product_id || '') === String(workflow.id)) {
+    updatedProduct = await updateProductByCode(product.kode, { cost_price: cost, supplier_stock: stock, supplier_synced_at: new Date().toISOString() });
+  }
+  return { workflow, supplier, stock, product: updatedProduct };
+}
+
+async function syncSupplierWorkflowStocks(supplierId) {
+  const value = String(supplierId || '').trim();
+  if (!value) return [];
+  const workflows = (await listResellerWorkflows(500)).filter((row) => String(row.supplier_id || '') === value);
+  const results = [];
+  for (const workflow of workflows) results.push(await syncWorkflowSupplierStock(workflow).catch((error) => ({ workflow, error: String(error?.message || error) })));
+  return results;
+}
+
+async function recordResellerSupplierAdjustment(supplierId, balanceBefore, balanceAfter, note = '') {
+  const supplier = String(supplierId || '').trim();
+  if (!supplier) return null;
+  const before = Math.max(0, Number(balanceBefore || 0));
+  const after = Math.max(0, Number(balanceAfter || 0));
+  if (before === after) return null;
+  const { data, error } = await sb().from('reseller_supplier_ledger').insert({
+    supplier_id: supplier,
+    order_ref: '',
+    entry_type: 'adjustment',
+    amount_idr: after - before,
+    balance_before: before,
+    balance_after: after,
+    note: String(note || 'Saldo manual diperbarui owner')
+  }).select('*').single();
+  if (error) {
+    if (isMissingTableError(error)) return null;
+    throw error;
+  }
+  return data;
+}
+
+async function listResellerSupplierLedger(supplierId, limit = 100) {
+  const value = String(supplierId || '').trim();
+  if (!value) return [];
+  const { data, error } = await sb().from('reseller_supplier_ledger').select('*').eq('supplier_id', value).order('created_at', { ascending: false }).limit(Math.max(1, Math.min(300, Number(limit || 100))));
+  if (error) {
+    if (isMissingTableError(error)) return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function debitResellerSupplierBalance(supplierId, orderRef, amountIdr, note = '') {
+  const supplier = String(supplierId || '').trim();
+  const ref = String(orderRef || '').trim();
+  const amount = Math.max(0, Number(amountIdr || 0));
+  if (!supplier || !ref) throw new Error('Supplier/invoice untuk debit saldo tidak valid.');
+  const { data, error } = await sb().rpc('debit_reseller_supplier_balance_v823', {
+    p_supplier_id: supplier,
+    p_order_ref: ref,
+    p_amount: amount,
+    p_note: String(note || '')
+  });
+  if (error) {
+    if (/INSUFFICIENT_MANUAL_SUPPLIER_BALANCE/i.test(String(error.message || ''))) {
+      const e = new Error('Saldo manual supplier tidak mencukupi.');
+      e.code = 'WORKFLOW_MANUAL_BALANCE';
+      throw e;
+    }
+    if (isMissingTableError(error) || /debit_reseller_supplier_balance_v823/i.test(String(error.message || ''))) {
+      const e = new Error('Migration saldo Supplier v82.3 belum tersedia. Jalankan migration v82.3 terlebih dahulu.');
+      e.code = 'WORKFLOW_SUPPLIER_MIGRATION_MISSING';
+      throw e;
+    }
+    throw error;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  await syncSupplierWorkflowStocks(supplier).catch(() => null);
+  return row || null;
+}
+
 async function listResellerWorkflows(limit = 200) {
   const { data, error } = await sb().from('reseller_workflows').select('*').order('updated_at', { ascending: false }).limit(Math.max(1, Math.min(500, Number(limit || 200))));
   if (error) {
@@ -2111,6 +2293,9 @@ async function createResellerWorkflow(input = {}) {
     product_code: String(input.product_code || '').trim().toUpperCase(),
     variant_key: String(input.variant_key || '').trim().toUpperCase(),
     target_username: String(input.target_username || '').trim(),
+    supplier_id: input.supplier_id ? String(input.supplier_id).trim() : null,
+    unit_cost_idr: Math.max(0, Number(input.unit_cost_idr || input.cost_price || 0)),
+    copied_from_workflow_id: input.copied_from_workflow_id ? String(input.copied_from_workflow_id).trim() : null,
     active: input.active === true,
     sample_quantity: Math.max(1, Number(input.sample_quantity || 1)),
     step_timeout_ms: Math.max(1500, Math.min(30000, Number(input.step_timeout_ms || 7000))),
@@ -2130,12 +2315,14 @@ async function createResellerWorkflow(input = {}) {
 async function updateResellerWorkflow(id, updates = {}) {
   const value = String(id || '').trim();
   if (!value) throw new Error('Workflow tidak ditemukan.');
-  const allowed = ['name','product_code','variant_key','target_username','active','sample_quantity','step_timeout_ms','last_message_id','last_message_snapshot','recent_message_snapshots','previous_link_snapshot'];
+  const allowed = ['name','product_code','variant_key','target_username','supplier_id','unit_cost_idr','copied_from_workflow_id','active','sample_quantity','step_timeout_ms','last_message_id','last_message_snapshot','recent_message_snapshots','previous_link_snapshot'];
   const payload = { updated_at: new Date().toISOString() };
   allowed.forEach((key) => {
     if (updates[key] === undefined) return;
     if (key === 'product_code' || key === 'variant_key') payload[key] = String(updates[key] || '').trim().toUpperCase();
     else if (key === 'target_username' || key === 'name') payload[key] = String(updates[key] || '').trim();
+    else if (key === 'supplier_id' || key === 'copied_from_workflow_id') payload[key] = updates[key] ? String(updates[key]).trim() : null;
+    else if (key === 'unit_cost_idr') payload[key] = Math.max(0, Number(updates[key] || 0));
     else if (key === 'sample_quantity') payload[key] = Math.max(1, Number(updates[key] || 1));
     else if (key === 'step_timeout_ms') payload[key] = Math.max(1500, Math.min(30000, Number(updates[key] || 7000)));
     else if (key === 'last_message_id') payload[key] = updates[key] ? Number(updates[key]) : null;
@@ -2211,6 +2398,78 @@ async function selectResellerWorkflowStepResponse(workflowId, stepId, messageId,
   return data || null;
 }
 
+
+async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
+  const workflow = String(workflowId || '').trim();
+  const step = String(stepId || '').trim();
+  if (!workflow || !step) throw new Error('Step workflow tidak ditemukan.');
+  const payload = {};
+  if (updates.action_type !== undefined) {
+    const type = String(updates.action_type || '').trim().toLowerCase();
+    if (!['text','button'].includes(type)) throw new Error('Jenis step harus text atau button.');
+    payload.action_type = type;
+  }
+  if (updates.text_category !== undefined) payload.text_category = String(updates.text_category || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'other';
+  if (updates.action_value !== undefined) payload.action_value = String(updates.action_value || '').trim();
+  if (payload.action_type === 'text' && payload.text_category === 'quantity') payload.action_value = '{quantity}';
+  if (updates.preview_value !== undefined) payload.preview_value = String(updates.preview_value || '').trim();
+  if (updates.capture_result !== undefined) payload.capture_result = updates.capture_result === true;
+  if (updates.response_snapshot !== undefined) payload.response_snapshot = updates.response_snapshot && typeof updates.response_snapshot === 'object' ? updates.response_snapshot : {};
+  if (updates.response_snapshots !== undefined) payload.response_snapshots = Array.isArray(updates.response_snapshots) ? updates.response_snapshots : [];
+  if (updates.response_selection_index !== undefined) payload.response_selection_index = Number.isInteger(Number(updates.response_selection_index)) ? Number(updates.response_selection_index) : -1;
+  const { data, error } = await sb().from('reseller_workflow_steps').update(payload).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function deleteResellerWorkflowStep(workflowId, stepId) {
+  const workflow = String(workflowId || '').trim();
+  const step = String(stepId || '').trim();
+  if (!workflow || !step) return false;
+  const { error } = await sb().from('reseller_workflow_steps').delete().eq('workflow_id', workflow).eq('id', step);
+  if (error) throw error;
+  const rows = await listResellerWorkflowSteps(workflow);
+  for (let index = 0; index < rows.length; index += 1) {
+    if (Number(rows[index].step_order || 0) === index + 1) continue;
+    const { error: renumberError } = await sb().from('reseller_workflow_steps').update({ step_order: index + 1 }).eq('id', rows[index].id);
+    if (renumberError) throw renumberError;
+  }
+  return true;
+}
+
+async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
+  const source = await getResellerWorkflow(sourceWorkflowId);
+  if (!source) throw new Error('Workflow sumber tidak ditemukan.');
+  const steps = await listResellerWorkflowSteps(source.id);
+  const copy = await createResellerWorkflow({
+    name: String(input.name || '').trim() || `${source.name || source.product_code} - Copy`,
+    product_code: input.product_code !== undefined ? input.product_code : source.product_code,
+    variant_key: input.variant_key !== undefined ? input.variant_key : source.variant_key,
+    target_username: input.target_username !== undefined ? input.target_username : source.target_username,
+    supplier_id: input.supplier_id !== undefined ? input.supplier_id : source.supplier_id,
+    unit_cost_idr: input.unit_cost_idr !== undefined ? input.unit_cost_idr : source.unit_cost_idr,
+    sample_quantity: input.sample_quantity !== undefined ? input.sample_quantity : source.sample_quantity,
+    step_timeout_ms: input.step_timeout_ms !== undefined ? input.step_timeout_ms : source.step_timeout_ms,
+    previous_link_snapshot: input.previous_link_snapshot || {},
+    copied_from_workflow_id: source.id,
+    created_by: input.created_by || source.created_by || null,
+    active: false
+  });
+  for (const step of steps) {
+    await addResellerWorkflowStep(copy.id, {
+      action_type: step.action_type,
+      action_value: step.action_value,
+      preview_value: step.preview_value,
+      response_snapshot: step.response_snapshot || {},
+      response_snapshots: Array.isArray(step.response_snapshots) ? step.response_snapshots : [],
+      response_selection_index: Number(step.response_selection_index ?? -1),
+      text_category: step.text_category || 'other',
+      capture_result: step.capture_result === true
+    });
+  }
+  return { workflow: copy, steps: await listResellerWorkflowSteps(copy.id) };
+}
+
 async function deleteLastResellerWorkflowStep(workflowId) {
   const rows = await listResellerWorkflowSteps(workflowId);
   const last = rows[rows.length - 1];
@@ -2254,6 +2513,10 @@ async function upsertResellerWorkflowRun(input = {}) {
     product_code: String(input.product_code || '').trim().toUpperCase(),
     variant_key: String(input.variant_key || '').trim().toUpperCase(),
     quantity: Math.max(1, Number(input.quantity || 1)),
+    supplier_id: input.supplier_id ? String(input.supplier_id).trim() : null,
+    supplier_unit_cost_idr: Math.max(0, Number(input.supplier_unit_cost_idr || 0)),
+    supplier_cost_total_idr: Math.max(0, Number(input.supplier_cost_total_idr || 0)),
+    supplier_balance_debited_at: input.supplier_balance_debited_at || null,
     status: String(input.status || 'queued').trim().toLowerCase(),
     current_step: Math.max(0, Number(input.current_step || 0)),
     result_text: String(input.result_text || ''),
@@ -2273,7 +2536,7 @@ async function upsertResellerWorkflowRun(input = {}) {
 async function patchResellerWorkflowRun(orderRef, updates = {}) {
   const ref = String(orderRef || '').trim();
   if (!ref) throw new Error('Invoice workflow wajib diisi.');
-  const allowed = ['status','current_step','result_text','last_message_id','last_message_snapshot','error_code','error_message','started_at','finished_at'];
+  const allowed = ['status','current_step','result_text','last_message_id','last_message_snapshot','error_code','error_message','started_at','finished_at','supplier_id','supplier_unit_cost_idr','supplier_cost_total_idr','supplier_balance_debited_at'];
   const payload = { updated_at: new Date().toISOString() };
   allowed.forEach((key) => { if (updates[key] !== undefined) payload[key] = updates[key]; });
   const { data, error } = await sb().from('reseller_workflow_runs').update(payload).eq('order_ref', ref).select('*').maybeSingle();
@@ -2377,6 +2640,7 @@ module.exports = {
   claimOnce,
   markClaimDone,
   releaseClaim,
+  releaseClaim,
   upsertUser,
   registerUserWithReferral,
   getWalletSummary,
@@ -2471,6 +2735,18 @@ module.exports = {
   flashSaleWindowState,
   promoAllowedByFlashSale,
   promoDiscountAmount,
+  listResellerSuppliers,
+  getResellerSupplier,
+  getResellerSupplierByTarget,
+  createResellerSupplier,
+  updateResellerSupplier,
+  deleteResellerSupplier,
+  workflowEstimatedStock,
+  syncWorkflowSupplierStock,
+  syncSupplierWorkflowStocks,
+  listResellerSupplierLedger,
+  recordResellerSupplierAdjustment,
+  debitResellerSupplierBalance,
   listResellerWorkflows,
   getResellerWorkflow,
   getActiveResellerWorkflow,
@@ -2480,6 +2756,9 @@ module.exports = {
   listResellerWorkflowSteps,
   addResellerWorkflowStep,
   selectResellerWorkflowStepResponse,
+  updateResellerWorkflowStep,
+  deleteResellerWorkflowStep,
+  cloneResellerWorkflow,
   deleteLastResellerWorkflowStep,
   setResellerWorkflowResultStep,
   getResellerWorkflowRun,

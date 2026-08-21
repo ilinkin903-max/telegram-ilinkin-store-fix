@@ -237,6 +237,12 @@ function supplierAvailabilityFromProduct(product, supplierId, fallbackStock = 0)
   return { availableStock: Math.max(0, Math.floor(Number(fallbackStock || 0))), unitPrice: 0, publicPrice: 0, supplierStock: fallbackStock == null ? null : Number(fallbackStock) };
 }
 
+function workflowAvailabilityFromProduct(product, variant = null) {
+  const raw = variant?.supplier_stock ?? product?.supplier_stock;
+  const cost = Math.max(0, Number(variant?.cost_price ?? product?.cost_price ?? 0));
+  return { availableStock: raw == null ? 0 : Math.max(0, Math.floor(Number(raw || 0))), unitCostIdr: cost };
+}
+
 function sanitizeVariant(variant, index, promos = [], productCode = '', flashPromos = [], productDeliveryMode = 'auto', product = null) {
   const key = db.variantKey(variant, index);
   const price = Number(variant?.price || 0);
@@ -250,7 +256,7 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
     key,
     name: String(variant?.name || `Varian ${index + 1}`),
     price,
-    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? 0 : variantStock(variant)),
+    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : variantStock(variant)),
     sold: Number(variant?.sold || 0),
     active: variant?.active !== false,
     description: String(variant?.description || ''),
@@ -260,7 +266,7 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
     effective_delivery_mode: (supplier || workflow) ? 'auto' : db.normalizeDeliveryMode(variant?.delivery_mode, db.normalizeDeliveryMode(productDeliveryMode, 'auto')),
     supplier_source: supplier?.source || workflow?.source || '',
     supplier_product_id: supplier?.productId || workflow?.workflowId || '',
-    supplier_stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : null,
+    supplier_stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : null),
     bulk_prices: db.normalizeBulkPrices(variant?.bulk_prices || []),
     promo,
     flash_promo: flashPromo,
@@ -296,14 +302,15 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
   const variants = (Array.isArray(product?.variants) ? product.variants : [])
     .map((variant, index) => sanitizeVariant(variant, index, promos, product.kode, flashPromos, productDeliveryMode, product))
     .filter((variant) => variant.active);
-  const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0 || variant.supplier_source === 'telegram_workflow'));
+  const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
   const supplierAvailableStock = isSupplier
     ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock).availableStock || 0)))
     : null;
+  const workflowAvailableStock = isWorkflow ? workflowAvailabilityFromProduct(product, null).availableStock : null;
   const stock = variants.length
-    ? variants.reduce((sum, variant) => sum + (variant.effective_delivery_mode === 'po' ? 0 : Math.max(0, Number(variant.stock || 0))), 0)
-    : (isSupplier ? supplierAvailableStock : (isWorkflow ? 0 : (isPo ? 0 : baseStock)));
+    ? variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0)
+    : (isSupplier ? supplierAvailableStock : (isWorkflow ? workflowAvailableStock : (isPo ? 0 : baseStock)));
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
     .filter((price) => price > 0);
@@ -635,6 +642,16 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
       }
       throw httpError('Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');
     }
+  }
+  if (workflow) {
+    const workflowAvailability = workflowAvailabilityFromProduct(product, selected.variant || null);
+    if (workflowAvailability.availableStock < qty) {
+      throw httpError(`Stok tidak mencukupi. Stok tersedia: ${workflowAvailability.availableStock}.`, 409, 'SUPPLIER_STOCK', { available_stock: workflowAvailability.availableStock });
+    }
+    if (!(workflowAvailability.unitCostIdr > 0)) {
+      throw httpError('Modal produk reseller belum diisi. Produk sementara tidak dapat dibeli.', 409, 'SUPPLIER_UNAVAILABLE');
+    }
+    liveSupplierCostUnit = workflowAvailability.unitCostIdr;
   }
   const availableStock = selected.variant
     ? variantStock(selected.variant)

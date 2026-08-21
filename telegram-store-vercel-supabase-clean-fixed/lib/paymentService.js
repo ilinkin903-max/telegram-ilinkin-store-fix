@@ -629,6 +629,23 @@ function isWorkflowProduct(product = {}, order = {}) {
   return Boolean(workflowSelection(product, order));
 }
 
+async function workflowManualSupplierInfo(workflow, quantity = 1) {
+  if (!workflow?.supplier_id) return { supplier: null, unitCost: Math.max(0, Number(workflow?.unit_cost_idr || 0)), totalCost: 0, estimatedStock: 0 };
+  const supplier = await db.getResellerSupplier(workflow.supplier_id).catch(() => null);
+  const unitCost = Math.max(0, Number(workflow?.unit_cost_idr || 0));
+  const qty = Math.max(1, Number(quantity || 1));
+  return { supplier, unitCost, totalCost: unitCost * qty, estimatedStock: supplier ? db.workflowEstimatedStock(workflow, supplier) : 0 };
+}
+
+async function settleWorkflowSupplierCost(workflow, run, invoice, quantity = 1) {
+  if (!run || run.supplier_balance_debited_at) return run;
+  const supplierId = String(run.supplier_id || workflow?.supplier_id || '').trim();
+  const totalCost = Math.max(0, Number(run.supplier_cost_total_idr || 0));
+  if (!supplierId || !(totalCost > 0)) return run;
+  await db.debitResellerSupplierBalance(supplierId, invoice, totalCost, `Workflow ${workflow?.name || workflow?.id || ''} · ${Math.max(1, Number(quantity || run.quantity || 1))} item`);
+  return await db.patchResellerWorkflowRun(invoice, { supplier_balance_debited_at: new Date().toISOString() }).catch(() => run);
+}
+
 async function notifyOwnerWorkflowIssue(order, product, error, workflow = null, run = null) {
   const target = await transactionChannelTarget().catch(() => String(config.channelLog || '').trim());
   if (!target) return;
@@ -668,6 +685,7 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
     return { handled: true, pending: true, error, transaction };
   }
 
+  const orderQuantity = Math.max(1, Number(order?.quantity || transaction?.quantity || 1));
   const steps = await db.listResellerWorkflowSteps(workflow.id);
   if (!steps.length || !steps.some((step) => step.capture_result === true)) {
     const error = new Error('Workflow reseller belum lengkap. Rekam langkah dan tandai satu balasan sebagai Hasil Produk.');
@@ -677,15 +695,21 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
   }
 
   const existingPo = await db.getPoOrder(invoice).catch(() => null);
+  let run = await db.getResellerWorkflowRun(invoice).catch(() => null);
   if (existingPo?.status === 'delivered' && String(existingPo.delivery_text || '').trim()) {
     const delivered = String(existingPo.delivery_text).split(/\r?\n/).filter(Boolean);
+    if (run?.supplier_cost_total_idr > 0 && !run?.supplier_balance_debited_at) {
+      run = await settleWorkflowSupplierCost(workflow, run, invoice, orderQuantity).catch((error) => { console.error('Debit saldo supplier workflow tertunda:', error.message || error); return run; });
+    }
     await sendSupplierDeliveryOnce({ invoice, userId: Number(order?.telegram_id || transaction?.telegram_id), poOrder: existingPo, deliveryText: existingPo.delivery_text, product }).catch(() => null);
     await sendOwnerLog({ ...order, invoice_ref: invoice }, product, transaction, buyer).catch(() => null);
-    return { handled: true, delivered, po_order: existingPo, transaction };
+    return { handled: true, delivered, po_order: existingPo, transaction, workflow_run: run };
   }
 
-  let run = await db.getResellerWorkflowRun(invoice).catch(() => null);
   if (run?.status === 'delivered' && String(run.result_text || '').trim()) {
+    if (run?.supplier_cost_total_idr > 0 && !run?.supplier_balance_debited_at) {
+      run = await settleWorkflowSupplierCost(workflow, run, invoice, orderQuantity).catch((error) => { console.error('Debit saldo supplier workflow tertunda:', error.message || error); return run; });
+    }
     const marked = await db.markPoDelivered(invoice, run.result_text, config.ownerId || null);
     const poOrder = marked?.po_order || await db.getPoOrder(invoice);
     const finalTransaction = marked?.transaction || transaction;
@@ -728,6 +752,34 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
     return { handled: true, pending: true, error, transaction, workflow_run: run };
   }
 
+  const manualSupplier = await workflowManualSupplierInfo(workflow, orderQuantity);
+  if (workflow.supplier_id) {
+    let supplierError = null;
+    if (!manualSupplier.supplier || manualSupplier.supplier.active === false) {
+      supplierError = new Error('Supplier workflow sedang tidak tersedia/nonaktif.');
+      supplierError.code = 'WORKFLOW_SUPPLIER_INACTIVE';
+    } else if (!(manualSupplier.unitCost > 0)) {
+      supplierError = new Error('Modal produk workflow belum diisi. Isi modal agar stok dapat dihitung dari saldo supplier.');
+      supplierError.code = 'WORKFLOW_COST_NOT_SET';
+    } else if (manualSupplier.estimatedStock < orderQuantity) {
+      supplierError = new Error(`Saldo manual supplier tidak mencukupi. Stok perkiraan: ${manualSupplier.estimatedStock}.`);
+      supplierError.code = 'WORKFLOW_MANUAL_BALANCE';
+    }
+    if (supplierError) {
+      if (!run) {
+        run = await db.upsertResellerWorkflowRun({
+          order_ref: invoice, workflow_id: workflow.id, telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
+          product_code: transaction?.product_code || order?.product_code || product?.kode || '', variant_key: transaction?.variant_key || order?.variant_key || '',
+          quantity: orderQuantity, supplier_id: workflow.supplier_id, supplier_unit_cost_idr: manualSupplier.unitCost, supplier_cost_total_idr: manualSupplier.totalCost,
+          status: 'queued', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
+        });
+      } else {
+        run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
+      }
+      return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run };
+    }
+  }
+
   if (forceRestart) {
     // Hanya aksi manual owner yang boleh menghapus guard. Retry otomatis tidak pernah masuk sini.
     await db.resetResellerWorkflowRunStepGuards(invoice);
@@ -740,10 +792,22 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
       product_code: transaction?.product_code || order?.product_code || product?.kode || '',
       variant_key: transaction?.variant_key || order?.variant_key || '',
-      quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+      quantity: orderQuantity,
+      supplier_id: manualSupplier.supplier?.id || workflow.supplier_id || null,
+      supplier_unit_cost_idr: manualSupplier.unitCost,
+      supplier_cost_total_idr: manualSupplier.totalCost,
+      supplier_balance_debited_at: null,
       status: 'queued', current_step: 0, result_text: '', last_message_id: null, last_message_snapshot: {},
       error_code: '', error_message: '', started_at: null, finished_at: null
     });
+  }
+
+  if (run && workflow.supplier_id && !(Number(run.supplier_cost_total_idr || 0) > 0)) {
+    run = await db.patchResellerWorkflowRun(invoice, {
+      supplier_id: manualSupplier.supplier?.id || workflow.supplier_id || null,
+      supplier_unit_cost_idr: manualSupplier.unitCost,
+      supplier_cost_total_idr: manualSupplier.totalCost
+    }).catch(() => run);
   }
 
   const targetLock = `workflow_supplier:${String(workflow.target_username || '').toLowerCase()}`;
@@ -761,7 +825,7 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       status: 'running', error_code: '', error_message: '', started_at: run.started_at || new Date().toISOString()
     });
     const context = {
-      quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || run?.quantity || 1)),
+      quantity: orderQuantity,
       invoice,
       telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
       username: buyer?.username || buyer?.first_name || '',
@@ -819,6 +883,12 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       last_message_id: runtime.last_response?.id || null, last_message_snapshot: runtime.last_response || {},
       error_code: '', error_message: '', finished_at: new Date().toISOString()
     });
+    if (run?.supplier_cost_total_idr > 0 && !run?.supplier_balance_debited_at) {
+      run = await settleWorkflowSupplierCost(workflow, run, invoice, orderQuantity).catch((error) => {
+        console.error('Produk supplier sudah didapat tetapi debit saldo manual gagal:', error.message || error);
+        return run;
+      });
+    }
     await db.upsertSupplierOrder({
       order_ref: invoice, supplier: 'telegram_workflow', supplier_order_id: workflow.id,
       supplier_product_id: workflow.id, quantity: context.quantity, amount_usdt: 0,
