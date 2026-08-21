@@ -31,7 +31,9 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: true, version: getAppVersion(), state: 'completed', invoice, attempt, data: result });
   } catch (error) {
     const code = String(error?.code || '').toUpperCase();
-    const retryable = ['WORKFLOW_BUSY', 'WORKFLOW_STILL_RUNNING'].includes(code);
+    // Hanya antrean sebelum workflow mulai yang boleh dicoba otomatis.
+    // WORKFLOW_STILL_RUNNING tidak dijadwalkan ulang agar satu invoice tidak memiliki runner berantai.
+    const retryable = ['WORKFLOW_BUSY'].includes(code);
     const maxAttempts = Math.max(1, Number(config.workflowRetryMaxAttempts || 18));
     if (retryable && attempt + 1 < maxAttempts) {
       const scheduled = workflowRetry.scheduleWorkflowRetry(invoice, attempt + 1);

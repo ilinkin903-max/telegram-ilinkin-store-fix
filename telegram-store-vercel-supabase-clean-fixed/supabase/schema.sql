@@ -1880,10 +1880,31 @@ create index if not exists reseller_workflow_runs_status_idx
 create index if not exists reseller_workflow_runs_workflow_idx
   on public.reseller_workflow_runs (workflow_id, updated_at desc);
 
+-- v82.2 - persistent per-step execution journal. A step can only be sent once per invoice.
+create table if not exists public.reseller_workflow_run_steps (
+  id uuid primary key default gen_random_uuid(),
+  order_ref text not null references public.reseller_workflow_runs(order_ref) on delete cascade,
+  workflow_id uuid not null references public.reseller_workflows(id) on delete restrict,
+  step_order integer not null,
+  step_id uuid references public.reseller_workflow_steps(id) on delete set null,
+  action_type text not null default '',
+  action_value text not null default '',
+  status text not null default 'sending' check (status in ('sending','completed')),
+  response_message_id bigint,
+  response_snapshot jsonb not null default '{}'::jsonb,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(order_ref, step_order)
+);
+create index if not exists reseller_workflow_run_steps_order_idx on public.reseller_workflow_run_steps (order_ref, step_order);
+create index if not exists reseller_workflow_run_steps_status_idx on public.reseller_workflow_run_steps (status, updated_at desc);
+
 -- Service-role based backend owns these tables. Keep RLS enabled without public policies.
 alter table public.reseller_workflows enable row level security;
 alter table public.reseller_workflow_steps enable row level security;
 alter table public.reseller_workflow_runs enable row level security;
+alter table public.reseller_workflow_run_steps enable row level security;
 
 -- v82 setting defaults (stored as JSONB strings, matching existing shop_settings usage).
 insert into public.shop_settings(key, value)
@@ -1900,4 +1921,8 @@ alter table public.reseller_workflows add column if not exists recent_message_sn
 alter table public.reseller_workflow_steps add column if not exists response_snapshots jsonb not null default '[]'::jsonb;
 alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
 alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
+notify pgrst, 'reload schema';
+
+
+-- v82.2 schema cache reload
 notify pgrst, 'reload schema';

@@ -6,14 +6,16 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('pesan PO tidak lagi mengulang blok PRE-ORDER dan header pengiriman PO', () => {
+test('pengiriman PO final memakai format PEMBAYARAN BERHASIL yang seragam', () => {
   const payment = read('lib/paymentService.js');
   const paidFn = payment.slice(payment.indexOf('async function sendPoPaidNotice'), payment.indexOf('async function sendSupplierPendingNotice'));
-  const deliveryFn = payment.slice(payment.indexOf('async function sendPoDeliveryReceipt'), payment.indexOf('async function sendOwnerPoWaitingLog'));
+  const deliveryFn = payment.slice(payment.indexOf('async function sendPoDeliveryReceipt'), payment.indexOf('async function sendChannelWithRetry'));
   assert.doesNotMatch(paidFn, /PESANAN PRE-ORDER/);
   assert.doesNotMatch(deliveryFn, /PESANAN PO SUDAH DIKIRIM/);
-  assert.match(deliveryFn, /SYARAT &amp; KETENTUAN/);
-  assert.match(deliveryFn, /<b>PRODUK<\/b>/);
+  assert.match(payment, /✅ <b>PEMBAYARAN BERHASIL<\/b>/);
+  assert.match(payment, /<b>SYARAT &amp; KETENTUAN<\/b>/);
+  assert.match(payment, /<b>PRODUK YANG DIDAPAT<\/b>/);
+  assert.match(deliveryFn, /sendCompletedReceipt/);
 });
 
 test('popup dashboard menutup menu bawah dan berada di lapisan teratas', () => {

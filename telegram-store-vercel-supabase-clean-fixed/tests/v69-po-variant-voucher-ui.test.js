@@ -49,13 +49,14 @@ test('voucher dihitung server sebelum modal konfirmasi dibuka', () => {
   assert.match(storeJs, /renderPaymentMethods\(Number\(preview\.after_discount/);
 });
 
-test('pesan produk PO tetap memuat SnK snapshot dan data produk mudah disalin', () => {
+test('pesan produk PO memakai receipt final, SnK snapshot, dan blok kode tanpa tombol salin', () => {
   assert.match(sql, /terms_snapshot text not null default ''/);
   assert.match(sql, /v_terms_snapshot/);
   assert.match(payment, /poOrder\?\.terms_snapshot/);
+  assert.match(payment, /sendCompletedReceipt/);
   assert.match(payment, /SYARAT &amp; KETENTUAN/);
-  assert.match(payment, /<pre>\$\{escapeHtml\(raw\)\}<\/pre>/);
-  assert.match(payment, /Tekan lama\/blok data produk/);
+  assert.match(payment, /PRODUK YANG DIDAPAT/);
+  assert.doesNotMatch(payment, /Salin Produk/);
   assert.match(resellerApi, /sendPoDeliveryReceipt\(po\.telegram_id, po, deliveryText, product\)/);
 });
 

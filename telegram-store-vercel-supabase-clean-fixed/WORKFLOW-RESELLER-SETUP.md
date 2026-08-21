@@ -1,4 +1,4 @@
-# Setup Workflow Reseller v82.1
+# Setup Workflow Reseller v82.2
 
 ## 1. Jalankan migration Supabase
 
@@ -6,11 +6,13 @@ Buka Supabase → SQL Editor → New query, lalu jalankan seluruh isi:
 
 `supabase/update-v82-workflow-recorder.sql`
 
-Jika sebelumnya sudah menjalankan v82.0, cukup jalankan migration tambahan:
+Jika sebelumnya sudah menjalankan v82.0/v82.1, jalankan migration tambahan berurutan sesuai yang belum pernah dijalankan:
 
 `supabase/update-v82.1-multi-message-recorder.sql`
 
-Migration ini aman untuk database v81.2.1+ dan tidak menghapus data lama.
+`supabase/update-v82.2-workflow-guard-receipt.sql`
+
+Migration v82.2 wajib untuk proteksi anti-loop/anti-double-order. Semua migration ini additive dan tidak menghapus data lama.
 
 ## 2. Tambahkan Environment Variables di Vercel
 
@@ -56,8 +58,7 @@ Jika status `GAGAL TERHUBUNG`, jangan mulai merekam sampai konfigurasi userbot b
 
 ## 4. Rekam alur produk
 
-1. Pilih **Produk yang Dituju**.
-2. Pilih **Varian** bila workflow hanya untuk varian tertentu.
+1. Pilih **Produk yang Dituju**. Produk yang mempunyai varian akan tampil langsung sebagai `Nama Produk — Nama Varian`; pilih varian yang tepat.
 3. Isi **Bot Supplier**, misalnya `@Vinnstore_bot`.
 4. Isi nama workflow.
 5. Isi **Jumlah Contoh Saat Rekam**. Angka ini hanya dipakai saat latihan untuk step kategori Jumlah Pembelian.
@@ -159,3 +160,13 @@ Untuk `ATTENTION`, **cek chat supplier dahulu**. Jangan menekan Mulai Ulang bila
 ## Catatan
 
 Workflow recorder saat ini mengambil **hasil berupa teks** dari balasan bot supplier. Jika supplier hanya mengirim file/dokumen tanpa teks/caption yang dapat dipakai sebagai hasil, alur tersebut perlu penanganan media tambahan pada versi berikutnya.
+
+
+## Anti-loop / anti-double-order v82.2
+Setiap invoice memiliki jurnal step persisten. Satu step hanya boleh dikirim satu kali. Quantity 1 maupun quantity lebih besar tetap menjalankan workflow **satu kali**; nilai jumlah diteruskan melalui step kategori **Jumlah Pembelian** (`{quantity}`). Jika runtime mencoba kembali ke step yang sama karena retry/serverless, proses berhenti sebelum aksi dikirim ulang.
+
+## Target produk bervarian
+Pada field **Produk yang Dituju**, produk yang memiliki varian tampil langsung sebagai `Nama Produk — Nama Varian`. Tidak ada lagi target ambigu `Produk Utama` untuk produk yang mempunyai varian.
+
+## Format produk ke pembeli
+Produk akhir dikirim dalam blok kode Telegram di bawah receipt `PEMBAYARAN BERHASIL`. Tombol `Salin Produk 1/2/3` sudah dihapus.

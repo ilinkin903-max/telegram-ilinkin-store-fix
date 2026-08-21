@@ -604,10 +604,13 @@ module.exports = async function handler(req, res) {
       const variantKey = String(body.variant_key || '').trim().toUpperCase();
       const product = await db.getProductByCode(productCode);
       if (!product) return json(res, 404, { ok: false, error: 'Produk yang dipilih tidak ditemukan.' });
-      if (variantKey && !db.findVariant(product, variantKey).variant) return json(res, 404, { ok: false, error: 'Varian yang dipilih tidak ditemukan.' });
+      const variants = Array.isArray(product.variants) ? product.variants.filter((variant) => Number(variant?.price || variant?.harga || 0) > 0) : [];
+      if (variants.length && !variantKey) return json(res, 400, { ok: false, error: 'Produk ini mempunyai varian. Pilih varian yang dituju agar workflow tidak terhubung ke produk yang salah.' });
+      const selectedVariant = variantKey ? db.findVariant(product, variantKey).variant : null;
+      if (variantKey && !selectedVariant) return json(res, 404, { ok: false, error: 'Varian yang dipilih tidak ditemukan.' });
       const previousLinkSnapshot = await originalWorkflowLinkSnapshot(product, variantKey);
       const workflow = await db.createResellerWorkflow({
-        name: body.name || `Order ${product.nama}${variantKey ? ' - ' + variantKey : ''}`,
+        name: body.name || `Order ${product.nama}${selectedVariant ? ' - ' + (selectedVariant.name || selectedVariant.nama || variantKey) : ''}`,
         product_code: productCode,
         variant_key: variantKey,
         target_username: workflowUserbot.normalizeTarget(body.target_username || ''),

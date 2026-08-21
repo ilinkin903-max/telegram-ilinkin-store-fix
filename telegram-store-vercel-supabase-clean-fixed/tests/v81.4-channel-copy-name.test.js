@@ -25,11 +25,13 @@ test('completed order notification is independent from buyer receipt and can be 
   assert.match(ui, /Pulihkan Notif 30 Order/);
 });
 
-test('delivered product has Telegram copy_text buttons', () => {
+test('delivered product uses code block without copy buttons', () => {
   const payment = read('lib/paymentService.js');
-  assert.match(payment, /copyProductKeyboard/);
-  assert.match(payment, /copy_text:\s*\{\s*text:\s*item\s*\}/);
-  assert.match(payment, /Salin Produk/);
+  assert.match(payment, /PRODUK YANG DIDAPAT/);
+  assert.match(payment, /<pre>/);
+  assert.doesNotMatch(payment, /copyProductKeyboard/);
+  assert.doesNotMatch(payment, /copy_text:\s*\{/);
+  assert.doesNotMatch(payment, /Salin Produk/);
 });
 
 test('store name is used by bot and synced to Telegram display name', () => {

@@ -70,10 +70,10 @@ test('seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir',
   assert.match(resellerApi, /markPoDelivered/);
 });
 
-test('data PO panjang dikirim sebagai TXT agar tidak terpotong', () => {
-  assert.match(payment, /inlineLimit/);
-  assert.match(payment, /sendDocument/);
-  assert.match(payment, /agar utuh dan mudah disalin/);
+test('data PO panjang dipecah menjadi beberapa pesan receipt agar tidak terpotong', () => {
+  assert.match(payment, /splitReceiptProduct/);
+  assert.match(payment, /LANJUTAN PRODUK YANG DIDAPAT/);
+  assert.match(payment, /Produk dilanjutkan pada pesan berikutnya/);
 });
 
 test('notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal', () => {

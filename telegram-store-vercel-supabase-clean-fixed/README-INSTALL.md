@@ -102,3 +102,7 @@ Setelah v82.0 terpasang, jalankan `supabase/update-v82.1-multi-message-recorder.
 Recorder sekarang menyimpan semua balasan baru supplier dan meminta admin memilih pesan yang benar bila muncul lebih dari satu. Step teks juga dipisah menjadi **Jumlah Pembelian** (otomatis `{quantity}`) dan **Teks / Perintah Lainnya**.
 
 Lihat `UPDATE-v82.1.md` dan `WORKFLOW-RESELLER-SETUP.md`.
+
+
+## v82.2.0 — Anti Loop Workflow & Receipt Produk
+Jika update dari v82.1, jalankan `supabase/update-v82.2-workflow-guard-receipt.sql`, upload patch, lalu redeploy. Versi ini menambahkan guard persisten per invoice+step untuk mencegah workflow mengulang order supplier, target workflow langsung per-varian, menghapus tombol Salin Produk, dan menyeragamkan pesan produk akhir ke format PEMBAYARAN BERHASIL. Lihat `UPDATE-v82.2.md` dan `V82.2-CHANGES.md`.

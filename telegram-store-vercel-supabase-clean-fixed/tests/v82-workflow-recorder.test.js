@@ -118,12 +118,13 @@ test('workflow activation tidak menghapus stok lokal dan menyimpan snapshot link
   assert.match(sql, /previous_link_snapshot\s+jsonb/i);
 });
 
-test('workflow yang sibuk mempunyai worker retry otomatis tanpa mengulang ATTENTION', () => {
+test('workflow hanya retry otomatis sebelum mulai dan tidak membuat runner berantai saat sudah running', () => {
   const payment = fs.readFileSync(path.join(__dirname, '..', 'lib', 'paymentService.js'), 'utf8');
   const runner = fs.readFileSync(path.join(__dirname, '..', 'api', 'workflow-runner.js'), 'utf8');
   assert.match(payment, /scheduleWorkflowRetry\(invoice,\s*0\)/);
   assert.match(runner, /WORKFLOW_BUSY/);
-  assert.match(runner, /WORKFLOW_STILL_RUNNING/);
+  assert.match(runner, /WORKFLOW_BUSY/);
+  assert.match(runner, /WORKFLOW_STILL_RUNNING tidak dijadwalkan ulang/);
   assert.match(runner, /'attention'/);
 });
 

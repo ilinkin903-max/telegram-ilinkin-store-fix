@@ -154,26 +154,36 @@ test('pencocokan project Pakasir tidak sensitif huruf besar kecil', () => {
 });
 
 
-test('invoice produk memakai blok kode dan tombol copy_text Telegram', async () => {
+test('invoice produk memakai format pembayaran berhasil tanpa tombol salin', async () => {
   const originalSendMessage = tg.sendMessage;
-  let captured = null;
+  const captured = [];
   tg.sendMessage = async (chatId, text, options) => {
-    captured = { chatId, text, options };
+    captured.push({ chatId, text, options });
     return { ok: true };
   };
 
   try {
     await sendOrderReceipt(
       123,
-      { invoice_ref: 'INV-COPY', quantity: 1, amount: 1000, fee: 0 },
-      { nama: 'Produk Uji', snk: 'Gunakan dengan baik.' },
-      { order_ref: 'INV-COPY', product_name: 'Produk Uji', quantity: 1, total_price: 1000 },
-      ['akun@example.com|password']
+      { invoice_ref: '1786544825-181', quantity: 1, amount: 3026, fee: 26, unit_price: 3000, payment_provider: 'autogopay' },
+      { nama: 'Canva', snk: '1 Bulan Pro\nLogin via Link, 1 Email 1 Link' },
+      { order_ref: '1786544825-181', product_name: 'Canva', variant_name: '1 Bulan Pro', quantity: 1, unit_price: 3000, total_price: 3026, payment_fee: 26, payment_method: 'gateway', created_at: '2026-08-12T14:29:00.000Z' },
+      ['https://www.canva.com/brand/join?token=TEST']
     );
-    assert.equal(captured.chatId, 123);
-    assert.match(captured.text, /<pre>akun@example\.com\|password<\/pre>/);
-    assert.equal(captured.options.parse_mode, 'HTML');
-    assert.equal(captured.options.reply_markup.inline_keyboard[0][0].copy_text.text, 'akun@example.com|password');
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].chatId, 123);
+    assert.match(captured[0].text, /✅ <b>PEMBAYARAN BERHASIL<\/b>/);
+    assert.match(captured[0].text, /Invoice: <b>1786544825-181<\/b>/);
+    assert.match(captured[0].text, /Produk: <b>Canva - 1 Bulan Pro<\/b>/);
+    assert.match(captured[0].text, /Harga: <b>Rp\s*3\.000<\/b>/);
+    assert.match(captured[0].text, /Metode: <b>AutoGoPay<\/b>/);
+    assert.match(captured[0].text, /Fee: <b>Rp\s*26<\/b>/);
+    assert.match(captured[0].text, /• 1 Bulan Pro/);
+    assert.match(captured[0].text, /<b>PRODUK YANG DIDAPAT<\/b>/);
+    assert.match(captured[0].text, /<pre>https:\/\/www\.canva\.com\/brand\/join\?token=TEST<\/pre>/);
+    assert.equal(captured[0].options.parse_mode, 'HTML');
+    assert.equal(captured[0].options.reply_markup, undefined);
+    assert.doesNotMatch(captured[0].text, /Salin Produk/);
   } finally {
     tg.sendMessage = originalSendMessage;
   }

@@ -1,0 +1,24 @@
+Link Auto Order v82.2.0 - Test Report
+Date: 2026-08-21 WIB
+
+Changes verified:
+1. Workflow anti-loop / anti-double-order guard is persistent per invoice + step.
+2. Automatic worker retries only WORKFLOW_BUSY before a workflow starts; running invoices are not chained/replayed.
+3. Manual owner restart explicitly clears the guard only after owner confirmation.
+4. Product target selector is variant-aware: products with variants expose each variant as a direct workflow target.
+5. Final product receipt uses PAYMENT SUCCESS / invoice / product / price / quantity / method / fee / total / date / terms / code block.
+6. AutoGoPay appears as the payment method inside the final product receipt while checkout UI remains QRIS.
+7. Salin Produk / copy_text buttons are removed.
+8. Long product output is split into safe Telegram code-block messages instead of repeating supplier orders.
+
+Validation:
+- JavaScript syntax check: PASS (61 JS files checked)
+- Full regression suite: 206 / 206 PASS
+- Workflow v82/v82.1/v82.2 targeted tests: PASS
+- Example Canva receipt rendering: PASS
+- ZIP packaging verification: performed after packaging
+
+Test environment note:
+The workspace could not download npm dependencies within the execution timeout. For offline regression execution only, axios/dotenv/qrcode/@supabase imports were replaced with non-network local stubs. Production package.json/package-lock.json still contain the real dependencies and Vercel installs those dependencies during deployment.
+
+No live supplier purchase or live AutoGoPay charge was performed by the automated tests.

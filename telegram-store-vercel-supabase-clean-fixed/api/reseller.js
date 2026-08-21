@@ -534,7 +534,7 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
       <div id="workflowUserbotStatus" class="workflowStatus"></div>
       <div class="workflowHint"><b>Penting:</b> akun Telegram supplier dijalankan sebagai userbot memakai <code>TG_API_ID</code>, <code>TG_API_HASH</code>, dan <code>TG_STRING_SESSION</code> di Vercel. Satu bot supplier diproses bergantian agar percakapan order tidak saling tertukar.</div>
       <form id="workflowCreateForm" class="form" style="margin-top:12px">
-        <div class="row3"><div class="field"><label class="label">Produk yang Dituju</label><select class="select" id="workflowProduct" name="product_code"></select></div><div class="field"><label class="label">Varian (opsional)</label><select class="select" id="workflowVariant" name="variant_key"><option value="">Produk Utama</option></select></div><div class="field"><label class="label">Bot Supplier</label><input class="input" name="target_username" placeholder="@Vinnstore_bot" required></div></div>
+        <div class="row"><div class="field"><label class="label">Produk yang Dituju</label><select class="select" id="workflowTarget" required></select><input type="hidden" id="workflowProduct" name="product_code"><input type="hidden" id="workflowVariant" name="variant_key"><p class="help">Produk tanpa varian tampil sebagai produk utama. Jika produk mempunyai varian, setiap varian tampil sebagai pilihan terpisah agar workflow terhubung tepat ke varian tersebut.</p></div><div class="field"><label class="label">Bot Supplier</label><input class="input" name="target_username" placeholder="@Vinnstore_bot" required></div></div>
         <div class="row3"><div class="field"><label class="label">Nama Workflow</label><input class="input" name="name" placeholder="Contoh: Alight Motion Supplier"></div><div class="field"><label class="label">Jumlah Contoh Saat Rekam</label><input class="input" type="number" min="1" name="sample_quantity" value="1"><p class="help">Jika step berisi {quantity}, saat rekam sistem mengirim angka contoh ini.</p></div><div class="field"><label class="label">Tunggu Balasan / Step</label><input class="input" type="number" min="1500" max="30000" step="500" name="step_timeout_ms" value="7000"><p class="help">Dalam milidetik. Default 7000. Naikkan bila bot supplier lambat merespons.</p></div></div>
         <button class="btn lime" type="submit">🔴 Mulai Rekam Workflow</button>
       </form>
@@ -959,19 +959,28 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
 
 
   function workflowCurrentId(){ var sel=document.getElementById('workflowSelect'); return String((sel&&sel.value)||(state.workflowDetail&&state.workflowDetail.workflow&&state.workflowDetail.workflow.id)||''); }
-  function refreshWorkflowProductOptions(){
-    var select=document.getElementById('workflowProduct'); if(!select) return;
-    var current=select.value;
-    var rows=(state.products||[]).slice().sort(function(a,b){return String(a.nama||'').localeCompare(String(b.nama||''),'id');});
-    select.innerHTML=rows.map(function(p){return '<option value="'+esc(p.kode||'')+'">'+esc(p.nama||p.kode)+' ('+esc(p.kode||'')+')</option>';}).join('')||'<option value="">Belum ada produk</option>';
-    if(current&&rows.some(function(p){return String(p.kode||'')===current;})) select.value=current;
-    refreshWorkflowVariantOptions();
+  function workflowTargetValue(productCode,variantKey){return String(productCode||'')+'||'+String(variantKey||'');}
+  function syncWorkflowTargetHidden(){
+    var target=document.getElementById('workflowTarget'); var psel=document.getElementById('workflowProduct'); var vsel=document.getElementById('workflowVariant');
+    if(!target||!psel||!vsel)return;
+    var parts=String(target.value||'').split('||'); psel.value=String(parts[0]||'').toUpperCase(); vsel.value=String(parts[1]||'').toUpperCase();
   }
-  function refreshWorkflowVariantOptions(){
-    var psel=document.getElementById('workflowProduct'); var vsel=document.getElementById('workflowVariant'); if(!psel||!vsel) return;
-    var current=vsel.value; var product=findProduct(psel.value); var vars=productVariants(product);
-    vsel.innerHTML='<option value="">Produk Utama</option>'+vars.map(function(v,i){var key=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); return '<option value="'+esc(key)+'">'+esc(v.name||v.nama||key)+'</option>';}).join('');
-    if(current&&vars.some(function(v,i){return String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase()===current;})) vsel.value=current;
+  function refreshWorkflowProductOptions(){
+    var target=document.getElementById('workflowTarget'); var psel=document.getElementById('workflowProduct'); var vsel=document.getElementById('workflowVariant'); if(!target||!psel||!vsel) return;
+    var current=workflowTargetValue(psel.value,vsel.value);
+    var products=(state.products||[]).slice().sort(function(a,b){return String(a.nama||'').localeCompare(String(b.nama||''),'id');});
+    var options=[];
+    products.forEach(function(p){
+      var vars=productVariants(p);
+      if(vars.length){
+        vars.forEach(function(v,i){var key=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase(); options.push({value:workflowTargetValue(p.kode,key),label:String(p.nama||p.kode)+' — '+String(v.name||v.nama||key)});});
+      }else{
+        options.push({value:workflowTargetValue(p.kode,''),label:String(p.nama||p.kode)});
+      }
+    });
+    target.innerHTML=options.map(function(o){return '<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>';}).join('')||'<option value="">Belum ada produk</option>';
+    if(current&&options.some(function(o){return o.value===current;})) target.value=current;
+    syncWorkflowTargetHidden();
   }
   async function loadWorkflowDetail(id){
     var value=String(id||''); if(!value){state.workflowDetail=null; renderWorkflow(); return;}
@@ -1558,10 +1567,10 @@ email2:password2"></textarea><p class="help">Disembunyikan saat varian aktif kar
   var supplierSettingsForm=document.getElementById('supplierSettingsForm'); if(supplierSettingsForm) supplierSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.prodseller_usdt_to_idr=Math.max(1,Number(d.prodseller_usdt_to_idr||16500)); d.prodseller_markup_percent=Math.max(0,Number(d.prodseller_markup_percent||25)); await post('save-settings',d); state.supplierLoaded=false; await loadSupplier(true);};
   var refreshSupplier=document.getElementById('refreshSupplier'); if(refreshSupplier) refreshSupplier.onclick=async function(){ refreshSupplier.disabled=true; var old=refreshSupplier.textContent; refreshSupplier.textContent='Memuat...'; try{ state.supplierLoaded=false; await loadSupplier(true); toast('Data ProdSeller diperbarui.'); }finally{ refreshSupplier.disabled=false; refreshSupplier.textContent=old; } };
   var supplierSearch=document.getElementById('supplierSearch'); if(supplierSearch) supplierSearch.oninput=renderSupplier;
-  var workflowProduct=document.getElementById('workflowProduct'); if(workflowProduct) workflowProduct.onchange=refreshWorkflowVariantOptions;
+  var workflowTarget=document.getElementById('workflowTarget'); if(workflowTarget) workflowTarget.onchange=syncWorkflowTargetHidden;
   var workflowSelect=document.getElementById('workflowSelect'); if(workflowSelect) workflowSelect.onchange=function(){loadWorkflowDetail(workflowSelect.value);};
   var workflowRefreshAll=document.getElementById('workflowRefreshAll'); if(workflowRefreshAll) workflowRefreshAll.onclick=async function(){workflowRefreshAll.disabled=true; try{state.workflowLoaded=false; await loadWorkflow(true); toast('Workflow diperbarui.');}finally{workflowRefreshAll.disabled=false;}};
-  var workflowCreateForm=document.getElementById('workflowCreateForm'); if(workflowCreateForm) workflowCreateForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); var btn=e.target.querySelector('button[type="submit"]'); if(btn)btn.disabled=true; try{var r=await api('workflow-create',d); var id=r.data&&r.data.workflow&&r.data.workflow.id; state.workflowLoaded=false; await loadWorkflow(true); if(id)await loadWorkflowDetail(id); toast('Mode rekam aktif. Sekarang ketik /start atau pilih aksi berikutnya.');}catch(err){toast(err.message,true);}finally{if(btn)btn.disabled=false;}};
+  var workflowCreateForm=document.getElementById('workflowCreateForm'); if(workflowCreateForm) workflowCreateForm.onsubmit=async function(e){e.preventDefault(); syncWorkflowTargetHidden(); var d=formDataRaw(e.target); var btn=e.target.querySelector('button[type="submit"]'); if(btn)btn.disabled=true; try{var r=await api('workflow-create',d); var id=r.data&&r.data.workflow&&r.data.workflow.id; state.workflowLoaded=false; await loadWorkflow(true); if(id)await loadWorkflowDetail(id); toast('Mode rekam aktif. Sekarang ketik /start atau pilih aksi berikutnya.');}catch(err){toast(err.message,true);}finally{if(btn)btn.disabled=false;}};
   document.querySelectorAll('[data-workflow-insert]').forEach(function(btn){btn.onclick=function(){var category=document.getElementById('workflowTextCategory'); if(category)category.value='other'; syncWorkflowTextCategory(); var input=document.getElementById('workflowTextInput'); if(!input)return; var value=btn.dataset.workflowInsert||''; if(value==='/start')input.value='/start'; else input.value=(String(input.value||'')+(input.value?' ':'')+value); input.focus();};});
   function syncWorkflowTextCategory(){var category=document.getElementById('workflowTextCategory'); var value=String(category&&category.value||'other'); var qty=document.getElementById('workflowQuantityBox'); var other=document.getElementById('workflowOtherTextBox'); var box=document.getElementById('workflowTextCategoryBox'); var send=document.getElementById('workflowSendText'); if(qty)qty.classList.toggle('hidden',value!=='quantity'); if(other)other.classList.toggle('hidden',value==='quantity'); if(box)box.classList.toggle('quantity',value==='quantity'); if(send)send.textContent=value==='quantity'?'🔢 Kirim Jumlah Pembelian & Rekam':'✍️ Kirim Teks & Rekam';}
   var workflowTextCategory=document.getElementById('workflowTextCategory'); if(workflowTextCategory)workflowTextCategory.onchange=syncWorkflowTextCategory; syncWorkflowTextCategory();

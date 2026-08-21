@@ -1788,7 +1788,7 @@ async function listSupplierOrders(limit = 100) {
   return data || [];
 }
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs'];
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs','reseller_workflow_run_steps'];
 
 async function safeSelectAll(table) {
   try {
@@ -2291,6 +2291,88 @@ async function listResellerWorkflowRuns(limit = 100) {
 }
 
 
+async function claimResellerWorkflowRunStep(orderRef, workflowId, stepOrder, step = {}) {
+  const ref = String(orderRef || '').trim();
+  const workflow = String(workflowId || '').trim();
+  const order = Math.max(1, Number(stepOrder || 1));
+  if (!ref || !workflow) throw new Error('Guard step workflow tidak valid.');
+  const payload = {
+    order_ref: ref,
+    workflow_id: workflow,
+    step_order: order,
+    step_id: step?.id || null,
+    action_type: String(step?.action_type || '').trim(),
+    action_value: String(step?.action_value || ''),
+    status: 'sending',
+    response_message_id: null,
+    response_snapshot: {},
+    completed_at: null,
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('reseller_workflow_run_steps').insert(payload).select('*').single();
+  if (!error) return { claimed: true, row: data };
+  if (String(error.code || '') === '23505' || /duplicate|unique/i.test(String(error.message || ''))) {
+    const { data: existing, error: readError } = await sb().from('reseller_workflow_run_steps')
+      .select('*').eq('order_ref', ref).eq('step_order', order).maybeSingle();
+    if (readError) throw readError;
+    return { claimed: false, row: existing || null };
+  }
+  if (isMissingTableError(error)) {
+    const migrationError = new Error('Proteksi anti-double-order v82.2 belum tersedia. Jalankan migration v82.2 terlebih dahulu.');
+    migrationError.code = 'WORKFLOW_GUARD_MISSING';
+    throw migrationError;
+  }
+  throw error;
+}
+
+async function completeResellerWorkflowRunStep(orderRef, stepOrder, response = null) {
+  const ref = String(orderRef || '').trim();
+  const order = Math.max(1, Number(stepOrder || 1));
+  if (!ref) throw new Error('Invoice workflow tidak valid.');
+  const payload = {
+    status: 'completed',
+    response_message_id: response?.id ? Number(response.id) : null,
+    response_snapshot: response && typeof response === 'object' ? response : {},
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb().from('reseller_workflow_run_steps').update(payload)
+    .eq('order_ref', ref).eq('step_order', order).select('*').maybeSingle();
+  if (error) {
+    if (isMissingTableError(error)) {
+      const migrationError = new Error('Proteksi anti-double-order v82.2 belum tersedia. Jalankan migration v82.2 terlebih dahulu.');
+      migrationError.code = 'WORKFLOW_GUARD_MISSING';
+      throw migrationError;
+    }
+    throw error;
+  }
+  return data || null;
+}
+
+async function listResellerWorkflowRunSteps(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return [];
+  const { data, error } = await sb().from('reseller_workflow_run_steps').select('*')
+    .eq('order_ref', ref).order('step_order', { ascending: true });
+  if (error) {
+    if (isMissingTableError(error)) return [];
+    throw error;
+  }
+  return data || [];
+}
+
+async function resetResellerWorkflowRunStepGuards(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return false;
+  const { error } = await sb().from('reseller_workflow_run_steps').delete().eq('order_ref', ref);
+  if (error) {
+    if (isMissingTableError(error)) return false;
+    throw error;
+  }
+  return true;
+}
+
+
 module.exports = {
   claimOnce,
   markClaimDone,
@@ -2404,4 +2486,8 @@ module.exports = {
   upsertResellerWorkflowRun,
   patchResellerWorkflowRun,
   listResellerWorkflowRuns,
+  claimResellerWorkflowRunStep,
+  completeResellerWorkflowRunStep,
+  listResellerWorkflowRunSteps,
+  resetResellerWorkflowRunStepGuards,
 };

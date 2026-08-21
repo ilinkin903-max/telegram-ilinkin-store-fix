@@ -297,83 +297,142 @@ function deliveredFromTransaction(transaction) {
 }
 
 function receiptContext(order, product, transaction, delivered) {
-  const quantity = Number(transaction?.quantity || order?.quantity || 1);
+  const quantity = Math.max(1, Number(transaction?.quantity || order?.quantity || 1));
   const total = Number(transaction?.total_price || order?.amount || 0);
-  const fee = Number(order?.fee || 0);
+  const fee = Math.max(0, Number(transaction?.payment_fee ?? order?.fee ?? 0));
+  const unitPrice = Math.max(0, Number(transaction?.unit_price || order?.unit_price || ((Math.max(0, total - fee)) / quantity) || 0));
   const subtotal = Math.max(0, total - fee);
   return {
-    invoice: displayPaymentReference(transaction?.order_ref || order?.invoice_ref || '-'),
+    invoice: displayPaymentReference(transaction?.order_ref || order?.invoice_ref || order?.order_ref || '-'),
     productName: transaction?.product_name || product?.nama || order?.product_code || '-',
     productCode: transaction?.product_code || product?.kode || order?.product_code || '',
     variantName: transaction?.variant_name || order?.variant_name || '',
     variantKey: transaction?.variant_key || order?.variant_key || '',
     quantity,
+    unitPrice,
     total,
     fee,
     subtotal,
     paymentMethod: String(transaction?.payment_method || order?.payment_method || 'gateway').toLowerCase(),
+    paymentProvider: String(order?.payment_provider || '').trim().toLowerCase(),
     walletMainUsed: Number(transaction?.wallet_main_used || 0),
     walletReferralUsed: Number(transaction?.wallet_referral_used || 0),
+    paidAt: transaction?.created_at || transaction?.status_updated_at || order?.paid_at || order?.updated_at || new Date().toISOString(),
     delivered: Array.isArray(delivered) ? delivered : deliveredFromTransaction(transaction)
   };
 }
 
-async function sendOrderReceipt(userId, order, product, transaction, delivered) {
-  const ctx = receiptContext(order, product, transaction, delivered);
-  const variant = product ? selectedVariant(product, { variant_key: ctx.variantKey }) : null;
-  const terms = variantTerms(product || {}, variant);
-  const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
-  const rawProduct = ctx.delivered.join('\n').trim();
-  const productForMessage = rawProduct.length > 2800
-    ? rawProduct.slice(0, 2800) + '\n...\n(Data produk terlalu panjang. Hubungi admin jika data belum lengkap.)'
-    : rawProduct;
+function receiptMethodLabel(ctx, order = {}) {
+  if (ctx.paymentMethod === 'wallet') return 'Saldo Bot';
+  const provider = String(ctx.paymentProvider || '').trim().toLowerCase() || paymentProviderForOrder(order);
+  return provider === 'autogopay' ? 'AutoGoPay' : 'QRIS';
+}
 
-  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
+function termsBulletHtml(value) {
+  const rows = String(value || '-')
+    .replace(/\\([.!()+#=\-])/g, '$1')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[•*\-–—]+\s*/, '').trim())
+    .filter(Boolean);
+  if (!rows.length) return '• -';
+  return rows.map((line) => `• ${escapeHtml(line)}`).join('\n');
+}
+
+function splitReceiptProduct(value, maxChars) {
+  const text = String(value || '').trim();
+  if (!text) return ['-'];
+  const limit = Math.max(300, Number(maxChars || 2600));
+  if (text.length <= limit) return [text];
+  const lines = text.split(/\r?\n/);
+  const chunks = [];
+  let current = '';
+  for (const line of lines) {
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length <= limit) {
+      current = candidate;
+      continue;
+    }
+    if (current) chunks.push(current);
+    if (line.length <= limit) {
+      current = line;
+      continue;
+    }
+    for (let i = 0; i < line.length; i += limit) chunks.push(line.slice(i, i + limit));
+    current = '';
+  }
+  if (current) chunks.push(current);
+  return chunks.filter(Boolean);
+}
+
+function buildReceiptHeader(ctx, title, terms, order = {}) {
+  return `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
     `=======================\n` +
     `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
     `Produk: <b>${escapeHtml(title)}</b>\n` +
-    `Harga: <b>${escapeHtml(formatRupiah(ctx.subtotal))}</b>\n` +
+    `Harga: <b>${escapeHtml(formatRupiah(ctx.unitPrice))}</b>\n` +
     `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
-    `Metode: <b>${ctx.paymentMethod === 'wallet' ? 'Saldo Bot' : escapeHtml(paymentProviderLabel(order))}</b>\n` +
+    `Metode: <b>${escapeHtml(receiptMethodLabel(ctx, order))}</b>\n` +
     (ctx.walletMainUsed > 0 ? `Saldo Utama: <b>-${escapeHtml(formatRupiah(ctx.walletMainUsed))}</b>\n` : '') +
     (ctx.walletReferralUsed > 0 ? `Saldo Referral: <b>-${escapeHtml(formatRupiah(ctx.walletReferralUsed))}</b>\n` : '') +
-    (ctx.fee > 0 ? `Fee: <b>${escapeHtml(formatRupiah(ctx.fee))}</b>\n` : '') +
+    `Fee: <b>${escapeHtml(formatRupiah(ctx.fee))}</b>\n` +
     `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
-    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>\n` +
+    `Tanggal: <b>${escapeHtml(formatWIB(ctx.paidAt))}</b>\n` +
     `=======================\n\n` +
-    `<b>SYARAT & KETENTUAN</b>\n${escapeHtml(terms)}\n\n` +
-    `<b>PRODUK YANG DIDAPAT</b>\n<pre>${escapeHtml(productForMessage || '-')}</pre>\n` +
-    `Pembayaran terdeteksi otomatis dan produk sudah dikirim.`;
-
-  const reply_markup = copyProductKeyboard(ctx.delivered);
-  return tg.sendMessage(userId, text, { parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) });
+    `<b>SYARAT &amp; KETENTUAN</b>\n${termsBulletHtml(terms)}\n\n` +
+    `<b>PRODUK YANG DIDAPAT</b>\n\n`;
 }
 
+async function sendCompletedReceipt(userId, order, product, transaction, delivered, termsOverride = '') {
+  const ctx = receiptContext(order, product, transaction, delivered);
+  const variant = product ? selectedVariant(product, { variant_key: ctx.variantKey }) : null;
+  const terms = String(termsOverride || variantTerms(product || {}, variant) || '-').trim() || '-';
+  const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
+  const rawProduct = ctx.delivered.join('\n').trim() || '-';
+  const header = buildReceiptHeader(ctx, title, terms, order);
+  const firstLimit = Math.max(500, 3650 - header.length);
+  const chunks = splitReceiptProduct(rawProduct, firstLimit);
+  const responses = [];
+  const first = `${header}<pre>${escapeHtml(chunks[0] || '-')}</pre>\n\n` +
+    (chunks.length === 1
+      ? `Pembayaran terdeteksi otomatis dan produk sudah dikirim.`
+      : `Produk dilanjutkan pada pesan berikutnya.`);
+  responses.push(await tg.sendMessage(Number(userId), first, { parse_mode: 'HTML' }));
+  for (let i = 1; i < chunks.length; i += 1) {
+    const last = i === chunks.length - 1;
+    const text = `<b>LANJUTAN PRODUK YANG DIDAPAT</b>\n` +
+      `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n\n` +
+      `<pre>${escapeHtml(chunks[i])}</pre>` +
+      (last ? `\n\nPembayaran terdeteksi otomatis dan produk sudah dikirim.` : '');
+    responses.push(await tg.sendMessage(Number(userId), text, { parse_mode: 'HTML' }));
+  }
+  return responses[responses.length - 1] || null;
+}
+
+async function sendOrderReceipt(userId, order, product, transaction, delivered) {
+  return sendCompletedReceipt(userId, order, product, transaction, delivered);
+}
 
 async function sendPoPaidNotice(userId, order, product, transaction) {
   const ctx = receiptContext(order, product, transaction, []);
   const title = `${ctx.productName}${ctx.variantName ? ' - ' + ctx.variantName : ''}`;
-  const text = `✅ <b>PEMBAYARAN BERHASIL</b>
-` +
-    `=======================
-` +
-    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>
-` +
-    `Produk: <b>${escapeHtml(title)}</b>
-` +
-    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>
-` +
-    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>
-` +
-    `Tanggal: <b>${escapeHtml(formatWIB(new Date()))}</b>
-` +
+  const text = `✅ <b>PEMBAYARAN BERHASIL</b>\n` +
+    `=======================\n` +
+    `Invoice: <b>${escapeHtml(ctx.invoice)}</b>\n` +
+    `Produk: <b>${escapeHtml(title)}</b>\n` +
+    `Harga: <b>${escapeHtml(formatRupiah(ctx.unitPrice))}</b>\n` +
+    `Jumlah Beli: <b>${escapeHtml(ctx.quantity)}</b>\n` +
+    `Metode: <b>${escapeHtml(receiptMethodLabel(ctx, order))}</b>\n` +
+    `Fee: <b>${escapeHtml(formatRupiah(ctx.fee))}</b>\n` +
+    `Total Dibayar: <b>${escapeHtml(formatRupiah(ctx.total))}</b>\n` +
+    `Tanggal: <b>${escapeHtml(formatWIB(ctx.paidAt))}</b>\n` +
     `=======================`;
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
 async function sendSupplierPendingNotice(userId) {
-  const text = `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>
-` +
+  const text = `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>\n` +
     `Pembayaran sudah diterima. Sistem sedang mengambil produk dari supplier. Produk akan dikirim ke chat ini setelah supplier berhasil mengirimkannya.`;
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
@@ -381,59 +440,24 @@ async function sendSupplierPendingNotice(userId) {
 async function sendPoDeliveryReceipt(userId, poOrder, deliveryText, product = null) {
   const raw = String(deliveryText || '').trim();
   if (!raw) throw new Error('Data produk PO kosong.');
-  const variant = product ? selectedVariant(product, { variant_key: poOrder?.variant_key || '' }) : null;
+  const invoice = String(poOrder?.order_ref || '').trim();
+  const transaction = invoice ? await db.getTransactionByOrderRef(invoice).catch(() => null) : null;
+  const variant = product ? selectedVariant(product, { variant_key: transaction?.variant_key || poOrder?.variant_key || '' }) : null;
   const terms = String(poOrder?.terms_snapshot || variantTerms(product || {}, variant) || '-').trim() || '-';
-  const termsBlock = `<b>SYARAT &amp; KETENTUAN</b>
-${escapeHtml(terms)}
-
-`;
-
-  // Pesan pengiriman sengaja tidak mengulang header PO, invoice, produk, atau jumlah.
-  // Pembeli menerima bagian penting saja: S&K dan data produk/akun.
-  const inlineLimit = Math.max(500, 3900 - termsBlock.length);
-  if (raw.length <= inlineLimit) {
-    const productItems = raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
-    const reply_markup = copyProductKeyboard(productItems);
-    return tg.sendMessage(Number(userId),
-      termsBlock + `<b>PRODUK</b>
-<pre>${escapeHtml(raw)}</pre>
-` +
-      (reply_markup ? `Gunakan tombol Salin Produk di bawah agar data bisa disalin tanpa karakter tambahan.` : `Tekan lama/blok data produk di atas untuk menyalin. Simpan data dengan baik.`),
-      { parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) }
-    );
-  }
-
-  const safeRef = String(displayPaymentReference(poOrder?.order_ref || 'ORDER')).replace(/[^a-z0-9_-]/gi, '-').slice(0, 50) || 'ORDER';
-  const textFile = `SYARAT & KETENTUAN
-${terms}
-
-PRODUK
-${raw}
-`;
-  const captionTerms = terms.length > 520 ? `${terms.slice(0, 517)}...` : terms;
-  const caption = `<b>SYARAT &amp; KETENTUAN</b>
-${escapeHtml(captionTerms)}
-
-Data produk panjang dikirim sebagai TXT agar utuh dan mudah disalin.`;
-  return tg.sendDocument(Number(userId), `PRODUK-${safeRef}.txt`, textFile, {
-    caption,
-    parse_mode: 'HTML'
-  });
-}
-
-
-function copyProductKeyboard(items = []) {
-  const clean = (Array.isArray(items) ? items : [])
-    .map((item) => String(item || '').trim())
-    .filter(Boolean);
-  const eligible = clean.filter((item) => item.length <= 256).slice(0, 12);
-  if (!eligible.length) return undefined;
-  return {
-    inline_keyboard: eligible.map((item, index) => ([{
-      text: clean.length === 1 ? '📋 Salin Produk' : `📋 Salin Produk ${index + 1}`,
-      copy_text: { text: item }
-    }]))
+  const orderLike = {
+    invoice_ref: invoice || transaction?.order_ref || '-',
+    telegram_id: Number(userId || transaction?.telegram_id || 0),
+    product_code: transaction?.product_code || product?.kode || '',
+    variant_key: transaction?.variant_key || poOrder?.variant_key || '',
+    variant_name: transaction?.variant_name || poOrder?.variant_name || '',
+    unit_price: Number(transaction?.unit_price || poOrder?.unit_price || 0),
+    quantity: Number(transaction?.quantity || poOrder?.quantity || 1),
+    amount: Number(transaction?.total_price || poOrder?.total_price || 0),
+    fee: Number(transaction?.payment_fee || 0),
+    payment_method: transaction?.payment_method || 'gateway',
+    payment_provider: config.paymentProvider
   };
+  return sendCompletedReceipt(Number(userId), orderLike, product || { nama: transaction?.product_name || poOrder?.product_name || poOrder?.product_code || 'Produk' }, transaction, raw.split(/\r?\n/).filter(Boolean), terms);
 }
 
 async function sendChannelWithRetry(target, text, attempts = 3) {
@@ -693,6 +717,22 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
     return { handled: true, pending: true, error, transaction, workflow_run: run };
   }
 
+  if (run && !forceRestart && String(run.status || '').toLowerCase() === 'queued' && run.started_at) {
+    run = await db.patchResellerWorkflowRun(invoice, {
+      status: 'attention',
+      error_code: 'WORKFLOW_REPLAY_BLOCKED',
+      error_message: 'Workflow ini pernah mulai berjalan. Replay otomatis dari awal diblokir untuk mencegah pembelian supplier terulang.'
+    }).catch(() => run);
+    const error = new Error(run?.error_message || 'Replay workflow diblokir.');
+    error.code = 'WORKFLOW_REPLAY_BLOCKED';
+    return { handled: true, pending: true, error, transaction, workflow_run: run };
+  }
+
+  if (forceRestart) {
+    // Hanya aksi manual owner yang boleh menghapus guard. Retry otomatis tidak pernah masuk sini.
+    await db.resetResellerWorkflowRunStepGuards(invoice);
+  }
+
   if (!run || forceRestart) {
     run = await db.upsertResellerWorkflowRun({
       order_ref: invoice,
@@ -734,6 +774,16 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       last_response: forceRestart ? null : (run?.last_message_snapshot || null),
       context,
       on_before_step: async ({ index, step, last_response }) => {
+        // Guard persisten per invoice + step. Satu step hanya boleh DIKIRIM SEKALI ke supplier.
+        // Jika serverless/retry masuk lagi pada step yang sama, proses berhenti sebelum klik/kirim ulang.
+        const guard = await db.claimResellerWorkflowRunStep(invoice, workflow.id, index + 1, step);
+        if (!guard?.claimed) {
+          const error = new Error(`Step ${index + 1} sudah pernah mulai dikirim ke supplier. Sistem menghentikan replay untuk mencegah order ganda.`);
+          error.code = guard?.row?.status === 'completed' ? 'WORKFLOW_STEP_ALREADY_COMPLETED' : 'WORKFLOW_STEP_ALREADY_SENT';
+          error.step_index = index;
+          error.last_response = last_response || run?.last_message_snapshot || null;
+          throw error;
+        }
         run = await db.patchResellerWorkflowRun(invoice, {
           status: 'running',
           current_step: index,
@@ -744,6 +794,9 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
         });
       },
       on_step: async ({ index, response }) => {
+        // Tandai guard step selesai SEBELUM memajukan current_step.
+        // Jika update run gagal setelah supplier sudah merespons, retry tetap tidak akan mengirim step lagi.
+        await db.completeResellerWorkflowRunStep(invoice, index + 1, response || null);
         run = await db.patchResellerWorkflowRun(invoice, {
           status: 'running',
           current_step: index + 1,
@@ -785,6 +838,20 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
     await sendOwnerLog({ ...order, invoice_ref: invoice }, product, finalTransaction, buyer);
     return { handled: true, delivered: resultText.split(/\r?\n/).filter(Boolean), po_order: poOrder, transaction: finalTransaction, workflow_run: run };
   } catch (error) {
+    // Jika hasil supplier SUDAH didapat dan disimpan, jangan pernah menurunkan status menjadi
+    // ATTENTION/QUEUED. Retry berikutnya cukup mengirim ulang receipt ke user, bukan order supplier.
+    if (String(run?.status || '').toLowerCase() === 'delivered' && String(run?.result_text || '').trim()) {
+      await notifyOwnerWorkflowIssue({ ...order, invoice_ref: invoice }, product, error, workflow, run);
+      return {
+        handled: true,
+        pending: true,
+        error,
+        delivered: String(run.result_text).split(/\r?\n/).filter(Boolean),
+        transaction,
+        workflow_run: run,
+        supplier_completed: true
+      };
+    }
     const status = error?.code === 'WORKFLOW_BUSY' ? 'queued' : 'attention';
     run = await db.patchResellerWorkflowRun(invoice, {
       status,
