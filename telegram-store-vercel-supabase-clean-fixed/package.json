@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "84.2.0",
+  "version": "84.3.0",
   "private": true,
-  "description": "Link Auto Order v84.2: workflow reseller failure-stop, same-sale restart, buyer failure notices, and completed-only revenue/profit statistics.",
+  "description": "Link Auto Order v84.3: reseller workflow failures stop permanently without automatic retry or repeated supplier balance debits.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

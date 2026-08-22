@@ -5,7 +5,6 @@ const tg = require('./telegram');
 const walletNotifications = require('./walletNotifications');
 const prodseller = require('./prodsellerService');
 const workflowUserbot = require('./userbotWorkflowService');
-const workflowRetry = require('./workflowRetryScheduler');
 const { formatRupiah, formatWIB } = require('./utils');
 
 function getVercelWaitUntil() {
@@ -444,8 +443,8 @@ async function sendWorkflowFailureNotice(userId, invoice) {
   if (!claimed) return false;
   try {
     const text = `⚠️ <b>PROSES PRODUK MENGALAMI KENDALA</b>\n\n` +
-      `Pesanan Anda sudah tercatat, tetapi proses pengiriman produk mengalami kendala. Sistem <b>menghentikan workflow pada langkah yang gagal</b> agar pesanan tidak salah atau terkirim ganda.\n\n` +
-      `Silakan tunggu beberapa saat. Jika produk belum diterima, hubungi admin dan sertakan referensi <b>${escapeHtml(ref)}</b>.\n\n` +
+      `Pesanan Anda sudah tercatat, tetapi proses pengiriman produk sedang mengalami kendala. Sistem <b>tidak melanjutkan langkah yang gagal</b> agar pesanan tidak salah.\n\n` +
+      `Silakan tunggu beberapa saat. Jika produk belum diterima, hubungi admin dengan referensi <b>${escapeHtml(ref)}</b>.\n\n` +
       `Terima kasih atas pengertiannya.`;
     await tg.sendMessage(Number(userId), text, { parse_mode: 'HTML' });
     await db.markClaimDone(claimKey, { invoice: String(invoice || '').trim(), state: 'sent' }).catch(() => null);
@@ -793,10 +792,10 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
           order_ref: invoice, workflow_id: workflow.id, telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
           product_code: transaction?.product_code || order?.product_code || product?.kode || '', variant_key: transaction?.variant_key || order?.variant_key || '',
           quantity: orderQuantity, supplier_id: workflow.supplier_id, supplier_unit_cost_idr: manualSupplier.unitCost, supplier_cost_total_idr: manualSupplier.totalCost,
-          status: 'attention', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
+          status: 'queued', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
         });
       } else {
-        run = await db.patchResellerWorkflowRun(invoice, { status: 'attention', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
+        run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
       }
       const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
       return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run, workflow_failure_notified: buyerNotified };
@@ -819,7 +818,7 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       supplier_id: manualSupplier.supplier?.id || workflow.supplier_id || null,
       supplier_unit_cost_idr: manualSupplier.unitCost,
       supplier_cost_total_idr: manualSupplier.totalCost,
-      supplier_balance_debited_at: run?.supplier_balance_debited_at || null,
+      supplier_balance_debited_at: null,
       status: 'queued', current_step: 0, result_text: '', last_message_id: null, last_message_snapshot: {},
       error_code: '', error_message: '', started_at: null, finished_at: null
     });
@@ -836,11 +835,27 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
   const targetLock = `workflow_supplier:${String(workflow.target_username || '').toLowerCase()}`;
   const locked = await db.claimOnce(targetLock, 600, { invoice, workflow_id: workflow.id }, { failClosed: true });
   if (!locked) {
-    const error = new Error('Bot supplier sedang memproses order lain. Pesanan masuk antrean dan akan dicoba otomatis.');
+    // GAGAL = STOP. Jangan antre, jangan retry otomatis, jangan jalankan workflow dari step lain.
+    // Owner harus melihat status ATTENTION dan memilih tindakan manual setelah memastikan supplier
+    // benar-benar belum memproses pesanan. Ini mencegah saldo supplier terpotong berulang akibat retry.
+    const error = new Error('Bot supplier sedang memproses pesanan lain. Workflow dihentikan dan tidak akan dicoba otomatis.');
     error.code = 'WORKFLOW_BUSY';
-    run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: error.code, error_message: error.message });
-    const retryScheduled = workflowRetry.scheduleWorkflowRetry(invoice, 0);
-    return { handled: true, pending: true, error, transaction, workflow_run: run, retry_scheduled: retryScheduled };
+    run = await db.patchResellerWorkflowRun(invoice, {
+      status: 'attention',
+      error_code: error.code,
+      error_message: error.message
+    });
+    const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
+    await notifyOwnerWorkflowIssue({ ...order, invoice_ref: invoice }, product, error, workflow, run);
+    return {
+      handled: true,
+      pending: true,
+      error,
+      transaction,
+      workflow_run: run,
+      workflow_failure_notified: buyerNotified,
+      retry_scheduled: false
+    };
   }
 
   try {
@@ -1187,10 +1202,25 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     let supplierResult = null;
     let workflowResult = null;
     if (poWaiting && isWorkflowProduct(product, result.transaction || order)) {
+      const existingWorkflowRun = await db.getResellerWorkflowRun(invoice).catch(() => null);
+      const workflowRunStatus = String(existingWorkflowRun?.status || '').toLowerCase();
+      if (['attention', 'canceled', 'cancelled', 'failed'].includes(workflowRunStatus)) {
+        const stoppedError = new Error(existingWorkflowRun?.error_message || 'Workflow reseller dihentikan karena mengalami kendala. Tidak ada retry otomatis.');
+        stoppedError.code = existingWorkflowRun?.error_code || 'WORKFLOW_ATTENTION';
+        workflowResult = {
+          handled: true,
+          pending: true,
+          error: stoppedError,
+          transaction: result.transaction,
+          workflow_run: existingWorkflowRun,
+          workflow_failure_notified: true
+        };
+      } else {
+        workflowResult = await processWorkflowDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
+      }
       // Jalankan workflow lebih dulu. Jika selesai cepat, pembeli langsung menerima produk
       // tanpa pesan "sedang diproses" yang tidak perlu. Jika masih antre/error, blok
       // po_paid_notice di bawah mengirim satu notifikasi pending secara idempotent.
-      workflowResult = await processWorkflowDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
       if (workflowResult && !workflowResult.pending && workflowResult.delivered?.length) {
         poWaiting = false;
         result.transaction = workflowResult.transaction || result.transaction;

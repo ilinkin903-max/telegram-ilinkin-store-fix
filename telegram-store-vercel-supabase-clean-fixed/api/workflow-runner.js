@@ -33,21 +33,8 @@ module.exports = async function handler(req, res) {
     const code = String(error?.code || '').toUpperCase();
     // Hanya antrean sebelum workflow mulai yang boleh dicoba otomatis.
     // WORKFLOW_STILL_RUNNING tidak dijadwalkan ulang agar satu invoice tidak memiliki runner berantai.
-    const retryable = ['WORKFLOW_BUSY'].includes(code);
-    const maxAttempts = Math.max(1, Number(config.workflowRetryMaxAttempts || 18));
-    if (retryable && attempt + 1 < maxAttempts) {
-      const scheduled = workflowRetry.scheduleWorkflowRetry(invoice, attempt + 1);
-      return res.status(202).json({
-        ok: true,
-        version: getAppVersion(),
-        state: 'queued',
-        invoice,
-        attempt,
-        next_attempt: attempt + 1,
-        retry_scheduled: scheduled,
-        error: error.message || String(error)
-      });
-    }
+    // v84.3: worker tidak pernah menjadwalkan ulang workflow yang gagal/busy.
+    // Workflow yang gagal harus berhenti dan masuk ATTENTION. Restart hanya boleh dilakukan manual.
     // 409 sengaja: worker berhenti. Untuk status ATTENTION admin harus mengecek chat supplier
     // sebelum mengulang agar tidak terjadi pembelian ganda.
     return res.status(409).json({

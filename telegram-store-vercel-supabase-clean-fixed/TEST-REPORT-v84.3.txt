@@ -1,0 +1,12 @@
+Link Auto Order v84.3.0
+
+Purpose:
+- Workflow reseller failures must STOP, never auto-retry or continue.
+- Supplier-busy condition is ATTENTION, not QUEUED.
+- Payment fulfillment skips a workflow whose run is already ATTENTION/FAILED/CANCELED.
+- Supplier balance settlement is never executed on the failure/busy path; it is only on delivery-success paths.
+- Dashboard retry remains MANUAL only.
+
+Validation:
+- JavaScript syntax: 0 errors across api/lib/public/tests.
+- v84.3 focused tests: 6/6 PASS.

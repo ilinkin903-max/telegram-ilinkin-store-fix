@@ -66,15 +66,9 @@ async function continueLater(invoice, nextAttempt, delaySeconds) {
 }
 
 function scheduleWorkflowRetry(invoice, attempt = 0, delaySeconds = null) {
-  const ref = String(invoice || '').trim();
-  if (!ref || !runnerSecret() || !String(config.publicUrl || '').trim()) return false;
-  const nextAttempt = Math.max(0, Number(attempt || 0));
-  const max = Math.max(1, Number(config.workflowRetryMaxAttempts || 18));
-  if (nextAttempt >= max) return false;
-  return runDetached(
-    continueLater(ref, nextAttempt, delaySeconds),
-    `continue workflow ${ref}`
-  );
+  // v84.3: workflow failure must STOP. Automatic retry is intentionally disabled.
+  // Manual retry is performed explicitly through retryWorkflowOrder from the dashboard.
+  return false;
 }
 
 module.exports = {
