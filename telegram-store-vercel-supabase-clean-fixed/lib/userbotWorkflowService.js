@@ -113,6 +113,21 @@ function buttonText(button) {
   return String(button?.text || button?.button?.text || button?.originalButton?.text || '').trim();
 }
 
+// Label tombol Telegram sering berubah walaupun tombol yang sama tetap dipakai:
+// - PRIVATE (6) -> PRIVATE (23) ketika stok berubah
+// - • Individual -> ○ Individual setelah pilihan berubah
+// Untuk identifikasi, gunakan label semantik yang stabil dan abaikan dekorasi/status dinamis.
+function normalizeButtonText(value) {
+  return String(value || '')
+    .replace(/^[\s•○●◦◉◎☑✅✔✓□■▪▫·]+/u, '')
+    .replace(/(^|\s)[•○●◦◉◎☑✅✔✓□■▪▫·]+(?=\s|$)/gu, ' ')
+    .replace(/\(\s*[-+]?\d[\d.,]*\s*\)/g, '(#)')
+    .replace(/[\uFE0F\u200D]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 function buttonKind(button) {
   const raw = button?.button || button?.originalButton || button || {};
   const name = String(raw.className || raw.constructor?.name || '').toLowerCase();
@@ -170,6 +185,17 @@ function resolveButtonActionValue(actionValue, buttonRole, message, context = {}
   return match.text;
 }
 
+function serializeButtonData(button) {
+  const raw = button?.button || button?.originalButton || button || {};
+  const data = raw?.data ?? button?.data;
+  if (data == null) return '';
+  try {
+    if (Buffer.isBuffer(data)) return data.toString('base64');
+    if (data instanceof Uint8Array) return Buffer.from(data).toString('base64');
+  } catch (_) {}
+  return String(data);
+}
+
 function messageButtons(message) {
   const out = [];
   const rows = Array.isArray(message?.buttons)
@@ -185,6 +211,8 @@ function messageButtons(message) {
         row: rowIndex,
         col: colIndex,
         text,
+        match_key: normalizeButtonText(text),
+        data: serializeButtonData(button),
         kind: buttonKind(button)
       });
     });
@@ -409,7 +437,7 @@ function responseLooksLikeExpected(actual, expected) {
 }
 
 function buttonSignature(snapshot) {
-  return (snapshot?.buttons || []).map((button) => String(button?.text || '').trim().toLowerCase()).filter(Boolean).join('|');
+  return (snapshot?.buttons || []).map((button) => String(button?.match_key || normalizeButtonText(button?.text)).trim()).filter(Boolean).join('|');
 }
 
 function responseMatchesRecorded(actual, expected) {
@@ -560,15 +588,43 @@ function renderTemplate(value, context = {}) {
   return String(value == null ? '' : value).replace(/\{(quantity|invoice|telegram_id|username|custom_input)\}/gi, (_, key) => String(map[String(key).toLowerCase()] ?? ''));
 }
 
-async function clickMessageButton(message, buttonValue) {
+function findRecordedButton(message, buttonValue, recordedSnapshot = null, recordedButton = null) {
+  const buttons = messageButtons(message);
+  const wanted = String(buttonValue || '').trim();
+  const wantedKey = normalizeButtonText(wanted);
+
+  // 1) Utamakan posisi tombol yang direkam. Ini paling kuat terhadap perubahan label dinamis.
+  const row = Number(recordedButton?.row ?? recordedButton?.row_index);
+  const col = Number(recordedButton?.col ?? recordedButton?.col_index);
+  if (Number.isInteger(row) && row >= 0 && Number.isInteger(col) && col >= 0) {
+    const byPosition = buttons.find((button) => button.row === row && button.col === col);
+    if (byPosition) return byPosition;
+  }
+
+  // 2) Cari berdasarkan callback data bila snapshot lama memilikinya.
+  const recordedData = String(recordedButton?.data || '');
+  if (recordedData) {
+    const byData = buttons.find((button) => String(button.data || '') === recordedData);
+    if (byData) return byData;
+  }
+
+  // 3) Fallback semantik: abaikan bullet status dan angka dinamis di dalam kurung.
+  const bySemantic = buttons.find((button) => button.match_key === wantedKey);
+  if (bySemantic) return bySemantic;
+
+  // 4) Kompatibilitas legacy: exact text.
+  return buttons.find((button) => button.text === wanted) || null;
+}
+
+async function clickMessageButton(message, buttonValue, options = {}) {
   const wanted = String(buttonValue || '').trim();
   if (!wanted) throw new Error('Teks tombol supplier kosong.');
   if (!message) throw new Error('Pesan supplier untuk tombol ini tidak ditemukan. Refresh balasan lalu coba lagi.');
-  const match = messageButtons(message).find((button) => button.text === wanted);
-  if (!match) throw new Error(`Tombol "${wanted}" tidak ditemukan pada pesan supplier terbaru.`);
+  const match = findRecordedButton(message, wanted, options.recorded_snapshot || null, options.recorded_button || null);
+  if (!match) throw new Error(`Tombol "${wanted}" tidak ditemukan pada pesan supplier terbaru. Sistem sudah mencoba posisi, callback, label dinamis, dan label exact.`);
   if (match.kind === 'url') throw new Error('Tombol URL tidak dapat direkam sebagai langkah order otomatis. Gunakan tombol callback/reply atau kirim teks.');
   if (typeof message.click !== 'function') throw new Error('Runtime Telegram tidak mendukung klik tombol pada pesan ini.');
-  await message.click({ text: wanted });
+  await message.click({ text: match.text });
   return match;
 }
 
@@ -601,7 +657,14 @@ async function executeActionWithClient(client, options = {}) {
     effectiveButtonRole = requestedButtonRole === 'quantity' || inferButtonRole(actionValue, actionSource) === 'quantity' ? 'quantity' : 'static';
     clickedButtonValue = resolveButtonActionValue(actionValue, effectiveButtonRole, clickable, options.context || {});
     previewValue = clickedButtonValue;
-    await clickMessageButton(clickable, clickedButtonValue);
+    const recordedButtons = Array.isArray(options.source_message_snapshot?.buttons) ? options.source_message_snapshot.buttons : [];
+    const requestedMatchKey = normalizeButtonText(actionValue);
+    const recordedButton = recordedButtons.find((button) => normalizeButtonText(button?.text) === requestedMatchKey) || null;
+    const clickedButton = await clickMessageButton(clickable, clickedButtonValue, {
+      recorded_snapshot: options.source_message_snapshot || null,
+      recorded_button: recordedButton
+    });
+    actionSource = actionSource ? { ...actionSource, clicked_button: clickedButton } : actionSource;
   }
 
   const strictExpected = responseMode !== 'same_message' && options.wait_for_match === true && hasStrictEditableResponseMarker(options.response_snapshot || null);
@@ -650,6 +713,7 @@ async function executeActionWithClient(client, options = {}) {
     action_value: actionValue,
     preview_value: previewValue,
     clicked_button_value: clickedButtonValue,
+    clicked_button: actionSource?.clicked_button || null,
     button_role: actionType === 'button' ? effectiveButtonRole : 'static',
     before,
     before_snapshots: beforeSnapshots,
@@ -773,6 +837,7 @@ async function runWorkflowSteps(options = {}) {
         timeout_ms: timeoutMs,
         response_mode: responseMode,
         response_snapshot: step.response_snapshot || null,
+        source_message_snapshot: step.source_message_snapshot || null,
         wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null) && responseMode !== 'same_message',
         context
       });
@@ -940,6 +1005,7 @@ module.exports = {
   extractTextByRule,
   parseStockNumber,
   resolveStepTimeoutMs,
+  normalizeButtonText,
   quantityValueFromButtonText,
   isLikelyQuantityButtonSnapshot,
   inferButtonRole,
