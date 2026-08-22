@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.23.0",
+  "version": "4.24.0",
   "private": true,
-  "description": "Link Auto Order v82.6: per-step workflow timeout, strict matching waits, and editable Telegram maintenance mode.",
+  "description": "Link Auto Order v82.7: continuous workflow recorder, transient/edit history, multi-stage button recording, per-step timeout, and Telegram maintenance mode.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

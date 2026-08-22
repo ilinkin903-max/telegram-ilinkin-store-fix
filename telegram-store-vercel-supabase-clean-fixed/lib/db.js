@@ -2381,6 +2381,7 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     response_snapshot: input.response_snapshot && typeof input.response_snapshot === 'object' ? input.response_snapshot : {},
     response_snapshots: Array.isArray(input.response_snapshots) ? input.response_snapshots : [],
     response_selection_index: Number.isInteger(Number(input.response_selection_index)) ? Number(input.response_selection_index) : 0,
+    recorder_before_snapshots: Array.isArray(input.recorder_before_snapshots) ? input.recorder_before_snapshots : [],
     text_category: ['quantity','other'].includes(String(input.text_category || '').toLowerCase()) ? String(input.text_category).toLowerCase() : 'other',
     capture_result: input.capture_result === true,
     result_extract_prefix: String(input.result_extract_prefix || ''),
@@ -2450,6 +2451,7 @@ async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
   if (updates.response_snapshot !== undefined) payload.response_snapshot = updates.response_snapshot && typeof updates.response_snapshot === 'object' ? updates.response_snapshot : {};
   if (updates.response_snapshots !== undefined) payload.response_snapshots = Array.isArray(updates.response_snapshots) ? updates.response_snapshots : [];
   if (updates.response_selection_index !== undefined) payload.response_selection_index = Number.isInteger(Number(updates.response_selection_index)) ? Number(updates.response_selection_index) : -1;
+  if (updates.recorder_before_snapshots !== undefined) payload.recorder_before_snapshots = Array.isArray(updates.recorder_before_snapshots) ? updates.recorder_before_snapshots : [];
   if (updates.wait_timeout_ms !== undefined) payload.wait_timeout_ms = updates.wait_timeout_ms === null || updates.wait_timeout_ms === '' ? null : Math.max(1500, Math.min(120000, Number(updates.wait_timeout_ms || 7000)));
   const { data, error } = await sb().from('reseller_workflow_steps').update(payload).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
@@ -2497,6 +2499,7 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       response_snapshot: step.response_snapshot || {},
       response_snapshots: Array.isArray(step.response_snapshots) ? step.response_snapshots : [],
       response_selection_index: Number(step.response_selection_index ?? -1),
+      recorder_before_snapshots: Array.isArray(step.recorder_before_snapshots) ? step.recorder_before_snapshots : [],
       text_category: step.text_category || 'other',
       capture_result: step.capture_result === true,
       result_extract_prefix: step.result_extract_prefix || '',

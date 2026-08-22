@@ -854,10 +854,20 @@ module.exports = async function handler(req, res) {
           last_message_snapshot: selectedStep?.response_snapshot || {},
           recent_message_snapshots: mergedCandidates
         }) || workflow;
-      } else if (previousStep) {
-        const previousCandidates = Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots : [];
-        if (previousCandidates.length > 1 && !Number(previousStep.response_snapshot?.id || 0)) {
-          return json(res, 409, { ok: false, error: 'Supplier mengirim beberapa pesan. Pilih dulu pesan mana yang direkam untuk step sebelumnya sebelum melanjutkan.' });
+      } else if (previousStep && !Number(previousStep.response_snapshot?.id || 0)) {
+        // Bila admin lanjut dengan kirim teks tanpa menekan "Pilih Pesan Ini", finalisasi
+        // otomatis ke pesan terakhir yang masih terlihat. Seluruh pesan yang sempat direkam
+        // tetap disimpan sebagai kandidat/riwayat sehingga tidak hilang dari recorder.
+        const previousCandidates = Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots.filter((snap) => Number(snap?.id || 0) > 0) : [];
+        const visible = previousCandidates.filter((snap) => snap?.currently_visible !== false);
+        const autoCandidate = visible[visible.length - 1] || previousCandidates[previousCandidates.length - 1] || null;
+        if (autoCandidate) {
+          const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, previousStep.id, Number(autoCandidate.id), previousCandidates);
+          workflow = await db.updateResellerWorkflow(workflow.id, {
+            last_message_id: selectedStep?.response_snapshot?.id || autoCandidate.id,
+            last_message_snapshot: selectedStep?.response_snapshot || autoCandidate,
+            recent_message_snapshots: previousCandidates
+          }) || workflow;
         }
       }
 
@@ -881,21 +891,25 @@ module.exports = async function handler(req, res) {
         timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
         context
       });
-      const responses = Array.isArray(result.responses) ? result.responses : [];
-      const autoSelected = responses.length === 1 ? responses[0] : null;
+      const rawResponses = Array.isArray(result.responses) ? result.responses : [];
+      const responses = workflowUserbot.mergeRecorderSnapshots([], rawResponses, { visible_snapshots: rawResponses, mark_visibility: true, limit: 50 });
+      // Jangan auto-pilih walau saat request pertama baru terlihat satu pesan. Bot supplier
+      // dapat mengirim loading, mengedit pesan, menghapusnya, lalu mengirim pilihan berikutnya.
+      // Selama belum ada aksi berikutnya/pilihan eksplisit, live recorder akan terus menambah kandidat.
       const step = await db.addResellerWorkflowStep(workflow.id, {
         action_type: result.action_type,
         action_value: result.action_value,
         preview_value: result.preview_value,
         text_category: textCategory,
-        response_snapshot: autoSelected || {},
+        response_snapshot: {},
         response_snapshots: responses,
-        response_selection_index: autoSelected ? 0 : -1,
+        response_selection_index: -1,
+        recorder_before_snapshots: Array.isArray(result.before_snapshots) ? result.before_snapshots : [],
         capture_result: false
       });
       const updated = await db.updateResellerWorkflow(workflow.id, {
-        last_message_id: autoSelected?.id || null,
-        last_message_snapshot: autoSelected || {},
+        last_message_id: null,
+        last_message_snapshot: {},
         recent_message_snapshots: responses
       });
       return json(res, 200, {
@@ -904,11 +918,48 @@ module.exports = async function handler(req, res) {
           workflow: updated,
           step,
           responses,
-          response: autoSelected,
+          response: null,
           response_changed: result.response_changed,
-          selection_required: responses.length > 1
+          selection_required: responses.length > 1,
+          recorder_live: true
         }
       });
+    }
+
+    if (action === 'workflow-record-poll') {
+      const workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 200, { ok: true, data: { recorder_live: false, reason: 'active', responses: [] } });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      const lastStep = steps[steps.length - 1] || null;
+      if (!lastStep) return json(res, 200, { ok: true, data: { recorder_live: true, reason: 'waiting_first_action', responses: [] } });
+      if (Number(lastStep.response_snapshot?.id || 0)) {
+        return json(res, 200, { ok: true, data: { recorder_live: false, reason: 'response_selected', step_id: lastStep.id, responses: lastStep.response_snapshots || [] } });
+      }
+      const observed = await workflowUserbot.observeRecorderResponses({
+        target: workflow.target_username,
+        before_snapshots: Array.isArray(lastStep.recorder_before_snapshots) ? lastStep.recorder_before_snapshots : [],
+        existing_snapshots: Array.isArray(lastStep.response_snapshots) ? lastStep.response_snapshots : [],
+        duration_ms: Math.max(1200, Math.min(9000, Number(body.duration_ms || 4500))),
+        limit: 50
+      });
+      // Request recorder bisa masih berjalan ketika admin sudah menekan tombol berikutnya.
+      // Cek ulang agar long-poll lama tidak menimpa step baru atau pilihan yang baru disimpan.
+      const freshSteps = await db.listResellerWorkflowSteps(workflow.id);
+      const freshLast = freshSteps[freshSteps.length - 1] || null;
+      if (!freshLast || String(freshLast.id) !== String(lastStep.id) || Number(freshLast.response_snapshot?.id || 0)) {
+        return json(res, 200, { ok: true, data: { recorder_live: false, stale: true, responses: freshLast?.response_snapshots || [] } });
+      }
+      const savedStep = await db.updateResellerWorkflowStep(workflow.id, lastStep.id, {
+        response_snapshots: observed.responses || [],
+        response_selection_index: -1
+      });
+      const updated = await db.updateResellerWorkflow(workflow.id, {
+        last_message_id: null,
+        last_message_snapshot: {},
+        recent_message_snapshots: observed.responses || []
+      });
+      return json(res, 200, { ok: true, data: { recorder_live: true, workflow: updated, step: savedStep, responses: observed.responses || [] } });
     }
 
     if (action === 'workflow-refresh') {
@@ -916,19 +967,30 @@ module.exports = async function handler(req, res) {
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
       const steps = await db.listResellerWorkflowSteps(workflow.id);
       const lastStep = steps[steps.length - 1] || null;
-      const existingCandidates = Array.isArray(lastStep?.response_snapshots) ? lastStep.response_snapshots.filter((snap) => Number(snap?.id || 0) > 0) : [];
-      const allRecent = await workflowUserbot.refreshSupplierMessages(workflow.target_username, 16);
-      const firstCurrentId = existingCandidates.length ? Math.min(...existingCandidates.map((snap) => Number(snap.id))) : 0;
-      const snapshots = firstCurrentId ? allRecent.filter((snap) => Number(snap?.id || 0) >= firstCurrentId) : allRecent.slice(-10);
-      const selectedId = Number(workflow.last_message_id || 0);
-      const selected = snapshots.find((snap) => Number(snap?.id || 0) === selectedId) || null;
-      const effectiveSelected = selected || (snapshots.length === 1 ? snapshots[0] : null);
-      const updated = await db.updateResellerWorkflow(workflow.id, {
-        last_message_id: effectiveSelected?.id || null,
-        last_message_snapshot: effectiveSelected || {},
-        recent_message_snapshots: snapshots
+      if (!lastStep) {
+        const rows = await workflowUserbot.refreshSupplierMessages(workflow.target_username, 16);
+        const updated = await db.updateResellerWorkflow(workflow.id, { recent_message_snapshots: rows });
+        return json(res, 200, { ok: true, data: { workflow: updated, responses: rows, response: null, selection_required: false } });
+      }
+      const selectedId = Number(lastStep.response_snapshot?.id || workflow.last_message_id || 0);
+      if (selectedId) {
+        const rows = await workflowUserbot.refreshSupplierMessages(workflow.target_username, 20);
+        const selected = rows.find((snap) => Number(snap?.id || 0) === selectedId) || lastStep.response_snapshot || null;
+        const merged = workflowUserbot.mergeRecorderSnapshots(lastStep.response_snapshots || [], rows, { visible_snapshots: rows, limit: 50 });
+        await db.updateResellerWorkflowStep(workflow.id, lastStep.id, { response_snapshots: merged });
+        const updated = await db.updateResellerWorkflow(workflow.id, { last_message_id: selectedId, last_message_snapshot: selected || {}, recent_message_snapshots: merged });
+        return json(res, 200, { ok: true, data: { workflow: updated, responses: merged, response: selected, selection_required: false } });
+      }
+      const observed = await workflowUserbot.observeRecorderResponses({
+        target: workflow.target_username,
+        before_snapshots: Array.isArray(lastStep.recorder_before_snapshots) ? lastStep.recorder_before_snapshots : [],
+        existing_snapshots: Array.isArray(lastStep.response_snapshots) ? lastStep.response_snapshots : [],
+        duration_ms: 1200,
+        limit: 50
       });
-      return json(res, 200, { ok: true, data: { workflow: updated, responses: snapshots, response: effectiveSelected, selection_required: snapshots.length > 1 && !effectiveSelected } });
+      const saved = await db.updateResellerWorkflowStep(workflow.id, lastStep.id, { response_snapshots: observed.responses || [], response_selection_index: -1 });
+      const updated = await db.updateResellerWorkflow(workflow.id, { last_message_id: null, last_message_snapshot: {}, recent_message_snapshots: observed.responses || [] });
+      return json(res, 200, { ok: true, data: { workflow: updated, step: saved, responses: observed.responses || [], response: null, selection_required: (observed.responses || []).length > 1 } });
     }
 
     if (action === 'workflow-select-message') {

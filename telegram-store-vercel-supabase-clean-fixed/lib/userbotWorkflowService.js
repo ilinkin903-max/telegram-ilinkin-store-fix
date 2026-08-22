@@ -166,6 +166,58 @@ function snapshotSignature(snapshot) {
   return JSON.stringify({ id: snapshot.id, text: snapshot.text, edit_date: snapshot.edit_date, buttons: snapshot.buttons });
 }
 
+
+function recorderSnapshotCore(snapshot = {}) {
+  return {
+    id: safeNumber(snapshot.id),
+    text: String(snapshot.text || ''),
+    out: Boolean(snapshot.out),
+    date: snapshot.date || null,
+    edit_date: snapshot.edit_date || null,
+    buttons: Array.isArray(snapshot.buttons) ? snapshot.buttons : [],
+    has_media: Boolean(snapshot.has_media),
+    media_type: String(snapshot.media_type || '')
+  };
+}
+
+function mergeRecorderSnapshots(existing = [], incoming = [], options = {}) {
+  const limit = Math.max(10, Math.min(80, Number(options.limit || 50)));
+  const now = new Date().toISOString();
+  const rows = new Map();
+  for (const raw of Array.isArray(existing) ? existing : []) {
+    const id = safeNumber(raw?.id);
+    if (!id) continue;
+    rows.set(id, { ...raw, id, versions: Array.isArray(raw?.versions) ? raw.versions.slice(-8) : [] });
+  }
+  for (const raw of Array.isArray(incoming) ? incoming : []) {
+    const id = safeNumber(raw?.id);
+    if (!id) continue;
+    const fresh = { ...recorderSnapshotCore(raw), captured_at: raw?.captured_at || now, currently_visible: true };
+    const previous = rows.get(id);
+    if (!previous) {
+      rows.set(id, { ...fresh, versions: [] });
+      continue;
+    }
+    const versions = Array.isArray(previous.versions) ? previous.versions.slice(-8) : [];
+    if (snapshotSignature(previous) !== snapshotSignature(fresh)) {
+      const priorCore = { ...recorderSnapshotCore(previous), captured_at: previous.captured_at || now };
+      if (!versions.length || snapshotSignature(versions[versions.length - 1]) !== snapshotSignature(priorCore)) versions.push(priorCore);
+    }
+    rows.set(id, {
+      ...previous,
+      ...fresh,
+      captured_at: previous.captured_at || fresh.captured_at || now,
+      last_seen_at: now,
+      versions: versions.slice(-8)
+    });
+  }
+  const visibleIds = new Set((Array.isArray(options.visible_snapshots) ? options.visible_snapshots : incoming).map((x) => safeNumber(x?.id)).filter(Boolean));
+  if (options.mark_visibility !== false) {
+    for (const [id, row] of rows.entries()) rows.set(id, { ...row, currently_visible: visibleIds.has(id) });
+  }
+  return Array.from(rows.values()).sort((a, b) => safeNumber(a?.id) - safeNumber(b?.id)).slice(-limit);
+}
+
 async function listRecent(client, target, limit = 12) {
   const messages = await client.getMessages(target, { limit: Math.max(3, Math.min(30, Number(limit || 12))) });
   return Array.from(messages || []);
@@ -224,9 +276,10 @@ async function waitForSupplierResponses(client, target, beforeSnapshots = [], ti
       if (!oldSignature || oldSignature !== signature) {
         const previous = collected.get(id);
         if (!previous || snapshotSignature(previous) !== signature) {
-          collected.set(id, snap);
+          const mergedVersion = mergeRecorderSnapshots(previous ? [previous] : [], [snap], { visible_snapshots: latestSnapshots, limit: 10 })[0] || snap;
+          collected.set(id, mergedVersion);
           changedThisPoll = true;
-          if (!matchedResponse && matcher && matcher(snap)) matchedResponse = snap;
+          if (!matchedResponse && matcher && matcher(snap)) matchedResponse = mergedVersion;
         }
       }
     }
@@ -235,7 +288,7 @@ async function waitForSupplierResponses(client, target, beforeSnapshots = [], ti
     if (!matcher && collected.size && lastChangeAt && Date.now() - lastChangeAt >= quietWindowMs) break;
   }
 
-  const responses = Array.from(collected.values()).sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+  const responses = mergeRecorderSnapshots(Array.from(collected.values()), [], { visible_snapshots: latestSnapshots, mark_visibility: true, limit: 50 });
   const fallback = latestSnapshots[latestSnapshots.length - 1] || null;
   return {
     responses,
@@ -507,10 +560,47 @@ async function executeActionWithClient(client, options = {}) {
     action_value: actionValue,
     preview_value: previewValue,
     before,
+    before_snapshots: beforeSnapshots,
     responses: waited.responses || [],
     response: waited.response || null,
     response_changed: waited.changed
   };
+}
+
+async function observeRecorderResponses(options = {}) {
+  const client = await openClient();
+  try {
+    const target = normalizeTarget(options.target);
+    const durationMs = Math.max(1200, Math.min(9000, Number(options.duration_ms || options.durationMs || 4500)));
+    const beforeSnapshots = Array.isArray(options.before_snapshots) ? options.before_snapshots.filter(Boolean) : [];
+    const beforeMap = new Map(beforeSnapshots.map((snap) => [safeNumber(snap?.id), snapshotSignature(snap)]).filter(([id]) => id));
+    let merged = mergeRecorderSnapshots(options.existing_snapshots || [], [], { mark_visibility: false, limit: options.limit || 50 });
+    const started = Date.now();
+    let latest = [];
+    do {
+      latest = await recentSupplierSnapshots(client, target, 20).catch(() => []);
+      const changed = latest.filter((snap) => {
+        const id = safeNumber(snap?.id);
+        if (!id) return false;
+        const baselineSignature = beforeMap.get(id);
+        return !baselineSignature || baselineSignature !== snapshotSignature(snap);
+      });
+      merged = mergeRecorderSnapshots(merged, changed, {
+        visible_snapshots: latest,
+        mark_visibility: true,
+        limit: options.limit || 50
+      });
+      if (Date.now() - started >= durationMs) break;
+      await sleep(350);
+    } while (Date.now() - started < durationMs);
+    return {
+      responses: merged,
+      visible_message_ids: latest.map((snap) => safeNumber(snap?.id)).filter(Boolean),
+      latest_response: merged.filter((snap) => snap.currently_visible !== false).slice(-1)[0] || merged.slice(-1)[0] || null
+    };
+  } finally {
+    await closeClient(client);
+  }
 }
 
 async function executeRecorderAction(options = {}) {
@@ -719,6 +809,8 @@ module.exports = {
   snapshotMessage,
   renderTemplate,
   executeRecorderAction,
+  observeRecorderResponses,
+  mergeRecorderSnapshots,
   refreshSupplierMessage,
   refreshSupplierMessages,
   selectResponseForStep,
