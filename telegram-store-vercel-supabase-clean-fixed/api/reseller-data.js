@@ -764,11 +764,32 @@ module.exports = async function handler(req, res) {
         await restoreWorkflowProductLink(workflow).catch(() => null);
         await db.updateResellerWorkflow(workflow.id, { active: false });
       }
+      const currentSteps = await db.listResellerWorkflowSteps(workflow.id);
+      const currentStep = currentSteps.find((row) => String(row.id) === String(body.step_id || ''));
+      if (!currentStep) return json(res, 404, { ok: false, error: 'Step workflow tidak ditemukan.' });
       const actionType = String(body.action_type || '').trim().toLowerCase();
       const textCategory = actionType === 'text' && String(body.text_category || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'other';
       const actionValue = actionType === 'text' && textCategory === 'quantity' ? '{quantity}' : String(body.action_value || '').trim();
       if (!actionValue) return json(res, 400, { ok: false, error: actionType === 'button' ? 'Teks tombol wajib diisi.' : 'Teks step wajib diisi.' });
-      const step = await db.updateResellerWorkflowStep(workflow.id, body.step_id || '', { action_type: actionType, text_category: textCategory, action_value: actionValue });
+
+      const updates = { action_type: actionType, text_category: textCategory, action_value: actionValue };
+      if (body.response_expected_text !== undefined) {
+        // expected_text sengaja boleh kosong: kosong berarti pencocokan teks dimatikan dan, jika ada, tombol menjadi penanda.
+        updates.response_snapshot = { ...(currentStep.response_snapshot || {}), expected_text: String(body.response_expected_text || '').trim() };
+      }
+      if (currentStep.capture_result === true) {
+        if (body.result_extract_prefix !== undefined) updates.result_extract_prefix = String(body.result_extract_prefix || '');
+        if (body.result_extract_suffix !== undefined) updates.result_extract_suffix = String(body.result_extract_suffix || '');
+        // sample lama tidak lagi dipakai sebagai aturan ekstraksi.
+        updates.result_sample_text = '';
+      }
+      if (currentStep.capture_stock === true) {
+        if (body.stock_extract_prefix !== undefined) updates.stock_extract_prefix = String(body.stock_extract_prefix || '');
+        if (body.stock_extract_suffix !== undefined) updates.stock_extract_suffix = String(body.stock_extract_suffix || '');
+        // angka rekaman (mis. 32) tidak boleh menjadi patokan stok.
+        updates.stock_sample_text = '';
+      }
+      const step = await db.updateResellerWorkflowStep(workflow.id, currentStep.id, updates);
       return json(res, 200, { ok: true, data: step });
     }
 

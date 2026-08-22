@@ -433,7 +433,7 @@ async function sendPoPaidNotice(userId, order, product, transaction) {
 
 async function sendSupplierPendingNotice(userId) {
   const text = `⏳ <b>PRODUK SEDANG DIPROSES OTOMATIS</b>\n` +
-    `Pembayaran sudah diterima. Sistem sedang mengambil produk dari supplier. Produk akan dikirim ke chat ini setelah supplier berhasil mengirimkannya.`;
+    `Pembayaran sudah diterima. Sistem sedang menyiapkan produk Anda secara otomatis. Produk akan dikirim ke chat ini segera setelah proses selesai.`;
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 

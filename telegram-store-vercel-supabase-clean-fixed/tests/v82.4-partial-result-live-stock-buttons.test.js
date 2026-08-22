@@ -68,7 +68,7 @@ test('dashboard recorder menyediakan seleksi bagian produk dan angka stok', () =
   const ui = read('api/reseller.js');
   const api = read('api/reseller-data.js');
   assert.match(ui, /Bagian Terpilih = Produk/);
-  assert.match(ui, /Angka Terpilih = Stok/);
+  assert.match(ui, /Bagian Terpilih = Stok/);
   assert.match(ui, /workflowSelectableText/);
   assert.match(ui, /workflowSelectedMessageRange/);
   assert.match(api, /action === 'workflow-mark-result'/);

@@ -257,11 +257,44 @@ function normalizedResultHint(snapshot) {
     .toLowerCase();
 }
 
+function expectedResponseText(expected) {
+  if (!expected || typeof expected !== 'object') return '';
+  if (Object.prototype.hasOwnProperty.call(expected, 'expected_text')) return String(expected.expected_text || '').trim();
+  return String(expected.text || '').trim();
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function editableResponsePattern(value, options = {}) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const placeholders = [];
+  const tokenized = raw.replace(/\{(number|any)\}/gi, (_, name) => {
+    const token = `__WF_${String(name).toUpperCase()}_${'X'.repeat(placeholders.length + 1)}__`;
+    placeholders.push([token, String(name).toLowerCase()]);
+    return token;
+  });
+  let source = escapeRegex(tokenized).replace(/\s+/g, '\\s+');
+  if (options.autoNumbers) source = source.replace(/\d[\d.,]*/g, '[-+]?\\d[\\d.,]*');
+  for (const [token, name] of placeholders) {
+    source = source.replace(escapeRegex(token), name === 'number' ? '[-+]?\\d[\\d.,]*' : '[\\s\\S]*?');
+  }
+  return new RegExp(source, 'i');
+}
+
 function responseLooksLikeExpected(actual, expected) {
   const actualText = String(actual?.text || '').trim();
-  const expectedText = String(expected?.text || '').trim();
-  if (!actualText || !expectedText) return false;
-  const hint = normalizedResultHint(expected);
+  if (!actualText || !expected) return false;
+  const hasCustomText = Object.prototype.hasOwnProperty.call(expected, 'expected_text');
+  const expectedText = expectedResponseText(expected);
+  if (!expectedText) return false;
+  if (hasCustomText) {
+    const pattern = editableResponsePattern(expectedText, { autoNumbers: true });
+    return Boolean(pattern && pattern.test(actualText));
+  }
+  const hint = normalizedResultHint({ text: expectedText });
   if (!hint) return false;
   const normalizedActual = actualText.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().toLowerCase();
   return normalizedActual.includes(hint);
@@ -275,12 +308,19 @@ function responseMatchesRecorded(actual, expected) {
   if (!actual || !expected) return false;
   const expectedButtons = buttonSignature(expected);
   const actualButtons = buttonSignature(actual);
-  if (expectedButtons) {
-    if (expectedButtons !== actualButtons) return false;
-    const expectedText = String(expected?.text || '').trim();
-    return !expectedText || responseLooksLikeExpected(actual, expected) || expectedButtons === actualButtons;
-  }
-  return responseLooksLikeExpected(actual, expected);
+  const hasEditableText = Object.prototype.hasOwnProperty.call(expected, 'expected_text');
+  const expectedText = expectedResponseText(expected);
+  if (expectedButtons && expectedButtons !== actualButtons) return false;
+  // Workflow lama tetap kompatibel: jika belum pernah mengatur penanda teks editable,
+  // tombol yang sama masih boleh menjadi penanda. Setelah field expected_text disimpan,
+  // teks tersebut wajib cocok sehingga salinan workflow tidak salah membaca produk lain.
+  if (hasEditableText) return expectedText ? responseLooksLikeExpected(actual, expected) : Boolean(expectedButtons);
+  if (expectedButtons) return true;
+  return expectedText ? responseLooksLikeExpected(actual, expected) : false;
+}
+
+function hasStrictEditableResponseMarker(expected) {
+  return Boolean(expected && Object.prototype.hasOwnProperty.call(expected, 'expected_text') && String(expected.expected_text || '').trim());
 }
 
 function selectResponseForStep(responses = [], step = {}) {
@@ -290,6 +330,9 @@ function selectResponseForStep(responses = [], step = {}) {
   if (expected && Object.keys(expected).length) {
     const matched = rows.find((row) => responseMatchesRecorded(row, expected));
     if (matched) return matched;
+    // Setelah admin menyimpan penanda teks editable, jangan fallback ke urutan pesan.
+    // Mismatch harus berhenti agar workflow salinan tidak membaca produk lain.
+    if (hasStrictEditableResponseMarker(expected)) return null;
   }
   const index = Number(step?.response_selection_index);
   if (Number.isInteger(index) && index >= 0 && index < rows.length) return rows[index];
@@ -311,6 +354,7 @@ async function waitForCaptureResult(client, target, initialResponses, expectedSn
   const combined = initial.concat(later.responses || []);
   const matched = combined.find((snap) => responseMatchesRecorded(snap, expectedSnapshot));
   if (matched) return matched;
+  if (hasStrictEditableResponseMarker(expectedSnapshot)) return null;
   if (selectionIndex >= 0 && selectionIndex < combined.length) return combined[selectionIndex];
   return combined[combined.length - 1] || later.response || null;
 }
@@ -528,7 +572,16 @@ async function runWorkflowSteps(options = {}) {
         error.last_response = action.response || lastResponse;
         throw error;
       }
-      lastResponse = selectResponseForStep(action.responses || [], step) || action.response;
+      const selectedResponse = selectResponseForStep(action.responses || [], step);
+      if (!selectedResponse && hasStrictEditableResponseMarker(step.response_snapshot || null)) {
+        const error = new Error(`Balasan supplier pada step ${index + 1} tidak cocok dengan Penanda Teks Balasan yang disimpan.`);
+        error.code = 'SUPPLIER_RESPONSE_MISMATCH';
+        error.step_index = index;
+        error.action_sent = true;
+        error.last_response = action.response || lastResponse;
+        throw error;
+      }
+      lastResponse = selectedResponse || action.response;
       if (step.capture_result) {
         lastResponse = await waitForCaptureResult(
           client,
@@ -538,11 +591,18 @@ async function runWorkflowSteps(options = {}) {
           Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
           Number(step.response_selection_index ?? -1)
         );
+        if (!lastResponse && hasStrictEditableResponseMarker(step.response_snapshot || null)) {
+          const error = new Error(`Hasil supplier pada step ${index + 1} tidak cocok dengan Penanda Teks Balasan yang disimpan.`);
+          error.code = 'SUPPLIER_RESULT_RESPONSE_MISMATCH';
+          error.step_index = index;
+          error.action_sent = true;
+          throw error;
+        }
       }
       if (typeof options.on_step === 'function') await options.on_step({ index, step, action, response: lastResponse });
       if (step.capture_result) {
         let resultText = String(lastResponse?.text || '').trim();
-        const hasPartialRule = Boolean(String(step.result_extract_prefix || '') || String(step.result_extract_suffix || '') || String(step.result_sample_text || ''));
+        const hasPartialRule = Boolean(String(step.result_extract_prefix || '') || String(step.result_extract_suffix || ''));
         if (hasPartialRule) {
           try {
             resultText = extractTextByRule(resultText, { prefix: step.result_extract_prefix || '', suffix: step.result_extract_suffix || '' }, { strict: true });
@@ -598,12 +658,18 @@ async function runWorkflowStockProbe(options = {}) {
         error.code = 'WORKFLOW_STOCK_RESPONSE_TIMEOUT';
         throw error;
       }
-      lastResponse = selectResponseForStep(action.responses || [], step) || action.response;
+      const selectedResponse = selectResponseForStep(action.responses || [], step);
+      if (!selectedResponse && hasStrictEditableResponseMarker(step.response_snapshot || null)) {
+        const error = new Error(`Balasan cek stok pada step ${index + 1} tidak cocok dengan Penanda Teks Balasan yang disimpan.`);
+        error.code = 'WORKFLOW_STOCK_RESPONSE_MISMATCH';
+        throw error;
+      }
+      lastResponse = selectedResponse || action.response;
       if (index === stockIndex) {
         const rawText = String(lastResponse?.text || '').trim();
         if (!rawText) throw Object.assign(new Error('Pesan stok supplier tidak berisi teks.'), { code: 'WORKFLOW_STOCK_EMPTY' });
         let extracted = rawText;
-        const hasRule = Boolean(String(step.stock_extract_prefix || '') || String(step.stock_extract_suffix || '') || String(step.stock_sample_text || ''));
+        const hasRule = Boolean(String(step.stock_extract_prefix || '') || String(step.stock_extract_suffix || ''));
         if (hasRule) extracted = extractTextByRule(rawText, { prefix: step.stock_extract_prefix || '', suffix: step.stock_extract_suffix || '' }, { strict: true });
         const stock = parseStockNumber(extracted);
         return { stock, extracted_text: extracted, response: lastResponse, step_index: index };

@@ -1,0 +1,27 @@
+Link Auto Order v82.5.0 - Validation Report
+Date: 2026-08-22
+
+Focused workflow regression suite:
+- Command: node --test tests/v82*.test.js
+- Result: 42 passed, 0 failed
+
+JavaScript syntax validation:
+- api/*.js: passed
+- lib/*.js: passed
+- public/*.js: passed
+- scripts/*.js: passed
+
+Full legacy test suite note:
+- 179 tests passed.
+- 5 legacy tests could not start in this sandbox because runtime dependencies axios/dotenv were not installed.
+- npm dependency installation was unavailable/timed out in this environment.
+- These were dependency-loading failures, not syntax failures or workflow assertion failures.
+
+v82.5 checks include:
+- stock reads current number between prefix/suffix and does not depend on recorded sample (e.g. 32)
+- prefix-only and suffix-only extraction semantics
+- editable supplier-response marker
+- same-button messages are distinguished by editable response marker
+- strict marker mismatch does not fall back to response index
+- editable product/stock extraction boundaries in step editor
+- customer processing message does not mention supplier

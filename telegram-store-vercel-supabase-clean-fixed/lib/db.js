@@ -2406,8 +2406,12 @@ async function selectResellerWorkflowStepResponse(workflowId, stepId, messageId,
   const selectedIndex = candidates.findIndex((snap) => Number(snap?.id || 0) === wantedId);
   if (selectedIndex < 0) throw new Error('Pesan yang dipilih tidak ditemukan pada daftar balasan supplier. Tekan Refresh Balasan lalu coba lagi.');
   const selected = candidates[selectedIndex];
+  const hadEditableText = current.response_snapshot && Object.prototype.hasOwnProperty.call(current.response_snapshot, 'expected_text');
+  const selectedSnapshot = hadEditableText
+    ? { ...selected, expected_text: String(current.response_snapshot.expected_text || '') }
+    : selected;
   const { data, error } = await sb().from('reseller_workflow_steps').update({
-    response_snapshot: selected,
+    response_snapshot: selectedSnapshot,
     response_snapshots: candidates,
     response_selection_index: selectedIndex
   }).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
@@ -2491,11 +2495,11 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       capture_result: step.capture_result === true,
       result_extract_prefix: step.result_extract_prefix || '',
       result_extract_suffix: step.result_extract_suffix || '',
-      result_sample_text: step.result_sample_text || '',
+      result_sample_text: '',
       capture_stock: step.capture_stock === true,
       stock_extract_prefix: step.stock_extract_prefix || '',
       stock_extract_suffix: step.stock_extract_suffix || '',
-      stock_sample_text: step.stock_sample_text || ''
+      stock_sample_text: ''
     });
   }
   return { workflow: copy, steps: await listResellerWorkflowSteps(copy.id) };
@@ -2516,12 +2520,21 @@ async function setResellerWorkflowResultStep(workflowId, stepId, responseSnapsho
   if (!workflow || !step) throw new Error('Step hasil tidak ditemukan.');
   const { error: clearError } = await sb().from('reseller_workflow_steps').update({ capture_result: false }).eq('workflow_id', workflow);
   if (clearError) throw clearError;
+  const currentRows = await listResellerWorkflowSteps(workflow);
+  const currentStep = currentRows.find((row) => String(row.id) === step) || null;
   const updates = { capture_result: true, result_extract_prefix: '', result_extract_suffix: '', result_sample_text: '' };
-  if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) updates.response_snapshot = responseSnapshot;
+  if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) {
+    const hadEditableText = currentStep?.response_snapshot && Object.prototype.hasOwnProperty.call(currentStep.response_snapshot, 'expected_text');
+    updates.response_snapshot = hadEditableText
+      ? { ...responseSnapshot, expected_text: String(currentStep.response_snapshot.expected_text || '') }
+      : responseSnapshot;
+  }
   if (extractionRule && typeof extractionRule === 'object') {
     updates.result_extract_prefix = String(extractionRule.prefix || '');
     updates.result_extract_suffix = String(extractionRule.suffix || '');
-    updates.result_sample_text = String(extractionRule.sample || '');
+    // Nilai contoh (mis. link/akun saat rekam) tidak dijadikan aturan runtime.
+    // Yang disimpan sebagai patokan hanya teks sebelum dan sesudah bagian dinamis.
+    updates.result_sample_text = '';
   }
   const { data, error } = await sb().from('reseller_workflow_steps').update(updates).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
@@ -2534,12 +2547,20 @@ async function setResellerWorkflowStockStep(workflowId, stepId, responseSnapshot
   if (!workflow || !step) throw new Error('Step stok tidak ditemukan.');
   const { error: clearError } = await sb().from('reseller_workflow_steps').update({ capture_stock: false }).eq('workflow_id', workflow);
   if (clearError) throw clearError;
-  const updates = { capture_stock: true };
-  if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) updates.response_snapshot = responseSnapshot;
+  const currentRows = await listResellerWorkflowSteps(workflow);
+  const currentStep = currentRows.find((row) => String(row.id) === step) || null;
+  const updates = { capture_stock: true, stock_extract_prefix: '', stock_extract_suffix: '', stock_sample_text: '' };
+  if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) {
+    const hadEditableText = currentStep?.response_snapshot && Object.prototype.hasOwnProperty.call(currentStep.response_snapshot, 'expected_text');
+    updates.response_snapshot = hadEditableText
+      ? { ...responseSnapshot, expected_text: String(currentStep.response_snapshot.expected_text || '') }
+      : responseSnapshot;
+  }
   if (extractionRule && typeof extractionRule === 'object') {
     updates.stock_extract_prefix = String(extractionRule.prefix || '');
     updates.stock_extract_suffix = String(extractionRule.suffix || '');
-    updates.stock_sample_text = String(extractionRule.sample || '');
+    // Angka contoh stok (mis. 32) hanya dipakai untuk validasi saat rekam, tidak disimpan sebagai patokan.
+    updates.stock_sample_text = '';
   }
   const { data, error } = await sb().from('reseller_workflow_steps').update(updates).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
