@@ -1838,6 +1838,7 @@ create table if not exists public.reseller_workflow_steps (
   action_type text not null check (action_type in ('text','button')),
   action_value text not null default '',
   preview_value text not null default '',
+  button_role text not null default 'static',
   response_snapshot jsonb not null default '{}'::jsonb,
   response_snapshots jsonb not null default '[]'::jsonb,
   response_selection_index integer not null default 0,
@@ -1855,6 +1856,7 @@ alter table public.reseller_workflow_steps add column if not exists response_sna
 alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
 alter table public.reseller_workflow_steps add column if not exists recorder_before_snapshots jsonb not null default '[]'::jsonb;
 alter table public.reseller_workflow_steps add column if not exists source_message_snapshot jsonb not null default '{}'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists button_role text not null default 'static';
 alter table public.reseller_workflow_steps add column if not exists response_mode text not null default 'wait';
 alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
 alter table public.reseller_workflow_steps add column if not exists wait_timeout_ms integer null;

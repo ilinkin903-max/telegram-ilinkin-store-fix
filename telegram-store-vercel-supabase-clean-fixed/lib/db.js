@@ -2378,6 +2378,7 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     action_type: String(input.action_type || '').trim().toLowerCase(),
     action_value: String(input.action_value || '').trim(),
     preview_value: String(input.preview_value || '').trim(),
+    button_role: String(input.button_role || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'static',
     response_snapshot: input.response_snapshot && typeof input.response_snapshot === 'object' ? input.response_snapshot : {},
     response_snapshots: Array.isArray(input.response_snapshots) ? input.response_snapshots : [],
     response_selection_index: Number.isInteger(Number(input.response_selection_index)) ? Number(input.response_selection_index) : 0,
@@ -2441,7 +2442,9 @@ async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
   }
   if (updates.text_category !== undefined) payload.text_category = String(updates.text_category || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'other';
   if (updates.action_value !== undefined) payload.action_value = String(updates.action_value || '').trim();
+  if (updates.button_role !== undefined) payload.button_role = String(updates.button_role || '').trim().toLowerCase() === 'quantity' && (payload.action_type || '').toLowerCase() === 'button' ? 'quantity' : 'static';
   if (payload.action_type === 'text' && payload.text_category === 'quantity') payload.action_value = '{quantity}';
+  if (payload.action_type === 'text') payload.button_role = 'static';
   if (updates.preview_value !== undefined) payload.preview_value = String(updates.preview_value || '').trim();
   if (updates.capture_result !== undefined) payload.capture_result = updates.capture_result === true;
   if (updates.result_extract_prefix !== undefined) payload.result_extract_prefix = String(updates.result_extract_prefix || '');
@@ -2501,6 +2504,7 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       action_type: step.action_type,
       action_value: step.action_value,
       preview_value: step.preview_value,
+      button_role: step.button_role || 'static',
       response_snapshot: step.response_snapshot || {},
       response_snapshots: Array.isArray(step.response_snapshots) ? step.response_snapshots : [],
       response_selection_index: Number(step.response_selection_index ?? -1),

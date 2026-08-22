@@ -772,7 +772,8 @@ module.exports = async function handler(req, res) {
       const actionValue = actionType === 'text' && textCategory === 'quantity' ? '{quantity}' : String(body.action_value || '').trim();
       if (!actionValue) return json(res, 400, { ok: false, error: actionType === 'button' ? 'Teks tombol wajib diisi.' : 'Teks step wajib diisi.' });
 
-      const updates = { action_type: actionType, text_category: textCategory, action_value: actionValue };
+      const buttonRole = actionType === 'button' && String(body.button_role || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'static';
+      const updates = { action_type: actionType, text_category: textCategory, action_value: actionValue, button_role: buttonRole };
       if (body.response_mode !== undefined) updates.response_mode = actionType === 'button' && String(body.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait';
       if (body.wait_timeout_ms !== undefined) {
         const rawWait = String(body.wait_timeout_ms ?? '').trim();
@@ -948,6 +949,7 @@ module.exports = async function handler(req, res) {
         action_type: result.action_type,
         action_value: result.action_value,
         preview_value: result.preview_value,
+        button_role: result.button_role || 'static',
         text_category: textCategory,
         response_snapshot: {},
         response_snapshots: responses,

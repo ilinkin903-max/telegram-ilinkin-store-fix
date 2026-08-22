@@ -121,6 +121,55 @@ function buttonKind(button) {
   return 'text';
 }
 
+function normalizeButtonRole(value) {
+  return String(value || '').trim().toLowerCase() === 'quantity' ? 'quantity' : 'static';
+}
+
+function quantityValueFromButtonText(value) {
+  const text = String(value || '').trim();
+  // Bentuk yang umum dari bot reseller: `1`, `• 1`, `1 akun`, `2 item`, `3x`.
+  // Jangan menganggap `30 Hari` sebagai jumlah item.
+  const match = text.match(/^[^0-9]*(\d{1,2})(?:\s*(?:akun|account|item|items|pcs|pc|x))?[^0-9]*$/i);
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isInteger(number) && number >= 1 && number <= 20 ? number : null;
+}
+
+function isLikelyQuantityButtonSnapshot(snapshot) {
+  const values = Array.from(new Set((snapshot?.buttons || [])
+    .map((button) => quantityValueFromButtonText(button?.text))
+    .filter((value) => Number.isInteger(value))));
+  if (values.length < 2) return false;
+  values.sort((a, b) => a - b);
+  const hasOneTwo = values.includes(1) && values.includes(2);
+  const hasAdjacent = values.some((value, index) => index > 0 && value === values[index - 1] + 1);
+  return hasOneTwo || hasAdjacent;
+}
+
+function inferButtonRole(actionValue, sourceSnapshot) {
+  return quantityValueFromButtonText(actionValue) !== null && isLikelyQuantityButtonSnapshot(sourceSnapshot)
+    ? 'quantity'
+    : 'static';
+}
+
+function resolveButtonActionValue(actionValue, buttonRole, message, context = {}) {
+  const requested = String(actionValue || '').trim();
+  const role = normalizeButtonRole(buttonRole);
+  if (role !== 'quantity' && inferButtonRole(requested, snapshotMessage(message)) !== 'quantity') return requested;
+
+  const quantity = Math.max(1, Number(context?.quantity || 1));
+  if (!Number.isInteger(quantity)) throw new Error('Jumlah pembelian tidak valid untuk tombol jumlah item.');
+  const buttons = Array.isArray(message?.buttons) && message.buttons.length && !Array.isArray(message.buttons[0])
+    ? message.buttons
+    : messageButtons(message);
+  const match = buttons.find((button) => quantityValueFromButtonText(button?.text) === quantity);
+  if (!match) {
+    const available = buttons.map((button) => quantityValueFromButtonText(button.text)).filter((value) => value !== null);
+    throw new Error(`Tombol jumlah ${quantity} tidak tersedia pada pesan supplier. Pilihan yang ditemukan: ${available.length ? available.join(', ') : 'tidak ada'}.`);
+  }
+  return match.text;
+}
+
 function messageButtons(message) {
   const out = [];
   const rows = Array.isArray(message?.buttons)
@@ -528,6 +577,7 @@ async function executeActionWithClient(client, options = {}) {
   const actionType = String(options.action_type || options.actionType || '').trim().toLowerCase();
   const actionValue = String(options.action_value ?? options.actionValue ?? '').trim();
   const responseMode = String(options.response_mode || options.responseMode || 'wait').trim().toLowerCase() === 'same_message' ? 'same_message' : 'wait';
+  const requestedButtonRole = normalizeButtonRole(options.button_role || options.buttonRole);
   if (!['text', 'button'].includes(actionType)) throw new Error('Jenis step harus text atau button.');
   if (!actionValue) throw new Error(actionType === 'button' ? 'Pilih tombol supplier.' : 'Teks yang dikirim tidak boleh kosong.');
 
@@ -537,6 +587,8 @@ async function executeActionWithClient(client, options = {}) {
   const before = snapshotMessage(beforeMessage);
   let previewValue = actionValue;
   let actionSource = null;
+  let effectiveButtonRole = requestedButtonRole;
+  let clickedButtonValue = actionValue;
 
   if (actionType === 'text') {
     previewValue = renderTemplate(actionValue, options.context || {});
@@ -546,7 +598,10 @@ async function executeActionWithClient(client, options = {}) {
     let clickable = beforeMessage;
     if (options.message_id) clickable = await getMessageById(client, target, options.message_id) || beforeMessage;
     actionSource = snapshotMessage(clickable);
-    await clickMessageButton(clickable, actionValue);
+    effectiveButtonRole = requestedButtonRole === 'quantity' || inferButtonRole(actionValue, actionSource) === 'quantity' ? 'quantity' : 'static';
+    clickedButtonValue = resolveButtonActionValue(actionValue, effectiveButtonRole, clickable, options.context || {});
+    previewValue = clickedButtonValue;
+    await clickMessageButton(clickable, clickedButtonValue);
   }
 
   const strictExpected = responseMode !== 'same_message' && options.wait_for_match === true && hasStrictEditableResponseMarker(options.response_snapshot || null);
@@ -594,9 +649,12 @@ async function executeActionWithClient(client, options = {}) {
     action_type: actionType,
     action_value: actionValue,
     preview_value: previewValue,
+    clicked_button_value: clickedButtonValue,
+    button_role: actionType === 'button' ? effectiveButtonRole : 'static',
     before,
     before_snapshots: beforeSnapshots,
-    source_message_snapshot: activeSource || actionSource || null,
+    source_message_snapshot: actionSource || activeSource || null,
+    source_message_current_snapshot: activeSource || actionSource || null,
     responses: waited.responses || [],
     response: sameMessageResponse || waited.response || null,
     response_changed: waited.changed,
@@ -710,6 +768,7 @@ async function runWorkflowSteps(options = {}) {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
+        button_role: step.button_role || 'static',
         message_id: lastResponse?.id || null,
         timeout_ms: timeoutMs,
         response_mode: responseMode,
@@ -816,6 +875,7 @@ async function runWorkflowStockProbe(options = {}) {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
+        button_role: step.button_role || 'static',
         message_id: lastResponse?.id || null,
         timeout_ms: timeoutMs,
         response_mode: responseMode,
@@ -880,6 +940,10 @@ module.exports = {
   extractTextByRule,
   parseStockNumber,
   resolveStepTimeoutMs,
+  quantityValueFromButtonText,
+  isLikelyQuantityButtonSnapshot,
+  inferButtonRole,
+  resolveButtonActionValue,
   runWorkflowStockProbe,
   runWorkflowSteps,
   __setClientFactoryForTests

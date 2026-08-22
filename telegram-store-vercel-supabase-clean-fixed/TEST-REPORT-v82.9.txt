@@ -1,0 +1,22 @@
+Link Auto Order v82.9.0
+
+Focused workflow suite: 68/68 PASS
+
+Covered:
+- Dynamic quantity button selection: order quantity 3 clicks button 3, quantity 1 clicks button 1.
+- Bullet/label variants such as `• 1` .. `• 5`.
+- Legacy workflow auto-detection for numeric quantity keyboards.
+- Same-message multi-button chain compatibility.
+- Recorder button highlight for already-clicked buttons.
+- Step editor retains recorded button menu and allows replacing the selected button.
+- Workflow copy preserves source button snapshots and button_role.
+- Supabase migration is additive only.
+
+Syntax checks passed for:
+- api/reseller.js
+- api/reseller-data.js
+- lib/db.js
+- lib/userbotWorkflowService.js
+- lib/paymentService.js
+
+Full project test command: 206/211 tests passed; 5 unrelated tests could not load because this sandbox does not contain node_modules dependencies (`dotenv`). No v82.9 workflow test failed.
