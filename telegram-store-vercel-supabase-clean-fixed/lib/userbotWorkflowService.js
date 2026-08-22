@@ -315,6 +315,80 @@ async function waitForCaptureResult(client, target, initialResponses, expectedSn
   return combined[combined.length - 1] || later.response || null;
 }
 
+
+function deriveTextSelectionRule(textValue, startValue, endValue) {
+  const text = String(textValue || '');
+  const start = Math.max(0, Math.min(text.length, Number(startValue || 0)));
+  const end = Math.max(start, Math.min(text.length, Number(endValue || 0)));
+  if (end <= start) throw new Error('Pilih/blok bagian teks terlebih dahulu.');
+  const selected = text.slice(start, end).trim();
+  if (!selected) throw new Error('Bagian teks yang dipilih kosong.');
+
+  const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  let lineEnd = text.indexOf('\n', end);
+  if (lineEnd < 0) lineEnd = text.length;
+  let prefix = text.slice(lineStart, start);
+  let suffix = text.slice(end, lineEnd);
+
+  // Jika pilihan dimulai/berakhir tepat di batas baris, pakai baris tetangga sebagai anchor
+  // agar bagian dinamis tetap dapat ditemukan pada order berikutnya.
+  if (!prefix && lineStart > 0) {
+    const previousEnd = lineStart - 1;
+    const previousStart = text.lastIndexOf('\n', Math.max(0, previousEnd - 1)) + 1;
+    prefix = text.slice(previousStart, lineStart);
+  }
+  if (!suffix && lineEnd < text.length) {
+    let nextEnd = text.indexOf('\n', lineEnd + 1);
+    if (nextEnd < 0) nextEnd = text.length;
+    suffix = text.slice(lineEnd, nextEnd);
+  }
+
+  return {
+    sample: selected,
+    prefix: String(prefix || '').slice(-180),
+    suffix: String(suffix || '').slice(0, 180),
+    start,
+    end
+  };
+}
+
+function extractTextByRule(textValue, rule = {}, options = {}) {
+  const text = String(textValue || '');
+  const prefix = String(rule.prefix || '');
+  const suffix = String(rule.suffix || '');
+  let start = 0;
+  if (prefix) {
+    const index = text.indexOf(prefix);
+    if (index < 0) {
+      if (options.strict) throw new Error('Penanda awal bagian teks tidak ditemukan pada balasan supplier.');
+      return '';
+    }
+    start = index + prefix.length;
+  }
+  let end = text.length;
+  if (suffix) {
+    const index = text.indexOf(suffix, start);
+    if (index < 0) {
+      if (options.strict) throw new Error('Penanda akhir bagian teks tidak ditemukan pada balasan supplier.');
+      return '';
+    }
+    end = index;
+  }
+  const extracted = text.slice(start, end).trim();
+  if (!extracted && options.strict) throw new Error('Bagian teks hasil ekstraksi kosong.');
+  return extracted;
+}
+
+function parseStockNumber(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/-?\d[\d.,]*/);
+  if (!match) throw new Error('Angka stok tidak ditemukan pada bagian teks yang dipilih.');
+  const digits = String(match[0]).replace(/[^0-9-]/g, '');
+  const number = Number(digits || 0);
+  if (!Number.isFinite(number)) throw new Error('Nilai stok tidak valid.');
+  return Math.max(0, Math.floor(number));
+}
+
 function renderTemplate(value, context = {}) {
   const map = {
     quantity: context.quantity ?? 1,
@@ -467,7 +541,18 @@ async function runWorkflowSteps(options = {}) {
       }
       if (typeof options.on_step === 'function') await options.on_step({ index, step, action, response: lastResponse });
       if (step.capture_result) {
-        const resultText = String(lastResponse?.text || '').trim();
+        let resultText = String(lastResponse?.text || '').trim();
+        const hasPartialRule = Boolean(String(step.result_extract_prefix || '') || String(step.result_extract_suffix || '') || String(step.result_sample_text || ''));
+        if (hasPartialRule) {
+          try {
+            resultText = extractTextByRule(resultText, { prefix: step.result_extract_prefix || '', suffix: step.result_extract_suffix || '' }, { strict: true });
+          } catch (extractError) {
+            extractError.code = 'SUPPLIER_RESULT_EXTRACT_FAILED';
+            extractError.step_index = index;
+            extractError.action_sent = true;
+            throw extractError;
+          }
+        }
         if (!resultText) {
           const error = new Error('Step hasil tercapai, tetapi balasan supplier tidak berisi teks produk.');
           error.code = 'EMPTY_SUPPLIER_RESULT';
@@ -479,6 +564,52 @@ async function runWorkflowSteps(options = {}) {
       }
     }
     return { completed: false, current_step: steps.length, last_response: lastResponse };
+  } finally {
+    await closeClient(client);
+  }
+}
+
+
+async function runWorkflowStockProbe(options = {}) {
+  const workflow = options.workflow || {};
+  const steps = Array.isArray(options.steps) ? options.steps : [];
+  const stockIndex = steps.findIndex((step) => step.capture_stock === true);
+  if (stockIndex < 0) {
+    const error = new Error('Workflow belum mempunyai bagian teks yang ditandai sebagai stok.');
+    error.code = 'WORKFLOW_STOCK_NOT_CONFIGURED';
+    throw error;
+  }
+  const client = await openClient();
+  try {
+    const target = normalizeTarget(workflow.target_username);
+    let lastResponse = null;
+    for (let index = 0; index <= stockIndex; index += 1) {
+      const step = steps[index];
+      const action = await executeActionWithClient(client, {
+        target,
+        action_type: step.action_type,
+        action_value: step.action_value,
+        message_id: lastResponse?.id || null,
+        timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+        context: options.context || { quantity: 1, invoice: 'STOCK-CHECK', telegram_id: 0, username: 'stock-check', custom_input: '' }
+      });
+      if (!action.response_changed || !(action.responses || []).length) {
+        const error = new Error(`Supplier belum memberi balasan saat cek stok pada step ${index + 1}.`);
+        error.code = 'WORKFLOW_STOCK_RESPONSE_TIMEOUT';
+        throw error;
+      }
+      lastResponse = selectResponseForStep(action.responses || [], step) || action.response;
+      if (index === stockIndex) {
+        const rawText = String(lastResponse?.text || '').trim();
+        if (!rawText) throw Object.assign(new Error('Pesan stok supplier tidak berisi teks.'), { code: 'WORKFLOW_STOCK_EMPTY' });
+        let extracted = rawText;
+        const hasRule = Boolean(String(step.stock_extract_prefix || '') || String(step.stock_extract_suffix || '') || String(step.stock_sample_text || ''));
+        if (hasRule) extracted = extractTextByRule(rawText, { prefix: step.stock_extract_prefix || '', suffix: step.stock_extract_suffix || '' }, { strict: true });
+        const stock = parseStockNumber(extracted);
+        return { stock, extracted_text: extracted, response: lastResponse, step_index: index };
+      }
+    }
+    throw Object.assign(new Error('Step stok tidak tercapai.'), { code: 'WORKFLOW_STOCK_STEP_NOT_REACHED' });
   } finally {
     await closeClient(client);
   }
@@ -498,6 +629,10 @@ module.exports = {
   refreshSupplierMessage,
   refreshSupplierMessages,
   selectResponseForStep,
+  deriveTextSelectionRule,
+  extractTextByRule,
+  parseStockNumber,
+  runWorkflowStockProbe,
   runWorkflowSteps,
   __setClientFactoryForTests
 };

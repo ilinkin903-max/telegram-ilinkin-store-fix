@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.20.0",
+  "version": "4.21.0",
   "private": true,
-  "description": "Link Auto Order v82.3: editable/copyable reseller workflows, manual supplier balances, product modal, and balance-based stock estimation.",
+  "description": "Link Auto Order v82.4: partial supplier-result extraction, recorded live stock checks, and colored stock-aware Telegram buttons.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

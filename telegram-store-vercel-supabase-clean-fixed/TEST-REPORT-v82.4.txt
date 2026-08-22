@@ -1,0 +1,23 @@
+Link Auto Order v82.4.0 - Test Report
+Date: 2026-08-22
+
+Scope
+- JavaScript syntax checks from npm test: PASS
+- Full Node test suite: 221 / 221 PASS
+- v82.4 targeted tests: 8 / 8 PASS
+- Failures: 0
+
+v82.4 targeted coverage
+1. Partial product text selection/extraction.
+2. Stock-number selection/parsing.
+3. Stock probe stops at capture_stock and never executes later purchase steps.
+4. Live stock refresh is triggered on single-product/variant selection and fails closed on busy/error.
+5. Telegram button statuses use Stok, sold-out danger/red, and green (1/N) pagination.
+6. Recorder UI/API expose partial product and stock selection.
+7. Functional userbot stock-probe simulation sends only /start + stock step, not the later BELI step.
+8. v82.4 migration is additive (no DROP/TRUNCATE).
+
+Test environment note
+The source package intentionally does not contain node_modules. The container has no installed axios/dotenv/qrcode packages, so the offline regression run used temporary test-only module stubs through NODE_PATH. These stubs are outside the project and are NOT included in either ZIP. Syntax checks run against the actual project files. Vercel installs the real dependencies from package.json/package-lock.json during deployment.
+
+No live Telegram supplier purchase, AutoGoPay transaction, or production Supabase mutation was performed by these tests.

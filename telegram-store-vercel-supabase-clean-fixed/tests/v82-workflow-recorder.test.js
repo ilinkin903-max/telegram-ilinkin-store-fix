@@ -98,7 +98,7 @@ test('dashboard menyediakan recorder tombol dan teks', () => {
   assert.match(html, /Workflow Reseller/);
   assert.match(html, /Kirim Teks & Rekam/);
   assert.match(html, /data-workflow-button/);
-  assert.match(html, /Balasan Ini = Hasil Produk/);
+  assert.match(html, /Bagian Terpilih = Produk/);
   assert.match(html, /\{quantity\}/);
 });
 

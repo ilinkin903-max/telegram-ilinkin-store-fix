@@ -729,6 +729,7 @@ module.exports = async function handler(req, res) {
         sample_quantity: body.sample_quantity !== undefined ? Math.max(1, Number(body.sample_quantity || 1)) : current.sample_quantity,
         step_timeout_ms: body.step_timeout_ms !== undefined ? Math.max(1500, Math.min(30000, Number(body.step_timeout_ms || 7000))) : current.step_timeout_ms,
         previous_link_snapshot: previousLinkSnapshot,
+        ...(targetChanged ? { live_stock: null, live_stock_checked_at: null, stock_refresh_error: '' } : {}),
         active: false
       });
       await db.syncWorkflowSupplierStock(updated).catch(() => null);
@@ -938,6 +939,7 @@ module.exports = async function handler(req, res) {
     if (action === 'workflow-mark-result') {
       let workflow = await db.getResellerWorkflow(body.workflow_id || '');
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow aktif tidak dapat diubah. Edit workflow terlebih dahulu agar masuk mode DRAFT.' });
       const steps = await db.listResellerWorkflowSteps(workflow.id);
       const stepId = String(body.step_id || steps[steps.length - 1]?.id || '').trim();
       if (!stepId) return json(res, 400, { ok: false, error: 'Belum ada step yang dapat dijadikan hasil produk.' });
@@ -956,9 +958,57 @@ module.exports = async function handler(req, res) {
         }) || workflow;
       }
       const selectedSnapshot = workflow.last_message_snapshot && typeof workflow.last_message_snapshot === 'object' ? workflow.last_message_snapshot : null;
-      if (!selectedSnapshot || !String(selectedSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Pilih dulu pesan supplier yang benar, lalu tandai pesan tersebut sebagai Hasil Produk.' });
-      const step = await db.setResellerWorkflowResultStep(workflow.id, stepId, selectedSnapshot);
-      return json(res, 200, { ok: true, data: step });
+      if (!selectedSnapshot || !String(selectedSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Pilih dulu pesan supplier yang benar.' });
+      let rule = null;
+      const hasSelection = Number(body.selection_end || 0) > Number(body.selection_start || 0);
+      if (hasSelection) {
+        try { rule = workflowUserbot.deriveTextSelectionRule(selectedSnapshot.text, body.selection_start, body.selection_end); }
+        catch (error) { return json(res, 400, { ok: false, error: error.message || 'Bagian produk yang dipilih tidak valid.' }); }
+      }
+      const step = await db.setResellerWorkflowResultStep(workflow.id, stepId, selectedSnapshot, rule);
+      return json(res, 200, { ok: true, data: { step, extraction: rule, sample: rule?.sample || String(selectedSnapshot.text || '').trim() } });
+    }
+
+    if (action === 'workflow-mark-stock') {
+      let workflow = await db.getResellerWorkflow(body.workflow_id || '');
+      if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+      if (workflow.active) return json(res, 409, { ok: false, error: 'Workflow aktif tidak dapat diubah. Edit workflow terlebih dahulu agar masuk mode DRAFT.' });
+      const steps = await db.listResellerWorkflowSteps(workflow.id);
+      const stepId = String(body.step_id || steps[steps.length - 1]?.id || '').trim();
+      if (!stepId) return json(res, 400, { ok: false, error: 'Belum ada step yang dapat dijadikan pembacaan stok.' });
+      const messageId = Number(body.message_id || workflow.last_message_id || 0);
+      if (messageId && Number(workflow.last_message_id || 0) !== messageId) {
+        const targetStep = steps.find((step) => String(step.id) === stepId);
+        const candidates = [
+          ...(Array.isArray(targetStep?.response_snapshots) ? targetStep.response_snapshots : []),
+          ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
+        ];
+        const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, stepId, messageId, candidates);
+        workflow = await db.updateResellerWorkflow(workflow.id, {
+          last_message_id: selectedStep?.response_snapshot?.id || messageId,
+          last_message_snapshot: selectedStep?.response_snapshot || {},
+          recent_message_snapshots: candidates
+        }) || workflow;
+      }
+      const selectedSnapshot = workflow.last_message_snapshot && typeof workflow.last_message_snapshot === 'object' ? workflow.last_message_snapshot : null;
+      if (!selectedSnapshot || !String(selectedSnapshot.text || '').trim()) return json(res, 400, { ok: false, error: 'Pilih pesan supplier yang menampilkan stok terlebih dahulu.' });
+      if (!(Number(body.selection_end || 0) > Number(body.selection_start || 0))) return json(res, 400, { ok: false, error: 'Blok/select angka stok pada pesan supplier terlebih dahulu.' });
+      let rule;
+      let stock;
+      try {
+        rule = workflowUserbot.deriveTextSelectionRule(selectedSnapshot.text, body.selection_start, body.selection_end);
+        stock = workflowUserbot.parseStockNumber(rule.sample);
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message || 'Bagian stok yang dipilih tidak valid.' });
+      }
+      const resultStep = steps.find((row) => row.capture_result === true);
+      const targetStep = steps.find((row) => String(row.id) === stepId);
+      if (resultStep && targetStep && Number(targetStep.step_order || 0) >= Number(resultStep.step_order || 0)) {
+        return json(res, 400, { ok: false, error: 'Pembacaan stok harus berasal dari step sebelum Hasil Produk agar pengecekan stok tidak menjalankan pembelian.' });
+      }
+      const step = await db.setResellerWorkflowStockStep(workflow.id, stepId, selectedSnapshot, rule);
+      const synced = await db.updateResellerWorkflowLiveStock(workflow.id, stock, '');
+      return json(res, 200, { ok: true, data: { step, extraction: rule, stock, product: synced?.product || null } });
     }
 
     if (action === 'workflow-undo') {
@@ -985,6 +1035,9 @@ module.exports = async function handler(req, res) {
       const unresolvedStep = steps.find((step) => Array.isArray(step.response_snapshots) && step.response_snapshots.length > 1 && !Number(step.response_snapshot?.id || 0));
       if (unresolvedStep) return json(res, 400, { ok: false, error: `Step ${unresolvedStep.step_order} menerima beberapa pesan supplier. Pilih dulu pesan yang direkam untuk step tersebut.` });
       if (!steps.some((step) => step.capture_result === true)) return json(res, 400, { ok: false, error: 'Tandai balasan hasil supplier sebagai Hasil Produk terlebih dahulu.' });
+      const resultStep = steps.find((step) => step.capture_result === true);
+      const stockStep = steps.find((step) => step.capture_stock === true);
+      if (stockStep && resultStep && Number(stockStep.step_order || 0) >= Number(resultStep.step_order || 0)) return json(res, 400, { ok: false, error: 'Step pembacaan stok harus berada sebelum step Hasil Produk.' });
       const product = await db.getProductByCode(workflow.product_code);
       if (!product) return json(res, 404, { ok: false, error: 'Produk workflow tidak ditemukan.' });
       const all = await db.listResellerWorkflows(500);

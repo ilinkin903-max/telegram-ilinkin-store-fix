@@ -181,3 +181,22 @@ Produk akhir dikirim dalam blok kode Telegram di bawah receipt `PEMBAYARAN BERHA
 - Tombol **Salin Workflow** menyalin semua step sebagai draft baru.
 - Setiap kartu step mempunyai **Edit** dan **Hapus**. Edit dapat mengganti `Klik Tombol` ↔ `Kirim Teks`, teks tombol/perintah, serta kategori `Jumlah Pembelian`.
 - Workflow aktif otomatis menjadi draft saat diedit. Setelah selesai, periksa lalu aktifkan kembali.
+
+## v82.4: memilih bagian produk dan membaca stok live
+
+### Hanya sebagian pesan sebagai produk
+1. Setelah supplier mengirim balasan, pilih pesan yang benar.
+2. Pada kotak pesan, blok/select hanya data yang akan dikirim ke customer (contoh link, akun, kode lisensi, atau beberapa baris data).
+3. Tekan **📦 Bagian Terpilih = Produk**.
+4. Recorder menyimpan contoh serta anchor sebelum/sesudah pilihan. Saat order asli, nilai dinamis di area itu yang diambil sebagai hasil.
+
+### Merekam stok supplier
+1. Jalankan alur supplier hanya sampai halaman/detail yang menampilkan stok.
+2. Pilih pesan yang memuat stok.
+3. Blok angka stok saja, contoh `74` dari `Sisa Stok : 74`.
+4. Tekan **📊 Angka Terpilih = Stok**.
+5. Lanjutkan merekam langkah order hingga Hasil Produk dan aktifkan workflow.
+
+**Penting:** tandai stok pada step yang aman dan terjadi sebelum tombol yang melakukan pembelian/konfirmasi. Saat customer mengecek produk, sistem replay hanya sampai step stok dan berhenti di sana.
+
+Untuk produk tunggal, refresh dilakukan saat produk dipilih. Untuk produk bervarian, refresh baru dilakukan saat varian tertentu dipilih. Stok efektif dihitung sebagai `min(stok live supplier, saldo manual / modal)`.

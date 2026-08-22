@@ -2155,8 +2155,12 @@ async function deleteResellerSupplier(id) {
 function workflowEstimatedStock(workflow = {}, supplier = {}) {
   const balance = Math.max(0, Number(supplier?.manual_balance_idr || 0));
   const cost = Math.max(0, Number(workflow?.unit_cost_idr || 0));
-  if (!(cost > 0)) return 0;
-  return Math.max(0, Math.floor(balance / cost));
+  const balanceStock = cost > 0 ? Math.max(0, Math.floor(balance / cost)) : 0;
+  const liveRaw = workflow?.live_stock;
+  const hasLive = liveRaw !== null && liveRaw !== undefined && String(liveRaw) !== '' && Number.isFinite(Number(liveRaw));
+  if (!hasLive) return balanceStock;
+  const liveStock = Math.max(0, Math.floor(Number(liveRaw || 0)));
+  return cost > 0 ? Math.min(balanceStock, liveStock) : liveStock;
 }
 
 async function syncWorkflowSupplierStock(workflowOrId) {
@@ -2299,6 +2303,9 @@ async function createResellerWorkflow(input = {}) {
     active: input.active === true,
     sample_quantity: Math.max(1, Number(input.sample_quantity || 1)),
     step_timeout_ms: Math.max(1500, Math.min(30000, Number(input.step_timeout_ms || 7000))),
+    live_stock: input.live_stock === null || input.live_stock === undefined || input.live_stock === '' ? null : Math.max(0, Math.floor(Number(input.live_stock || 0))),
+    live_stock_checked_at: input.live_stock_checked_at || null,
+    stock_refresh_error: String(input.stock_refresh_error || ''),
     last_message_id: input.last_message_id ? Number(input.last_message_id) : null,
     last_message_snapshot: input.last_message_snapshot && typeof input.last_message_snapshot === 'object' ? input.last_message_snapshot : {},
     previous_link_snapshot: input.previous_link_snapshot && typeof input.previous_link_snapshot === 'object' ? input.previous_link_snapshot : {},
@@ -2315,7 +2322,7 @@ async function createResellerWorkflow(input = {}) {
 async function updateResellerWorkflow(id, updates = {}) {
   const value = String(id || '').trim();
   if (!value) throw new Error('Workflow tidak ditemukan.');
-  const allowed = ['name','product_code','variant_key','target_username','supplier_id','unit_cost_idr','copied_from_workflow_id','active','sample_quantity','step_timeout_ms','last_message_id','last_message_snapshot','recent_message_snapshots','previous_link_snapshot'];
+  const allowed = ['name','product_code','variant_key','target_username','supplier_id','unit_cost_idr','copied_from_workflow_id','active','sample_quantity','step_timeout_ms','live_stock','live_stock_checked_at','stock_refresh_error','last_message_id','last_message_snapshot','recent_message_snapshots','previous_link_snapshot'];
   const payload = { updated_at: new Date().toISOString() };
   allowed.forEach((key) => {
     if (updates[key] === undefined) return;
@@ -2325,6 +2332,9 @@ async function updateResellerWorkflow(id, updates = {}) {
     else if (key === 'unit_cost_idr') payload[key] = Math.max(0, Number(updates[key] || 0));
     else if (key === 'sample_quantity') payload[key] = Math.max(1, Number(updates[key] || 1));
     else if (key === 'step_timeout_ms') payload[key] = Math.max(1500, Math.min(30000, Number(updates[key] || 7000)));
+    else if (key === 'live_stock') payload[key] = updates[key] === null || updates[key] === undefined || updates[key] === '' ? null : Math.max(0, Math.floor(Number(updates[key] || 0)));
+    else if (key === 'live_stock_checked_at') payload[key] = updates[key] || null;
+    else if (key === 'stock_refresh_error') payload[key] = String(updates[key] || '');
     else if (key === 'last_message_id') payload[key] = updates[key] ? Number(updates[key]) : null;
     else if (key === 'recent_message_snapshots') payload[key] = Array.isArray(updates[key]) ? updates[key] : [];
     else payload[key] = updates[key];
@@ -2368,7 +2378,14 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     response_snapshots: Array.isArray(input.response_snapshots) ? input.response_snapshots : [],
     response_selection_index: Number.isInteger(Number(input.response_selection_index)) ? Number(input.response_selection_index) : 0,
     text_category: ['quantity','other'].includes(String(input.text_category || '').toLowerCase()) ? String(input.text_category).toLowerCase() : 'other',
-    capture_result: input.capture_result === true
+    capture_result: input.capture_result === true,
+    result_extract_prefix: String(input.result_extract_prefix || ''),
+    result_extract_suffix: String(input.result_extract_suffix || ''),
+    result_sample_text: String(input.result_sample_text || ''),
+    capture_stock: input.capture_stock === true,
+    stock_extract_prefix: String(input.stock_extract_prefix || ''),
+    stock_extract_suffix: String(input.stock_extract_suffix || ''),
+    stock_sample_text: String(input.stock_sample_text || '')
   };
   const { data, error } = await sb().from('reseller_workflow_steps').insert(payload).select('*').single();
   if (error) throw error;
@@ -2414,6 +2431,13 @@ async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
   if (payload.action_type === 'text' && payload.text_category === 'quantity') payload.action_value = '{quantity}';
   if (updates.preview_value !== undefined) payload.preview_value = String(updates.preview_value || '').trim();
   if (updates.capture_result !== undefined) payload.capture_result = updates.capture_result === true;
+  if (updates.result_extract_prefix !== undefined) payload.result_extract_prefix = String(updates.result_extract_prefix || '');
+  if (updates.result_extract_suffix !== undefined) payload.result_extract_suffix = String(updates.result_extract_suffix || '');
+  if (updates.result_sample_text !== undefined) payload.result_sample_text = String(updates.result_sample_text || '');
+  if (updates.capture_stock !== undefined) payload.capture_stock = updates.capture_stock === true;
+  if (updates.stock_extract_prefix !== undefined) payload.stock_extract_prefix = String(updates.stock_extract_prefix || '');
+  if (updates.stock_extract_suffix !== undefined) payload.stock_extract_suffix = String(updates.stock_extract_suffix || '');
+  if (updates.stock_sample_text !== undefined) payload.stock_sample_text = String(updates.stock_sample_text || '');
   if (updates.response_snapshot !== undefined) payload.response_snapshot = updates.response_snapshot && typeof updates.response_snapshot === 'object' ? updates.response_snapshot : {};
   if (updates.response_snapshots !== undefined) payload.response_snapshots = Array.isArray(updates.response_snapshots) ? updates.response_snapshots : [];
   if (updates.response_selection_index !== undefined) payload.response_selection_index = Number.isInteger(Number(updates.response_selection_index)) ? Number(updates.response_selection_index) : -1;
@@ -2464,7 +2488,14 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       response_snapshots: Array.isArray(step.response_snapshots) ? step.response_snapshots : [],
       response_selection_index: Number(step.response_selection_index ?? -1),
       text_category: step.text_category || 'other',
-      capture_result: step.capture_result === true
+      capture_result: step.capture_result === true,
+      result_extract_prefix: step.result_extract_prefix || '',
+      result_extract_suffix: step.result_extract_suffix || '',
+      result_sample_text: step.result_sample_text || '',
+      capture_stock: step.capture_stock === true,
+      stock_extract_prefix: step.stock_extract_prefix || '',
+      stock_extract_suffix: step.stock_extract_suffix || '',
+      stock_sample_text: step.stock_sample_text || ''
     });
   }
   return { workflow: copy, steps: await listResellerWorkflowSteps(copy.id) };
@@ -2479,17 +2510,54 @@ async function deleteLastResellerWorkflowStep(workflowId) {
   return last;
 }
 
-async function setResellerWorkflowResultStep(workflowId, stepId, responseSnapshot = null) {
+async function setResellerWorkflowResultStep(workflowId, stepId, responseSnapshot = null, extractionRule = null) {
   const workflow = String(workflowId || '').trim();
   const step = String(stepId || '').trim();
   if (!workflow || !step) throw new Error('Step hasil tidak ditemukan.');
   const { error: clearError } = await sb().from('reseller_workflow_steps').update({ capture_result: false }).eq('workflow_id', workflow);
   if (clearError) throw clearError;
-  const updates = { capture_result: true };
+  const updates = { capture_result: true, result_extract_prefix: '', result_extract_suffix: '', result_sample_text: '' };
   if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) updates.response_snapshot = responseSnapshot;
+  if (extractionRule && typeof extractionRule === 'object') {
+    updates.result_extract_prefix = String(extractionRule.prefix || '');
+    updates.result_extract_suffix = String(extractionRule.suffix || '');
+    updates.result_sample_text = String(extractionRule.sample || '');
+  }
   const { data, error } = await sb().from('reseller_workflow_steps').update(updates).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
   return data || null;
+}
+
+async function setResellerWorkflowStockStep(workflowId, stepId, responseSnapshot = null, extractionRule = null) {
+  const workflow = String(workflowId || '').trim();
+  const step = String(stepId || '').trim();
+  if (!workflow || !step) throw new Error('Step stok tidak ditemukan.');
+  const { error: clearError } = await sb().from('reseller_workflow_steps').update({ capture_stock: false }).eq('workflow_id', workflow);
+  if (clearError) throw clearError;
+  const updates = { capture_stock: true };
+  if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) updates.response_snapshot = responseSnapshot;
+  if (extractionRule && typeof extractionRule === 'object') {
+    updates.stock_extract_prefix = String(extractionRule.prefix || '');
+    updates.stock_extract_suffix = String(extractionRule.suffix || '');
+    updates.stock_sample_text = String(extractionRule.sample || '');
+  }
+  const { data, error } = await sb().from('reseller_workflow_steps').update(updates).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function updateResellerWorkflowLiveStock(workflowId, stock, errorMessage = '') {
+  const workflow = await updateResellerWorkflow(workflowId, {
+    live_stock: stock === null || stock === undefined ? null : Math.max(0, Math.floor(Number(stock || 0))),
+    live_stock_checked_at: stock === null || stock === undefined ? null : new Date().toISOString(),
+    stock_refresh_error: String(errorMessage || '')
+  });
+  if (!workflow) return null;
+  return syncWorkflowSupplierStock(workflow);
+}
+
+async function recordResellerWorkflowStockError(workflowId, message = '') {
+  return updateResellerWorkflow(workflowId, { stock_refresh_error: String(message || ''), live_stock_checked_at: new Date().toISOString() });
 }
 
 async function getResellerWorkflowRun(orderRef) {
@@ -2761,6 +2829,9 @@ module.exports = {
   cloneResellerWorkflow,
   deleteLastResellerWorkflowStep,
   setResellerWorkflowResultStep,
+  setResellerWorkflowStockStep,
+  updateResellerWorkflowLiveStock,
+  recordResellerWorkflowStockError,
   getResellerWorkflowRun,
   upsertResellerWorkflowRun,
   patchResellerWorkflowRun,

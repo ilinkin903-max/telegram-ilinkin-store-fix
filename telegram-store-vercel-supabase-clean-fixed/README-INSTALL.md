@@ -110,3 +110,7 @@ Jika update dari v82.1, jalankan `supabase/update-v82.2-workflow-guard-receipt.s
 ## v82.3 - Workflow Editor & Supplier Balance Manual
 
 Jalankan `supabase/update-v82.3-workflow-editor-supplier-balance.sql`, lalu redeploy. Supplier Telegram sekarang memakai saldo manual dan modal per workflow untuk menghitung stok. Workflow/step dapat diedit dan workflow dapat disalin. Lihat `UPDATE-v82.3.md` dan `V82.3-CHANGES.md`.
+
+## v82.4 - Partial Product & Live Supplier Stock
+
+Jalankan `supabase/update-v82.4-partial-result-live-stock.sql`, lalu redeploy. Recorder dapat memblok hanya bagian teks yang menjadi produk dan hanya angka yang menjadi stok. Stok workflow di-refresh saat user memilih produk tunggal atau varian yang dipilih, lalu dibatasi lagi oleh saldo manual/modal. Lihat `UPDATE-v82.4.md` dan `V82.4-CHANGES.md`.

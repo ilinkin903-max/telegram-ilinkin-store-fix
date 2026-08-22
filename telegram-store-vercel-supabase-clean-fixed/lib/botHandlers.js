@@ -8,6 +8,7 @@ const paymentService = require('./paymentService');
 const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
 const walletNotifications = require('./walletNotifications');
+const workflowUserbot = require('./userbotWorkflowService');
 const license = require('./license');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
@@ -388,14 +389,14 @@ function homeKeyboard(req, userId, settings = {}) {
     rows.push([styledButton('‹🛍️› Buka Marketplace', { web_app: { url: storeUrl } }, 'primary')]);
   }
   if (menuMode !== 'marketplace') {
-    rows.push([styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'primary')]);
+    rows.push([styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'success')]);
   }
   rows.push([styledButton('‹💰› Saldo, Top Up & Referral', { callback_data: 'wallet' }, 'success')]);
   rows.push([
     styledButton('‹📋› Riwayat Transaksi', { callback_data: 'riwayattransaksi' }, 'primary'),
-    styledButton('‹❓› Cara Order', { callback_data: 'caraorder' }, 'primary')
+    styledButton('‹❓› Cara Order', { callback_data: 'caraorder' }, 'success')
   ]);
-  rows.push([styledButton('‹📊› Stok', { callback_data: 'stok' }, 'primary')]);
+  rows.push([styledButton('‹📊› Stok', { callback_data: 'stok' }, 'success')]);
   const miniAppUrl = getMiniAppUrl(req);
   if (miniAppUrl && isOwner(userId)) rows.push([styledButton('‹⚙️› Dashboard Owner', { web_app: { url: miniAppUrl } }, 'primary')]);
   const csUrl = normalizeUrl(settings.customer_service_link || config.customerService);
@@ -880,6 +881,39 @@ function workflowStockForSelection(product, selection = null) {
   return raw == null ? 0 : Math.max(0, Math.floor(Number(raw || 0)));
 }
 
+async function refreshWorkflowStockForSelection(product, selection = null) {
+  const ref = workflowSupplierSelection(product, selection);
+  if (!ref) return { refreshed: false, configured: false, stock: null, product };
+  const workflow = await db.getResellerWorkflow(ref.workflowId).catch(() => null);
+  if (!workflow || workflow.active !== true) return { refreshed: false, configured: false, stock: workflowStockForSelection(product, selection), product };
+  const steps = await db.listResellerWorkflowSteps(workflow.id).catch(() => []);
+  if (!steps.some((step) => step.capture_stock === true)) {
+    const supplier = workflow.supplier_id ? await db.getResellerSupplier(workflow.supplier_id).catch(() => null) : null;
+    const stock = supplier ? db.workflowEstimatedStock(workflow, supplier) : workflowStockForSelection(product, selection);
+    return { refreshed: false, configured: false, stock: Math.max(0, Number(stock || 0)), product };
+  }
+  const lockKey = `workflow_supplier:${String(workflow.target_username || '').toLowerCase()}`;
+  const locked = await db.claimOnce(lockKey, 45, { purpose: 'stock-check', workflow_id: workflow.id }, { failClosed: true }).catch(() => false);
+  if (!locked) return { refreshed: false, configured: true, busy: true, stock: workflowStockForSelection(product, selection), product };
+  try {
+    const probe = await workflowUserbot.runWorkflowStockProbe({
+      workflow,
+      steps,
+      context: { quantity: 1, invoice: `STOCK-${Date.now()}`, telegram_id: 0, username: 'stock-check', custom_input: '' }
+    });
+    const synced = await db.updateResellerWorkflowLiveStock(workflow.id, probe.stock, '').catch(() => null);
+    botReadCache.products = { at: 0, value: null };
+    const freshProduct = synced?.product || await db.getProductByCode(product.kode).catch(() => product);
+    return { refreshed: true, configured: true, stock: Math.max(0, Number(probe.stock || 0)), product: freshProduct, probe };
+  } catch (error) {
+    await db.recordResellerWorkflowStockError(workflow.id, error.message || String(error)).catch(() => null);
+    console.warn('Cek stok workflow gagal:', workflow.id, error.message || error);
+    return { refreshed: false, configured: true, error, stock: workflowStockForSelection(product, selection), product };
+  } finally {
+    await db.releaseClaim(lockKey).catch(() => null);
+  }
+}
+
 function isPoOrder(product, order = {}) {
   return isPoProduct(product, selectedVariant(product, order));
 }
@@ -1045,17 +1079,20 @@ function productButtons(products, page = 0, totalPages = 1, availabilityMap = ne
     const suffix = variants.length ? ` | ${variants.length} varian` : '';
     const summary = productDeliverySummary(p);
     const readyStock = readyStockForProduct(p, availabilityMap);
-    const availability = summary === 'workflow' ? 'Otomatis' : (summary === 'po' ? 'PRE-ORDER' : (summary === 'mixed' ? `Stok ${readyStock} + PO` : (summary === 'mixed_supplier' ? 'Otomatis' : `Stok ${readyStock}`)));
-    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, 'primary')];
+    const hasPoOption = summary === 'po' || summary === 'mixed' || variants.some((variant) => isPoProduct(p, variant) && !isSupplierProduct(p, variant) && !isWorkflowSupplierProduct(p, variant));
+    const availability = hasPoOption && readyStock < 1 ? 'PRE-ORDER' : `Stok ${readyStock}`;
+    const soldOut = !hasPoOption && readyStock < 1;
+    const style = soldOut ? 'danger' : 'success';
+    return [styledButton(`${p.nama} | mulai ${formatRupiah(minPrice)} | ${availability}${suffix}`, { callback_data: `item:${p.kode}:${page}` }, style)];
   });
   if (totalPages > 1) {
     const nav = [];
     if (page > 0) nav.push(styledButton('⬅️ Sebelumnya', { callback_data: `produkpage:${page - 1}` }, 'primary'));
-    nav.push({ text: `${page + 1}/${totalPages}`, callback_data: 'noop' });
+    nav.push(styledButton(`(${page + 1}/${totalPages})`, { callback_data: 'noop' }, 'success'));
     if (page < totalPages - 1) nav.push(styledButton('Selanjutnya ➡️', { callback_data: `produkpage:${page + 1}` }, 'primary'));
     rows.push(nav);
   }
-  rows.push([styledButton('🔙 Kembali', { callback_data: 'kembaliawal' }, 'primary')]);
+  rows.push([styledButton('🔙 Kembali', { callback_data: 'kembaliawal' })]);
   return { inline_keyboard: rows };
 }
 
@@ -1236,12 +1273,12 @@ ${bulk}
 function quantityKeyboard() {
   return {
     inline_keyboard: [
-      [styledButton('−', { callback_data: 'min:1' }, 'primary'), styledButton('+', { callback_data: 'plus:1' }, 'primary')],
+      [styledButton('−', { callback_data: 'min:1' }, 'danger'), styledButton('+', { callback_data: 'plus:1' }, 'success')],
       [
-        styledButton('+5', { callback_data: 'plus:5' }, 'primary'),
-        styledButton('+10', { callback_data: 'plus:10' }, 'primary'),
-        styledButton('+25', { callback_data: 'plus:25' }, 'primary'),
-        styledButton('+50', { callback_data: 'plus:50' }, 'primary')
+        styledButton('+5', { callback_data: 'plus:5' }, 'success'),
+        styledButton('+10', { callback_data: 'plus:10' }, 'success'),
+        styledButton('+25', { callback_data: 'plus:25' }, 'success'),
+        styledButton('+50', { callback_data: 'plus:50' }, 'success')
       ],
       [styledButton('🔄 Reset', { callback_data: 'reset' }, 'primary')],
       [styledButton('🔙 Kembali', { callback_data: 'daftarproduk' }, 'primary'), styledButton('✅ Konfirmasi', { callback_data: 'konfirmasi' }, 'success')]
@@ -1640,22 +1677,32 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
 
 async function handleProductSelection(query, code, listPage = 0) {
   const userId = query.from.id;
-  const product = await db.getProductByCode(code);
+  let product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(userId, '🛒 Produk ini hanya tersedia melalui Marketplace.');
+  const variantsBeforeRefresh = activeVariantsWithIndex(product);
+  if (!variantsBeforeRefresh.length && isWorkflowSupplierProduct(product)) {
+    const refreshed = await refreshWorkflowStockForSelection(product, null);
+    if (refreshed.configured && (refreshed.busy || refreshed.error)) {
+      const message = refreshed.busy
+        ? 'Supplier sedang memproses order lain. Stok belum dapat diperbarui, coba lagi sebentar.'
+        : 'Stok supplier gagal diperbarui. Silakan coba lagi sebentar.';
+      return answerCallback(query, { text: message, show_alert: true });
+    }
+    product = refreshed.product || product;
+  }
   const availabilityMap = await supplierAvailabilityForProducts([product]).catch(() => new Map());
   const variants = activeVariantsWithIndex(product);
   if (variants.length) {
     const rows = variants.map(({ variant, index }) => {
-      const stockText = isWorkflowSupplierProduct(product, variant)
-        ? `Stok ${readyStockForVariant(product, variant, availabilityMap)}`
-        : (isPoProduct(product, variant) && !isSupplierProduct(product, variant)
-          ? 'PRE-ORDER'
-          : `Stok ${readyStockForVariant(product, variant, availabilityMap)}`);
-      return [styledButton(`${variant.name} | ${formatRupiah(variantPrice(product, variant))} | ${stockText}`, { callback_data: `variant:${product.kode}:${index}:${Math.max(0, Number(listPage || 0))}` }, 'primary')];
+      const stock = readyStockForVariant(product, variant, availabilityMap);
+      const isPlainPo = isPoProduct(product, variant) && !isSupplierProduct(product, variant) && !isWorkflowSupplierProduct(product, variant);
+      const stockText = isPlainPo ? 'PRE-ORDER' : `Stok ${stock}`;
+      const style = !isPlainPo && stock < 1 ? 'danger' : 'success';
+      return [styledButton(`${variant.name} | ${formatRupiah(variantPrice(product, variant))} | ${stockText}`, { callback_data: `variant:${product.kode}:${index}:${Math.max(0, Number(listPage || 0))}` }, style)];
     });
-    rows.push([styledButton('🔙 Kembali', { callback_data: `produkpage:${Math.max(0, Number(listPage || 0))}` }, 'primary')]);
+    rows.push([styledButton('🔙 Kembali', { callback_data: `produkpage:${Math.max(0, Number(listPage || 0))}` })]);
     return editMessage(query, `📦 *${escapeMarkdownText(product.nama)}*
 =======================
 Pilih varian produk yang ingin dibeli. Setelah memilih varian, deskripsi produk akan tampil di halaman konfirmasi sebelum pembayaran.`, {
@@ -1694,14 +1741,25 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
 }
 
 async function handleVariantSelection(query, code, indexText) {
-  const product = await db.getProductByCode(code);
+  let product = await db.getProductByCode(code);
   if (!product) return tg.sendMessage(query.from.id, '⚠️ Produk tidak ditemukan.');
   if (product.active === false) return tg.sendMessage(query.from.id, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(query.from.id, '🛒 Produk ini hanya tersedia melalui Marketplace.');
   const index = Number(indexText);
-  const variant = (product.variants || [])[index];
+  let variant = (product.variants || [])[index];
   if (!variant) return tg.sendMessage(query.from.id, '⚠️ Varian tidak ditemukan.');
   if (!isVariantActive(variant)) return answerCallback(query, { text: 'Varian ini sedang OFF.', show_alert: true });
+  if (isWorkflowSupplierProduct(product, variant)) {
+    const refreshed = await refreshWorkflowStockForSelection(product, variant);
+    if (refreshed.configured && (refreshed.busy || refreshed.error)) {
+      const message = refreshed.busy
+        ? 'Supplier sedang memproses order lain. Stok varian belum dapat diperbarui, coba lagi sebentar.'
+        : 'Stok supplier gagal diperbarui. Silakan coba lagi sebentar.';
+      return answerCallback(query, { text: message, show_alert: true });
+    }
+    product = refreshed.product || product;
+    variant = (product.variants || [])[index] || variant;
+  }
   if (isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant)) {
     const availabilityMap = isSupplierProduct(product, variant) ? await supplierAvailabilityForProducts([product]).catch(() => new Map()) : new Map();
     if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
@@ -2189,7 +2247,7 @@ async function handleCallbackQuery(query, req) {
   if (cmd.startsWith('min:')) return changeQuantity(query, -Number(cmd.split(':')[1] || 1), false);
   if (cmd === 'konfirmasi') {
     return editMessage(query, '🎟 Jika kamu mempunyai kode voucher yang berlaku, klik Punya. Jika tidak, klik Tidak.', {
-      reply_markup: { inline_keyboard: [[styledButton('Tidak', { callback_data: 'bayar' }, 'primary'), styledButton('Punya Voucher', { callback_data: 'punya' }, 'primary')], [styledButton('🔙 Kembali', { callback_data: 'daftarproduk' }, 'primary'), styledButton('❌ Batal', { callback_data: 'batalbeli' }, 'danger')]] }
+      reply_markup: { inline_keyboard: [[styledButton('Tidak', { callback_data: 'bayar' }, 'primary'), styledButton('Punya Voucher', { callback_data: 'punya' }, 'success')], [styledButton('🔙 Kembali', { callback_data: 'daftarproduk' }, 'primary'), styledButton('❌ Batal', { callback_data: 'batalbeli' }, 'danger')]] }
     });
   }
   if (cmd === 'punya') {

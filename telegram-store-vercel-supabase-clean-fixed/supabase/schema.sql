@@ -2120,3 +2120,26 @@ revoke all on function public.debit_reseller_supplier_balance_v823(uuid,text,num
 grant execute on function public.debit_reseller_supplier_balance_v823(uuid,text,numeric,text) to service_role;
 
 notify pgrst, 'reload schema';
+
+-- ================================================================
+-- v82.4.0: partial product extraction + recorded live supplier stock
+-- ================================================================
+alter table if exists public.reseller_workflows
+  add column if not exists live_stock integer,
+  add column if not exists live_stock_checked_at timestamptz,
+  add column if not exists stock_refresh_error text not null default '';
+
+alter table if exists public.reseller_workflow_steps
+  add column if not exists result_extract_prefix text not null default '',
+  add column if not exists result_extract_suffix text not null default '',
+  add column if not exists result_sample_text text not null default '',
+  add column if not exists capture_stock boolean not null default false,
+  add column if not exists stock_extract_prefix text not null default '',
+  add column if not exists stock_extract_suffix text not null default '',
+  add column if not exists stock_sample_text text not null default '';
+
+create unique index if not exists reseller_workflow_steps_one_stock_capture_idx
+  on public.reseller_workflow_steps(workflow_id)
+  where capture_stock = true;
+
+notify pgrst, 'reload schema';
