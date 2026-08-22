@@ -437,6 +437,26 @@ async function sendSupplierPendingNotice(userId) {
   return tg.sendMessage(userId, text, { parse_mode: 'HTML' });
 }
 
+async function sendWorkflowFailureNotice(userId, invoice) {
+  const ref = displayPaymentReference(invoice || '-');
+  const claimKey = `workflow_failure_notice:${String(invoice || '').trim()}`;
+  const claimed = await db.claimOnce(claimKey, 30 * 24 * 60 * 60, { invoice: String(invoice || '').trim(), telegram_id: Number(userId || 0) }, { failClosed: true }).catch(() => false);
+  if (!claimed) return false;
+  try {
+    const text = `⚠️ <b>PROSES PRODUK MENGALAMI KENDALA</b>\n\n` +
+      `Pesanan Anda sudah tercatat, tetapi proses pengiriman produk sedang mengalami kendala. Sistem <b>tidak melanjutkan langkah yang gagal</b> agar pesanan tidak salah.\n\n` +
+      `Silakan tunggu beberapa saat. Jika produk belum diterima, hubungi admin dengan referensi <b>${escapeHtml(ref)}</b>.\n\n` +
+      `Terima kasih atas pengertiannya.`;
+    await tg.sendMessage(Number(userId), text, { parse_mode: 'HTML' });
+    await db.markClaimDone(claimKey, { invoice: String(invoice || '').trim(), state: 'sent' }).catch(() => null);
+    return true;
+  } catch (error) {
+    await db.releaseClaim(claimKey).catch(() => null);
+    console.error('Gagal mengirim notifikasi workflow gagal:', error.message || error);
+    return false;
+  }
+}
+
 async function sendPoDeliveryReceipt(userId, poOrder, deliveryText, product = null) {
   const raw = String(deliveryText || '').trim();
   if (!raw) throw new Error('Data produk PO kosong.');
@@ -682,7 +702,8 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)), status: 'error',
       error_code: error.code, error_message: error.message, raw_response: {}
     }).catch(() => null);
-    return { handled: true, pending: true, error, transaction };
+    const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
+    return { handled: true, pending: true, error, transaction, workflow_failure_notified: buyerNotified };
   }
 
   const orderQuantity = Math.max(1, Number(order?.quantity || transaction?.quantity || 1));
@@ -691,7 +712,8 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
     const error = new Error('Workflow reseller belum lengkap. Rekam langkah dan tandai satu balasan sebagai Hasil Produk.');
     error.code = 'WORKFLOW_INCOMPLETE';
     await notifyOwnerWorkflowIssue({ ...order, invoice_ref: invoice }, product, error, workflow, null);
-    return { handled: true, pending: true, error, transaction };
+    const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
+    return { handled: true, pending: true, error, transaction, workflow_failure_notified: buyerNotified };
   }
 
   const existingPo = await db.getPoOrder(invoice).catch(() => null);
@@ -776,7 +798,8 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       } else {
         run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
       }
-      return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run };
+      const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
+      return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run, workflow_failure_notified: buyerNotified };
     }
   }
 
@@ -938,7 +961,8 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       raw_response: { workflow_id: workflow.id, target_username: workflow.target_username, current_step: Number(run?.current_step || 0) }
     }).catch(() => null);
     await notifyOwnerWorkflowIssue({ ...order, invoice_ref: invoice }, product, error, workflow, run);
-    return { handled: true, pending: true, error, transaction, workflow_run: run };
+    const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
+    return { handled: true, pending: true, error, transaction, workflow_run: run, workflow_failure_notified: buyerNotified };
   } finally {
     await db.releaseClaim(targetLock).catch(() => null);
   }
@@ -1198,9 +1222,11 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       const noticeClaimed = await db.claimOnce(noticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (noticeClaimed) {
         try {
-          if (isProdSellerProduct(product, result.transaction || order) || isWorkflowProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
-          else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
-          await db.markClaimDone(noticeKey, { invoice, state: 'notified' }).catch(() => null);
+          if (!(workflowResult && workflowResult.workflow_failure_notified)) {
+            if (isProdSellerProduct(product, result.transaction || order) || isWorkflowProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
+            else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
+          }
+          await db.markClaimDone(noticeKey, { invoice, state: workflowResult?.workflow_failure_notified ? 'workflow_failed' : 'notified' }).catch(() => null);
         } catch (noticeError) {
           await db.releaseClaim(noticeKey).catch(() => null);
           throw noticeError;

@@ -461,7 +461,8 @@ async function summarizeAllTransactions() {
     const rows = [];
     for (let from = 0; ; from += pageSize) {
       const { data, error: pageError } = await sb().from('transactions')
-        .select('total_price,quantity,cost_total,profit_amount,created_at')
+        .select('total_price,quantity,cost_total,profit_amount,created_at,status')
+        .eq('status', 'completed')
         .order('created_at', { ascending: true })
         .range(from, from + pageSize - 1);
       if (pageError) throw pageError;
@@ -1393,6 +1394,10 @@ async function updateTransactionStatus(orderRef, statusInput) {
   if (!ref) throw new Error('Invoice transaksi wajib diisi.');
   const status = String(statusInput || '').trim().toLowerCase();
   if (!['completed', 'canceled'].includes(status)) throw new Error('Status transaksi tidak valid.');
+  const current = await getTransactionByOrderRef(ref);
+  if (!current) return null;
+  const previousStatus = String(current.status || 'completed').trim().toLowerCase();
+  if (previousStatus === status) return current;
   const nowIso = new Date().toISOString();
   const payload = {
     status,
@@ -1406,6 +1411,20 @@ async function updateTransactionStatus(orderRef, statusInput) {
       throw new Error('Kolom status transaksi v63 belum tersedia. Jalankan supabase/update-v63-ui-order-status.sql terlebih dahulu.');
     }
     throw error;
+  }
+  if (data) {
+    const wasCompleted = previousStatus === 'completed';
+    const nowCompleted = status === 'completed';
+    if (wasCompleted !== nowCompleted) {
+      const direction = nowCompleted ? 1 : -1;
+      await incrementHistoricalStats({
+        orders_total: direction,
+        revenue_total: direction * Number(data.total_price || 0),
+        quantity_sold: direction * Number(data.quantity || 0),
+        cost_total: direction * Number(data.cost_total || 0),
+        profit_total: direction * Number(data.profit_amount || 0)
+      }).catch((statsError) => console.error('Gagal menyesuaikan statistik status transaksi:', statsError.message || statsError));
+    }
   }
   if (data && String(data.delivery_mode || '') === 'po') {
     const poStatus = status === 'canceled'
