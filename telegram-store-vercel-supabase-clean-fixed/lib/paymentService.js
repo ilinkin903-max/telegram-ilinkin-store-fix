@@ -444,8 +444,8 @@ async function sendWorkflowFailureNotice(userId, invoice) {
   if (!claimed) return false;
   try {
     const text = `⚠️ <b>PROSES PRODUK MENGALAMI KENDALA</b>\n\n` +
-      `Pesanan Anda sudah tercatat, tetapi proses pengiriman produk sedang mengalami kendala. Sistem <b>tidak melanjutkan langkah yang gagal</b> agar pesanan tidak salah.\n\n` +
-      `Silakan tunggu beberapa saat. Jika produk belum diterima, hubungi admin dengan referensi <b>${escapeHtml(ref)}</b>.\n\n` +
+      `Pesanan Anda sudah tercatat, tetapi proses pengiriman produk mengalami kendala. Sistem <b>menghentikan workflow pada langkah yang gagal</b> agar pesanan tidak salah atau terkirim ganda.\n\n` +
+      `Silakan tunggu beberapa saat. Jika produk belum diterima, hubungi admin dan sertakan referensi <b>${escapeHtml(ref)}</b>.\n\n` +
       `Terima kasih atas pengertiannya.`;
     await tg.sendMessage(Number(userId), text, { parse_mode: 'HTML' });
     await db.markClaimDone(claimKey, { invoice: String(invoice || '').trim(), state: 'sent' }).catch(() => null);
@@ -793,10 +793,10 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
           order_ref: invoice, workflow_id: workflow.id, telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
           product_code: transaction?.product_code || order?.product_code || product?.kode || '', variant_key: transaction?.variant_key || order?.variant_key || '',
           quantity: orderQuantity, supplier_id: workflow.supplier_id, supplier_unit_cost_idr: manualSupplier.unitCost, supplier_cost_total_idr: manualSupplier.totalCost,
-          status: 'queued', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
+          status: 'attention', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
         });
       } else {
-        run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
+        run = await db.patchResellerWorkflowRun(invoice, { status: 'attention', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
       }
       const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
       return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run, workflow_failure_notified: buyerNotified };
@@ -819,7 +819,7 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       supplier_id: manualSupplier.supplier?.id || workflow.supplier_id || null,
       supplier_unit_cost_idr: manualSupplier.unitCost,
       supplier_cost_total_idr: manualSupplier.totalCost,
-      supplier_balance_debited_at: null,
+      supplier_balance_debited_at: run?.supplier_balance_debited_at || null,
       status: 'queued', current_step: 0, result_text: '', last_message_id: null, last_message_snapshot: {},
       error_code: '', error_message: '', started_at: null, finished_at: null
     });

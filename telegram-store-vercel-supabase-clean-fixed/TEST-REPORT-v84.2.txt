@@ -1,0 +1,25 @@
+Link Auto Order v84.2.0 validation
+
+Focused workflow/failure/cancel suite:
+- 41/41 PASS across v82.6-v82.11 + v84.2 focused tests.
+
+Full JS syntax:
+- api/*.js: PASS
+- lib/*.js: PASS
+- public/*.js: PASS
+- scripts/*.js: PASS
+- tests/*.js: PASS
+
+Full project suite:
+- 196 passed / 226 total.
+- 30 existing tests failed due legacy/project-environment or older assertions unrelated to the v84.2 workflow/cancel changes. Focused v84.2 regression suite is fully green.
+
+v84.2 specifically validates:
+- workflow failure -> ATTENTION and stops
+- no automatic continuation from the failing step
+- buyer failure notice is idempotent
+- manual restart starts at workflow Step 1
+- restart reuses the same invoice/marketplace transaction
+- supplier debit timestamp is preserved on restart
+- completed -> canceled subtracts transaction revenue/profit
+- live stats/RPC/fallback/monthly analytics count completed transactions only

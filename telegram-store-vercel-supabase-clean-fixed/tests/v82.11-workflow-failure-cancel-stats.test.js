@@ -11,7 +11,7 @@ const statsSql = fs.readFileSync(path.join(root, 'supabase/update-v82.11-workflo
 
 test('workflow failure stops and notifies buyer once', () => {
   assert.match(payment, /sendWorkflowFailureNotice/);
-  assert.match(payment, /tidak melanjutkan langkah yang gagal/);
+  assert.match(payment, /menghentikan workflow pada langkah yang gagal|tidak melanjutkan langkah yang gagal/);
   assert.match(payment, /workflow_failure_notified/);
 });
 

@@ -524,11 +524,11 @@ async function getStats() {
   return {
     users: usersCount || 0,
     products: (products || []).length,
-    orders: Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0)),
+    orders: Number(summary.orders_total || 0),
     liveOrders: Number(summary.orders_total || 0),
     stokTersedia,
-    stokTerjual: Math.max(stokTerjual, Number(historical.quantity_sold || 0)),
-    omzet: Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0)),
+    stokTerjual: stokTerjual,
+    omzet: Number(summary.revenue_total || 0),
     liveOmzet: Number(summary.revenue_total || 0),
     modal: Number(summary.cost_total || 0),
     profit: Number(summary.profit_total || 0),
@@ -776,6 +776,7 @@ async function getMonthlyRekap(month, year) {
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
+    .eq('status', 'completed')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: false });
@@ -822,6 +823,7 @@ async function getAnalytics() {
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
+    .eq('status', 'completed')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: true });
@@ -2068,9 +2070,9 @@ async function getDeepStats() {
   ]);
 
   const historical = await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
-  const revenue = Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0));
-  const qtySold = Math.max(Number(summary.quantity_sold || 0), Number(historical.quantity_sold || 0));
-  const ordersTotal = Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0));
+  const revenue = Number(summary.revenue_total || 0);
+  const qtySold = Number(summary.quantity_sold || 0);
+  const ordersTotal = Number(summary.orders_total || 0);
   const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active, delivery_mode: String(p.delivery_mode || 'auto') }))
     .filter((p) => p.active !== false && p.delivery_mode !== 'po' && p.stock <= 5)
     .sort((a, b) => a.stock - b.stock)
