@@ -1843,6 +1843,7 @@ create table if not exists public.reseller_workflow_steps (
   response_selection_index integer not null default 0,
   text_category text not null default 'other',
   capture_result boolean not null default false,
+  wait_timeout_ms integer null,
   created_at timestamptz not null default now(),
   unique(workflow_id, step_order)
 );
@@ -1850,6 +1851,7 @@ create table if not exists public.reseller_workflow_steps (
 alter table public.reseller_workflow_steps add column if not exists response_snapshots jsonb not null default '[]'::jsonb;
 alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
 alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
+alter table public.reseller_workflow_steps add column if not exists wait_timeout_ms integer null;
 
 create index if not exists reseller_workflow_steps_workflow_idx
   on public.reseller_workflow_steps (workflow_id, step_order);

@@ -1,0 +1,1334 @@
+TAP version 13
+# node:internal/modules/cjs/loader:1404
+#   throw err;
+#   ^
+# Error: Cannot find module 'axios'
+# Require stack:
+# - /mnt/data/v826work/lib/paymentService.js
+# - /mnt/data/v826work/tests/payment-service.test.js
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+#     at Function._load (node:internal/modules/cjs/loader:1211:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+#     at Module.require (node:internal/modules/cjs/loader:1487:12)
+#     at require (node:internal/modules/helpers:135:16)
+#     at Object.<anonymous> (/mnt/data/v826work/lib/paymentService.js:1:15)
+#     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [
+#     '/mnt/data/v826work/lib/paymentService.js',
+#     '/mnt/data/v826work/tests/payment-service.test.js'
+#   ]
+# }
+# Node.js v22.16.0
+# Subtest: tests/payment-service.test.js
+not ok 1 - tests/payment-service.test.js
+  ---
+  duration_ms: 39.028711
+  type: 'test'
+  location: '/mnt/data/v826work/tests/payment-service.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/cjs/loader:1404
+#   throw err;
+#   ^
+# Error: Cannot find module 'dotenv'
+# Require stack:
+# - /mnt/data/v826work/lib/config.js
+# - /mnt/data/v826work/api/payment-webhook.js
+# - /mnt/data/v826work/tests/payment-webhook.test.js
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+#     at Function._load (node:internal/modules/cjs/loader:1211:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+#     at Module.require (node:internal/modules/cjs/loader:1487:12)
+#     at require (node:internal/modules/helpers:135:16)
+#     at Object.<anonymous> (/mnt/data/v826work/lib/config.js:1:1)
+#     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [
+#     '/mnt/data/v826work/lib/config.js',
+#     '/mnt/data/v826work/api/payment-webhook.js',
+#     '/mnt/data/v826work/tests/payment-webhook.test.js'
+#   ]
+# }
+# Node.js v22.16.0
+# Subtest: tests/payment-webhook.test.js
+not ok 2 - tests/payment-webhook.test.js
+  ---
+  duration_ms: 39.33064
+  type: 'test'
+  location: '/mnt/data/v826work/tests/payment-webhook.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/cjs/loader:1404
+#   throw err;
+#   ^
+# Error: Cannot find module 'dotenv'
+# Require stack:
+# - /mnt/data/v826work/lib/config.js
+# - /mnt/data/v826work/lib/supabase.js
+# - /mnt/data/v826work/lib/db.js
+# - /mnt/data/v826work/tests/profit-cost.test.js
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+#     at Function._load (node:internal/modules/cjs/loader:1211:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+#     at Module.require (node:internal/modules/cjs/loader:1487:12)
+#     at require (node:internal/modules/helpers:135:16)
+#     at Object.<anonymous> (/mnt/data/v826work/lib/config.js:1:1)
+#     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [
+#     '/mnt/data/v826work/lib/config.js',
+#     '/mnt/data/v826work/lib/supabase.js',
+#     '/mnt/data/v826work/lib/db.js',
+#     '/mnt/data/v826work/tests/profit-cost.test.js'
+#   ]
+# }
+# Node.js v22.16.0
+# Subtest: tests/profit-cost.test.js
+not ok 3 - tests/profit-cost.test.js
+  ---
+  duration_ms: 27.667954
+  type: 'test'
+  location: '/mnt/data/v826work/tests/profit-cost.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/cjs/loader:1404
+#   throw err;
+#   ^
+# Error: Cannot find module 'dotenv'
+# Require stack:
+# - /mnt/data/v826work/lib/config.js
+# - /mnt/data/v826work/lib/supabase.js
+# - /mnt/data/v826work/lib/db.js
+# - /mnt/data/v826work/tests/promo-utils.test.js
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+#     at Function._load (node:internal/modules/cjs/loader:1211:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+#     at Module.require (node:internal/modules/cjs/loader:1487:12)
+#     at require (node:internal/modules/helpers:135:16)
+#     at Object.<anonymous> (/mnt/data/v826work/lib/config.js:1:1)
+#     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [
+#     '/mnt/data/v826work/lib/config.js',
+#     '/mnt/data/v826work/lib/supabase.js',
+#     '/mnt/data/v826work/lib/db.js',
+#     '/mnt/data/v826work/tests/promo-utils.test.js'
+#   ]
+# }
+# Node.js v22.16.0
+# Subtest: tests/promo-utils.test.js
+not ok 4 - tests/promo-utils.test.js
+  ---
+  duration_ms: 43.81878
+  type: 'test'
+  location: '/mnt/data/v826work/tests/promo-utils.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: v62 memakai RPC atomik untuk fulfillment dan lock baris produk
+ok 5 - v62 memakai RPC atomik untuk fulfillment dan lock baris produk
+  ---
+  duration_ms: 1.015898
+  type: 'test'
+  ...
+# Subtest: lock pekerjaan dipisahkan dari shop_settings dan pembayaran fail-closed
+ok 6 - lock pekerjaan dipisahkan dari shop_settings dan pembayaran fail-closed
+  ---
+  duration_ms: 0.68446
+  type: 'test'
+  ...
+# Subtest: mode developer tidak dapat aktif di production dan hash aman dari beda panjang
+ok 7 - mode developer tidak dapat aktif di production dan hash aman dari beda panjang
+  ---
+  duration_ms: 0.163249
+  type: 'test'
+  ...
+# Subtest: statistik memakai agregasi database dan tidak dibatasi 1000 transaksi
+ok 8 - statistik memakai agregasi database dan tidak dibatasi 1000 transaksi
+  ---
+  duration_ms: 0.394039
+  type: 'test'
+  ...
+# Subtest: invoice gateway dipertahankan case-sensitive
+ok 9 - invoice gateway dipertahankan case-sensitive
+  ---
+  duration_ms: 0.190796
+  type: 'test'
+  ...
+# Subtest: unduh QRIS memakai token singkat, bukan initData di query atau CORS wildcard
+ok 10 - unduh QRIS memakai token singkat, bukan initData di query atau CORS wildcard
+  ---
+  duration_ms: 0.660089
+  type: 'test'
+  ...
+# Subtest: cron pembayaran dan backup wajib memakai CRON_SECRET
+ok 11 - cron pembayaran dan backup wajib memakai CRON_SECRET
+  ---
+  duration_ms: 0.194804
+  type: 'test'
+  ...
+# Subtest: paket tidak lagi membawa stok dan data user produksi
+ok 12 - paket tidak lagi membawa stok dan data user produksi
+  ---
+  duration_ms: 0.884715
+  type: 'test'
+  ...
+# Subtest: versi API memakai satu sumber VERSION
+ok 13 - versi API memakai satu sumber VERSION
+  ---
+  duration_ms: 0.706078
+  type: 'test'
+  ...
+# node:internal/modules/cjs/loader:1404
+#   throw err;
+#   ^
+# Error: Cannot find module 'axios'
+# Require stack:
+# - /mnt/data/v826work/lib/storeService.js
+# - /mnt/data/v826work/tests/store-service.test.js
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+#     at Function._load (node:internal/modules/cjs/loader:1211:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+#     at Module.require (node:internal/modules/cjs/loader:1487:12)
+#     at require (node:internal/modules/helpers:135:16)
+#     at Object.<anonymous> (/mnt/data/v826work/lib/storeService.js:1:15)
+#     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [
+#     '/mnt/data/v826work/lib/storeService.js',
+#     '/mnt/data/v826work/tests/store-service.test.js'
+#   ]
+# }
+# Node.js v22.16.0
+# Subtest: tests/store-service.test.js
+not ok 6 - tests/store-service.test.js
+  ---
+  duration_ms: 26.102225
+  type: 'test'
+  location: '/mnt/data/v826work/tests/store-service.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: marketplace menyediakan unduh QRIS dan bubble detail pembayaran
+ok 15 - marketplace menyediakan unduh QRIS dan bubble detail pembayaran
+  ---
+  duration_ms: 1.88084
+  type: 'test'
+  ...
+# Subtest: marketplace menyediakan carousel banner dan bubble customer service
+ok 16 - marketplace menyediakan carousel banner dan bubble customer service
+  ---
+  duration_ms: 0.29398
+  type: 'test'
+  ...
+# Subtest: label Produk Pilihan dan mulai sudah dihapus dari kartu produk
+ok 17 - label Produk Pilihan dan mulai sudah dihapus dari kartu produk
+  ---
+  duration_ms: 0.372906
+  type: 'test'
+  ...
+# Subtest: v52 memakai tema biru dan mendukung logo URL
+ok 18 - v52 memakai tema biru dan mendukung logo URL
+  ---
+  duration_ms: 0.433032
+  type: 'test'
+  ...
+# Subtest: dashboard banner memakai manager gambar/bawaan dengan urutan dan hapus
+ok 19 - dashboard banner memakai manager gambar/bawaan dengan urutan dan hapus
+  ---
+  duration_ms: 0.546697
+  type: 'test'
+  ...
+# Subtest: produk bisa dipilih untuk bot+marketplace atau marketplace saja
+ok 20 - produk bisa dipilih untuk bot+marketplace atau marketplace saja
+  ---
+  duration_ms: 0.203938
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan harga termurah dan harga promo dicoret tanpa blok varian promo di kartu
+ok 21 - marketplace menampilkan harga termurah dan harga promo dicoret tanpa blok varian promo di kartu
+  ---
+  duration_ms: 0.219867
+  type: 'test'
+  ...
+# Subtest: unduh QRIS memakai endpoint server dan Telegram downloadFile
+ok 22 - unduh QRIS memakai endpoint server dan Telegram downloadFile
+  ---
+  duration_ms: 0.283998
+  type: 'test'
+  ...
+# Subtest: v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace
+ok 23 - v53 memakai hero rasio 2,39:1 dan nama banner tidak ditampilkan di marketplace
+  ---
+  duration_ms: 1.542684
+  type: 'test'
+  ...
+# Subtest: v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otomatis
+ok 24 - v54 menyediakan Flash Sale biru di menu Promo dan pemilihan per promo otomatis
+  ---
+  duration_ms: 0.93093
+  type: 'test'
+  ...
+# Subtest: v53 menempatkan blok benefit setelah katalog
+ok 25 - v53 menempatkan blok benefit setelah katalog
+  ---
+  duration_ms: 0.270807
+  type: 'test'
+  ...
+# Subtest: v53 meminta konfirmasi sebelum membuat pembayaran
+ok 26 - v53 meminta konfirmasi sebelum membuat pembayaran
+  ---
+  duration_ms: 0.143293
+  type: 'test'
+  ...
+# Subtest: Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale
+ok 27 - Flash Sale menampilkan nama varian tepat setelah nama produk dan jumlah terjual periode Flash Sale
+  ---
+  duration_ms: 0.194287
+  type: 'test'
+  ...
+# Subtest: pembayaran Link Auto Order tidak menampilkan link checkout eksternal
+ok 28 - pembayaran Link Auto Order tidak menampilkan link checkout eksternal
+  ---
+  duration_ms: 0.110874
+  type: 'test'
+  ...
+# Subtest: v63 seluruh submenu Pengaturan membuka halaman terpisah
+ok 29 - v63 seluruh submenu Pengaturan membuka halaman terpisah
+  ---
+  duration_ms: 1.723845
+  type: 'test'
+  ...
+# Subtest: v58 flash sale selalu satu baris horizontal
+ok 30 - v58 flash sale selalu satu baris horizontal
+  ---
+  duration_ms: 0.434666
+  type: 'test'
+  ...
+# Subtest: marketplace memakai invoice_display agar prefix gateway tidak terlihat
+ok 31 - marketplace memakai invoice_display agar prefix gateway tidak terlihat
+  ---
+  duration_ms: 0.415748
+  type: 'test'
+  ...
+# Subtest: promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif
+ok 32 - promo Flash Sale difilter dari promo biasa ketika jadwal tidak aktif
+  ---
+  duration_ms: 0.832962
+  type: 'test'
+  ...
+# Subtest: v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang tidak perlu
+ok 33 - v61 membersihkan kartu dashboard, produk, dan penjualan dari rincian yang tidak perlu
+  ---
+  duration_ms: 0.47357
+  type: 'test'
+  ...
+# Subtest: v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih
+ok 34 - v61 detail penjualan ringkas dan Atur Modal memakai Profit Bersih
+  ---
+  duration_ms: 0.364364
+  type: 'test'
+  ...
+# Subtest: v63 merapikan Flash Sale, katalog mobile, footer, dan grup Telegram
+ok 35 - v63 merapikan Flash Sale, katalog mobile, footer, dan grup Telegram
+  ---
+  duration_ms: 0.345986
+  type: 'test'
+  ...
+# Subtest: v63 dashboard mendukung status CANCELED dan kartu user ringkas
+ok 36 - v63 dashboard mendukung status CANCELED dan kartu user ringkas
+  ---
+  duration_ms: 1.309143
+  type: 'test'
+  ...
+# Subtest: pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslash
+ok 37 - pesan start memakai HTML sehingga nama toko bertitik tidak diberi backslash
+  ---
+  duration_ms: 0.784387
+  type: 'test'
+  ...
+# Subtest: v64 menempatkan status penjualan segaris dengan nama produk
+ok 38 - v64 menempatkan status penjualan segaris dengan nama produk
+  ---
+  duration_ms: 0.195286
+  type: 'test'
+  ...
+# Subtest: v64 merapikan kartu users pada layar sedang dan tombol hapus diperkecil
+ok 39 - v64 merapikan kartu users pada layar sedang dan tombol hapus diperkecil
+  ---
+  duration_ms: 0.164258
+  type: 'test'
+  ...
+# Subtest: v64 promo dan voucher memiliki kartu serta submenu ringkas
+ok 40 - v64 promo dan voucher memiliki kartu serta submenu ringkas
+  ---
+  duration_ms: 0.138469
+  type: 'test'
+  ...
+# Subtest: v64 menyediakan pengaturan tombol bot dan tombol Order Sekarang pada broadcast
+ok 41 - v64 menyediakan pengaturan tombol bot dan tombol Order Sekarang pada broadcast
+  ---
+  duration_ms: 2.030651
+  type: 'test'
+  ...
+# Subtest: v65 menambahkan dua saldo, referral, ledger, dan pending top up
+ok 42 - v65 menambahkan dua saldo, referral, ledger, dan pending top up
+  ---
+  duration_ms: 1.016714
+  type: 'test'
+  ...
+# Subtest: registrasi referral hanya memberi satu hadiah dan mendukung mode langsung atau pembelian pertama
+ok 43 - registrasi referral hanya memberi satu hadiah dan mendukung mode langsung atau pembelian pertama
+  ---
+  duration_ms: 0.557251
+  type: 'test'
+  ...
+# Subtest: bonus referral pembelian pertama diproses oleh trigger database
+ok 44 - bonus referral pembelian pertama diproses oleh trigger database
+  ---
+  duration_ms: 0.235053
+  type: 'test'
+  ...
+# Subtest: checkout saldo atomik memakai saldo utama dahulu lalu saldo referral
+ok 45 - checkout saldo atomik memakai saldo utama dahulu lalu saldo referral
+  ---
+  duration_ms: 0.461018
+  type: 'test'
+  ...
+# Subtest: top up divalidasi dan dikreditkan tepat satu kali
+ok 46 - top up divalidasi dan dikreditkan tepat satu kali
+  ---
+  duration_ms: 0.216379
+  type: 'test'
+  ...
+# Subtest: bot menyediakan halaman saldo, top up, referral, dan pilihan pembayaran
+ok 47 - bot menyediakan halaman saldo, top up, referral, dan pilihan pembayaran
+  ---
+  duration_ms: 0.20807
+  type: 'test'
+  ...
+# Subtest: dashboard memiliki pengaturan referral dan editor saldo setiap user
+ok 48 - dashboard memiliki pengaturan referral dan editor saldo setiap user
+  ---
+  duration_ms: 0.484333
+  type: 'test'
+  ...
+# Subtest: API owner dapat mengubah kedua saldo dengan catatan ledger
+ok 49 - API owner dapat mengubah kedua saldo dengan catatan ledger
+  ---
+  duration_ms: 0.240768
+  type: 'test'
+  ...
+# Subtest: schema instalasi baru sudah membundel migrasi v65
+ok 50 - schema instalasi baru sudah membundel migrasi v65
+  ---
+  duration_ms: 0.533222
+  type: 'test'
+  ...
+# Subtest: v66 memperbaiki referral untuk user lama yang belum pernah bertransaksi
+ok 51 - v66 memperbaiki referral untuk user lama yang belum pernah bertransaksi
+  ---
+  duration_ms: 0.868102
+  type: 'test'
+  ...
+# Subtest: bonus signup menggunakan ledger sebagai gerbang idempotensi
+ok 52 - bonus signup menggunakan ledger sebagai gerbang idempotensi
+  ---
+  duration_ms: 0.586489
+  type: 'test'
+  ...
+# Subtest: schema instalasi baru membundel fungsi v66
+ok 53 - schema instalasi baru membundel fungsi v66
+  ---
+  duration_ms: 0.215849
+  type: 'test'
+  ...
+# Subtest: notifikasi referral dikirim ke user dan channel
+ok 54 - notifikasi referral dikirim ke user dan channel
+  ---
+  duration_ms: 0.218632
+  type: 'test'
+  ...
+# Subtest: notifikasi top up dikirim ke channel hanya setelah kredit baru
+ok 55 - notifikasi top up dikirim ke channel hanya setelah kredit baru
+  ---
+  duration_ms: 0.309278
+  type: 'test'
+  ...
+# Subtest: channel saldo dapat memakai WALLET_CHANNEL dengan fallback CHANNEL_LOG
+ok 56 - channel saldo dapat memakai WALLET_CHANNEL dengan fallback CHANNEL_LOG
+  ---
+  duration_ms: 0.179335
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan saldo user segaris dengan header toko
+ok 57 - marketplace menampilkan saldo user segaris dengan header toko
+  ---
+  duration_ms: 0.766564
+  type: 'test'
+  ...
+# Subtest: katalog mengirim saldo aman tanpa ledger ke browser
+ok 58 - katalog mengirim saldo aman tanpa ledger ke browser
+  ---
+  duration_ms: 0.192342
+  type: 'test'
+  ...
+# Subtest: konfirmasi checkout menyediakan pilihan QRIS dan Saldo Bot
+ok 59 - konfirmasi checkout menyediakan pilihan QRIS dan Saldo Bot
+  ---
+  duration_ms: 0.144247
+  type: 'test'
+  ...
+# Subtest: API marketplace mengarahkan pembayaran saldo ke fulfillment atomik v65
+ok 60 - API marketplace mengarahkan pembayaran saldo ke fulfillment atomik v65
+  ---
+  duration_ms: 0.147232
+  type: 'test'
+  ...
+# Subtest: pembayaran saldo memperbarui header dan menampilkan sukses tanpa QRIS
+ok 61 - pembayaran saldo memperbarui header dan menampilkan sukses tanpa QRIS
+  ---
+  duration_ms: 0.184459
+  type: 'test'
+  ...
+# Subtest: banner marketplace menggunakan clone agar loop terus tanpa lompat visual
+ok 62 - banner marketplace menggunakan clone agar loop terus tanpa lompat visual
+  ---
+  duration_ms: 1.125916
+  type: 'test'
+  ...
+# Subtest: gambar produk, flash sale, dan detail dipaksa rasio 1 banding 1 termasuk HP
+ok 63 - gambar produk, flash sale, dan detail dipaksa rasio 1 banding 1 termasuk HP
+  ---
+  duration_ms: 0.531786
+  type: 'test'
+  ...
+# Subtest: deskripsi detail dapat dilipat dan dibuka lengkap
+ok 64 - deskripsi detail dapat dilipat dan dibuka lengkap
+  ---
+  duration_ms: 0.282531
+  type: 'test'
+  ...
+# Subtest: promo memakai persen dan harga promo ditampilkan sebelum harga coret
+ok 65 - promo memakai persen dan harga promo ditampilkan sebelum harga coret
+  ---
+  duration_ms: 0.344444
+  type: 'test'
+  ...
+# Subtest: produk dapat diset AUTO atau PRE-ORDER dari dashboard
+ok 66 - produk dapat diset AUTO atau PRE-ORDER dari dashboard
+  ---
+  duration_ms: 0.253281
+  type: 'test'
+  ...
+# Subtest: PO tidak memotong stok dan dicatat menunggu pengiriman secara atomik
+ok 67 - PO tidak memotong stok dan dicatat menunggu pengiriman secara atomik
+  ---
+  duration_ms: 1.243419
+  type: 'test'
+  ...
+# Subtest: pembayaran PO masuk status awaiting_delivery bukan mengirim stok otomatis
+ok 68 - pembayaran PO masuk status awaiting_delivery bukan mengirim stok otomatis
+  ---
+  duration_ms: 0.331517
+  type: 'test'
+  ...
+# Subtest: seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir
+ok 69 - seller harus mengonfirmasi sebelum data PO dikirim dan canceled diblokir
+  ---
+  duration_ms: 0.340745
+  type: 'test'
+  ...
+# Subtest: data PO panjang dipecah menjadi beberapa pesan receipt agar tidak terpotong
+ok 70 - data PO panjang dipecah menjadi beberapa pesan receipt agar tidak terpotong
+  ---
+  duration_ms: 0.349855
+  type: 'test'
+  ...
+# Subtest: notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal
+ok 71 - notifikasi pembayaran PO dapat dicoba ulang jika Telegram sempat gagal
+  ---
+  duration_ms: 0.481279
+  type: 'test'
+  ...
+# Subtest: PO dapat diatur per varian dan disimpan di JSON varian
+ok 72 - PO dapat diatur per varian dan disimpan di JSON varian
+  ---
+  duration_ms: 1.366174
+  type: 'test'
+  ...
+# Subtest: checkout menyimpan snapshot mode pengiriman dan PO memakai RPC v69
+ok 73 - checkout menyimpan snapshot mode pengiriman dan PO memakai RPC v69
+  ---
+  duration_ms: 0.300692
+  type: 'test'
+  ...
+# Subtest: bot juga menghormati mode PO per varian
+ok 74 - bot juga menghormati mode PO per varian
+  ---
+  duration_ms: 0.221521
+  type: 'test'
+  ...
+# Subtest: voucher dihitung server sebelum modal konfirmasi dibuka
+ok 75 - voucher dihitung server sebelum modal konfirmasi dibuka
+  ---
+  duration_ms: 0.310652
+  type: 'test'
+  ...
+# Subtest: pesan produk PO memakai receipt final, SnK snapshot, dan blok kode tanpa tombol salin
+ok 76 - pesan produk PO memakai receipt final, SnK snapshot, dan blok kode tanpa tombol salin
+  ---
+  duration_ms: 0.429151
+  type: 'test'
+  ...
+# Subtest: Flash Sale dipadatkan dan menampilkan rating serta terjual dekat harga
+ok 77 - Flash Sale dipadatkan dan menampilkan rating serta terjual dekat harga
+  ---
+  duration_ms: 0.375887
+  type: 'test'
+  ...
+# Subtest: tombol simpan edit produk menjadi dock mengambang untuk HP dan tablet
+ok 78 - tombol simpan edit produk menjadi dock mengambang untuk HP dan tablet
+  ---
+  duration_ms: 0.378942
+  type: 'test'
+  ...
+# Subtest: reseller kembali ke UI klasik dan navigasi berada di bawah
+ok 79 - reseller kembali ke UI klasik dan navigasi berada di bawah
+  ---
+  duration_ms: 1.317142
+  type: 'test'
+  ...
+# Subtest: marketplace memakai visual klasik yang sama dan bottom navigation
+ok 80 - marketplace memakai visual klasik yang sama dan bottom navigation
+  ---
+  duration_ms: 0.364936
+  type: 'test'
+  ...
+# Subtest: fitur penting marketplace dan PO tetap ada
+ok 81 - fitur penting marketplace dan PO tetap ada
+  ---
+  duration_ms: 0.277456
+  type: 'test'
+  ...
+# Subtest: grafik menaruh omzet tepat di atas batang
+ok 82 - grafik menaruh omzet tepat di atas batang
+  ---
+  duration_ms: 0.77865
+  type: 'test'
+  ...
+# Subtest: menu reseller desktop dipusatkan dan users satu kolom rapi
+ok 83 - menu reseller desktop dipusatkan dan users satu kolom rapi
+  ---
+  duration_ms: 0.466701
+  type: 'test'
+  ...
+# Subtest: promo mempertahankan judul rapi dan diskon tidak mudah overflow
+ok 84 - promo mempertahankan judul rapi dan diskon tidak mudah overflow
+  ---
+  duration_ms: 0.531044
+  type: 'test'
+  ...
+# Subtest: marketplace search ikut scroll, katalog turun, close tetap terlihat
+ok 85 - marketplace search ikut scroll, katalog turun, close tetap terlihat
+  ---
+  duration_ms: 1.090094
+  type: 'test'
+  ...
+# Subtest: promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+ok 86 - promo tidak menduplikasi judul dan tombol edit hapus kembali ke bawah
+  ---
+  duration_ms: 0.931533
+  type: 'test'
+  ...
+# Subtest: dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+ok 87 - dashboard bisa menambah banner gambar dan banner bawaan serta mengubah urutan
+  ---
+  duration_ms: 1.060484
+  type: 'test'
+  ...
+# Subtest: marketplace merender banner bawaan dan banner gambar dalam satu carousel
+ok 88 - marketplace merender banner bawaan dan banner gambar dalam satu carousel
+  ---
+  duration_ms: 0.190563
+  type: 'test'
+  ...
+# Subtest: Cara Order marketplace mengikuti mode tombol toko
+ok 89 - Cara Order marketplace mengikuti mode tombol toko
+  ---
+  duration_ms: 0.126929
+  type: 'test'
+  ...
+# Subtest: banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+ok 90 - banner manager default ringkas dengan preview, Edit, dan Posisi Banner
+  ---
+  duration_ms: 0.772343
+  type: 'test'
+  ...
+# Subtest: marketplace banner mendukung swipe pointer dan drag
+ok 91 - marketplace banner mendukung swipe pointer dan drag
+  ---
+  duration_ms: 0.229592
+  type: 'test'
+  ...
+# Subtest: indikator banner lebih transparan
+ok 92 - indikator banner lebih transparan
+  ---
+  duration_ms: 0.097591
+  type: 'test'
+  ...
+# Subtest: Cara Order bot tetap tersedia dan memberi panduan pembelian
+ok 93 - Cara Order bot tetap tersedia dan memberi panduan pembelian
+  ---
+  duration_ms: 0.237097
+  type: 'test'
+  ...
+# Subtest: tombol Cara Order selalu ada di menu bot
+ok 94 - tombol Cara Order selalu ada di menu bot
+  ---
+  duration_ms: 1.261016
+  type: 'test'
+  ...
+# Subtest: panduan Cara Order memakai alur Marketplace saat marketplace aktif
+ok 95 - panduan Cara Order memakai alur Marketplace saat marketplace aktif
+  ---
+  duration_ms: 0.40457
+  type: 'test'
+  ...
+# Subtest: panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+ok 96 - panduan tetap memiliki fallback Daftar Produk bila marketplace dimatikan
+  ---
+  duration_ms: 0.30517
+  type: 'test'
+  ...
+# Subtest: v76 menambahkan konfigurasi ProdSeller hanya di server
+ok 97 - v76 menambahkan konfigurasi ProdSeller hanya di server
+  ---
+  duration_ms: 1.344019
+  type: 'test'
+  ...
+# Subtest: service ProdSeller memakai X-API-Key dan Idempotency-Key
+ok 98 - service ProdSeller memakai X-API-Key dan Idempotency-Key
+  ---
+  duration_ms: 0.292884
+  type: 'test'
+  ...
+# Subtest: produk supplier dipilih satu per satu dari dashboard
+ok 99 - produk supplier dipilih satu per satu dari dashboard
+  ---
+  duration_ms: 1.97287
+  type: 'test'
+  ...
+# Subtest: checkout memverifikasi stok supplier sebelum pelanggan membayar
+ok 100 - checkout memverifikasi stok supplier sebelum pelanggan membayar
+  ---
+  duration_ms: 1.836068
+  type: 'test'
+  ...
+# Subtest: fulfillment supplier hanya setelah order lunas dan aman untuk retry
+ok 101 - fulfillment supplier hanya setelah order lunas dan aman untuk retry
+  ---
+  duration_ms: 0.645834
+  type: 'test'
+  ...
+# Subtest: migration v76 menyimpan metadata produk dan order supplier
+ok 102 - migration v76 menyimpan metadata produk dan order supplier
+  ---
+  duration_ms: 0.321069
+  type: 'test'
+  ...
+# Subtest: pengiriman PO final memakai format PEMBAYARAN BERHASIL yang seragam
+ok 103 - pengiriman PO final memakai format PEMBAYARAN BERHASIL yang seragam
+  ---
+  duration_ms: 0.968265
+  type: 'test'
+  ...
+# Subtest: popup dashboard menutup menu bawah dan berada di lapisan teratas
+ok 104 - popup dashboard menutup menu bawah dan berada di lapisan teratas
+  ---
+  duration_ms: 1.365718
+  type: 'test'
+  ...
+# Subtest: stok supplier dihitung dari saldo dan stok aktual supplier
+ok 105 - stok supplier dihitung dari saldo dan stok aktual supplier
+  ---
+  duration_ms: 0.476971
+  type: 'test'
+  ...
+# Subtest: marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+ok 106 - marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER
+  ---
+  duration_ms: 0.34229
+  type: 'test'
+  ...
+# Subtest: produk supplier tidak dicampur ke menu Pesanan PO
+ok 107 - produk supplier tidak dicampur ke menu Pesanan PO
+  ---
+  duration_ms: 2.193744
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan loadSupplier
+ok 108 - dashboard v78 mendefinisikan loadSupplier
+  ---
+  duration_ms: 0.945868
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan renderStats
+ok 109 - dashboard v78 mendefinisikan renderStats
+  ---
+  duration_ms: 0.333514
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan renderCharts
+ok 110 - dashboard v78 mendefinisikan renderCharts
+  ---
+  duration_ms: 0.278481
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan productMatches
+ok 111 - dashboard v78 mendefinisikan productMatches
+  ---
+  duration_ms: 0.275054
+  type: 'test'
+  ...
+# Subtest: dashboard v78 mendefinisikan productInitial
+ok 112 - dashboard v78 mendefinisikan productInitial
+  ---
+  duration_ms: 0.274302
+  type: 'test'
+  ...
+# Subtest: metadata ProdSeller dapat disimpan pada masing-masing varian
+ok 113 - metadata ProdSeller dapat disimpan pada masing-masing varian
+  ---
+  duration_ms: 2.599337
+  type: 'test'
+  ...
+# Subtest: dashboard dapat memilih produk baru atau varian produk yang sudah ada
+ok 114 - dashboard dapat memilih produk baru atau varian produk yang sudah ada
+  ---
+  duration_ms: 1.715358
+  type: 'test'
+  ...
+# Subtest: import reseller ke varian mempertahankan produk lama sebagai varian Utama bila perlu
+ok 115 - import reseller ke varian mempertahankan produk lama sebagai varian Utama bila perlu
+  ---
+  duration_ms: 1.676717
+  type: 'test'
+  ...
+# Subtest: marketplace menghitung stok live per Product ID supplier pada varian
+ok 116 - marketplace menghitung stok live per Product ID supplier pada varian
+  ---
+  duration_ms: 0.65046
+  type: 'test'
+  ...
+# Subtest: checkout dan fulfillment memakai Product ID milik varian yang dipilih
+ok 117 - checkout dan fulfillment memakai Product ID milik varian yang dipilih
+  ---
+  duration_ms: 1.187718
+  type: 'test'
+  ...
+# Subtest: varian supplier tidak masuk PO manual dan stok lokalnya tidak dapat diedit
+ok 118 - varian supplier tidak masuk PO manual dan stok lokalnya tidak dapat diedit
+  ---
+  duration_ms: 2.857684
+  type: 'test'
+  ...
+# Subtest: produk campuran lokal dan supplier tetap didukung
+ok 119 - produk campuran lokal dan supplier tetap didukung
+  ---
+  duration_ms: 0.787292
+  type: 'test'
+  ...
+# Subtest: daftar produk bot memakai pagination 10 produk per halaman
+ok 120 - daftar produk bot memakai pagination 10 produk per halaman
+  ---
+  duration_ms: 1.634151
+  type: 'test'
+  ...
+# Subtest: produk supplier di bot tampil sebagai stok ready berdasarkan saldo dan stok ProdSeller
+ok 121 - produk supplier di bot tampil sebagai stok ready berdasarkan saldo dan stok ProdSeller
+  ---
+  duration_ms: 0.858322
+  type: 'test'
+  ...
+# Subtest: varian supplier tidak lagi memakai array stok lokal untuk menentukan stok
+ok 122 - varian supplier tidak lagi memakai array stok lokal untuk menentukan stok
+  ---
+  duration_ms: 0.80065
+  type: 'test'
+  ...
+# Subtest: tombol bot menggunakan style warna resmi Telegram
+ok 123 - tombol bot menggunakan style warna resmi Telegram
+  ---
+  duration_ms: 0.9376
+  type: 'test'
+  ...
+# Subtest: read berat bot diberi cache singkat dan start tidak mengulang upsert setelah registrasi referral
+ok 124 - read berat bot diberi cache singkat dan start tidak mengulang upsert setelah registrasi referral
+  ---
+  duration_ms: 1.605913
+  type: 'test'
+  ...
+# Subtest: bot QRIS tidak menampilkan tombol halaman pembayaran
+ok 125 - bot QRIS tidak menampilkan tombol halaman pembayaran
+  ---
+  duration_ms: 1.088703
+  type: 'test'
+  ...
+# Subtest: invoice bot tetap memakai referensi lokal
+ok 126 - invoice bot tetap memakai referensi lokal
+  ---
+  duration_ms: 0.634587
+  type: 'test'
+  ...
+# Subtest: pembayaran otomatis memakai polling 30 detik tanpa callback wajib
+ok 127 - pembayaran otomatis memakai polling 30 detik tanpa callback wajib
+  ---
+  duration_ms: 0.29244
+  type: 'test'
+  ...
+# Subtest: marketplace tidak menampilkan link checkout eksternal
+ok 128 - marketplace tidak menampilkan link checkout eksternal
+  ---
+  duration_ms: 0.422652
+  type: 'test'
+  ...
+# Subtest: label provider pada UI adalah QRIS
+ok 129 - label provider pada UI adalah QRIS
+  ---
+  duration_ms: 0.314337
+  type: 'test'
+  ...
+# Subtest: owner compatibility accepts OWNER_ID, OWNER_IDS and DEV_OWNER_ID
+ok 130 - owner compatibility accepts OWNER_ID, OWNER_IDS and DEV_OWNER_ID
+  ---
+  duration_ms: 1.276311
+  type: 'test'
+  ...
+# Subtest: dashboard owner button and command are available
+ok 131 - dashboard owner button and command are available
+  ---
+  duration_ms: 0.57881
+  type: 'test'
+  ...
+# Subtest: legacy Link Auto Account environment aliases remain supported
+ok 132 - legacy Link Auto Account environment aliases remain supported
+  ---
+  duration_ms: 0.165066
+  type: 'test'
+  ...
+# Subtest: callback router no longer answers every callback before validation
+ok 133 - callback router no longer answers every callback before validation
+  ---
+  duration_ms: 0.396514
+  type: 'test'
+  ...
+# Subtest: dashboard Mini App owner authentication uses all configured owner IDs
+ok 134 - dashboard Mini App owner authentication uses all configured owner IDs
+  ---
+  duration_ms: 0.165095
+  type: 'test'
+  ...
+# Subtest: settings support required channel, transaction channel and hidden total users
+ok 135 - settings support required channel, transaction channel and hidden total users
+  ---
+  duration_ms: 3.2988
+  type: 'test'
+  ...
+# Subtest: telegram membership check gates bot usage and has recheck button
+ok 136 - telegram membership check gates bot usage and has recheck button
+  ---
+  duration_ms: 2.06236
+  type: 'test'
+  ...
+# Subtest: legacy Markdown escaping no longer adds visible slashes before punctuation
+ok 137 - legacy Markdown escaping no longer adds visible slashes before punctuation
+  ---
+  duration_ms: 0.703678
+  type: 'test'
+  ...
+# Subtest: transaction success notification also covers supplier fulfillment and uses configurable channel
+ok 138 - transaction success notification also covers supplier fulfillment and uses configurable channel
+  ---
+  duration_ms: 0.585555
+  type: 'test'
+  ...
+# Subtest: mobile edit save dock is placed near bottom instead of 108px above it
+ok 139 - mobile edit save dock is placed near bottom instead of 108px above it
+  ---
+  duration_ms: 2.137213
+  type: 'test'
+  ...
+# Subtest: transaction notification lock has direct job_locks fallback
+ok 140 - transaction notification lock has direct job_locks fallback
+  ---
+  duration_ms: 1.459181
+  type: 'test'
+  ...
+# Subtest: completed order notification is independent from buyer receipt and can be recovered
+ok 141 - completed order notification is independent from buyer receipt and can be recovered
+  ---
+  duration_ms: 2.811912
+  type: 'test'
+  ...
+# Subtest: delivered product uses code block without copy buttons
+ok 142 - delivered product uses code block without copy buttons
+  ---
+  duration_ms: 0.823385
+  type: 'test'
+  ...
+# Subtest: store name is used by bot and synced to Telegram display name
+ok 143 - store name is used by bot and synced to Telegram display name
+  ---
+  duration_ms: 3.106903
+  type: 'test'
+  ...
+# Subtest: placeholder dinamis workflow dirender sesuai order
+ok 144 - placeholder dinamis workflow dirender sesuai order
+  ---
+  duration_ms: 1.511248
+  type: 'test'
+  ...
+# Subtest: workflow campuran kirim teks dan klik tombol dapat direplay sampai hasil
+ok 145 - workflow campuran kirim teks dan klik tombol dapat direplay sampai hasil
+  ---
+  duration_ms: 5715.329763
+  type: 'test'
+  ...
+# Subtest: migration v82 membuat tabel workflow server-side
+ok 146 - migration v82 membuat tabel workflow server-side
+  ---
+  duration_ms: 0.394778
+  type: 'test'
+  ...
+# Subtest: dashboard menyediakan recorder tombol dan teks
+ok 147 - dashboard menyediakan recorder tombol dan teks
+  ---
+  duration_ms: 1.337607
+  type: 'test'
+  ...
+# Subtest: fulfillment mengenali telegram_workflow sebelum ProdSeller
+ok 148 - fulfillment mengenali telegram_workflow sebelum ProdSeller
+  ---
+  duration_ms: 0.464466
+  type: 'test'
+  ...
+# Subtest: workflow activation tidak menghapus stok lokal dan menyimpan snapshot link lama
+ok 149 - workflow activation tidak menghapus stok lokal dan menyimpan snapshot link lama
+  ---
+  duration_ms: 0.788434
+  type: 'test'
+  ...
+# Subtest: workflow hanya retry otomatis sebelum mulai dan tidak membuat runner berantai saat sudah running
+ok 150 - workflow hanya retry otomatis sebelum mulai dan tidak membuat runner berantai saat sudah running
+  ---
+  duration_ms: 0.572927
+  type: 'test'
+  ...
+# Subtest: teleproto loader memprioritaskan CommonJS untuk menghindari directory import error Vercel
+ok 151 - teleproto loader memprioritaskan CommonJS untuk menghindari directory import error Vercel
+  ---
+  duration_ms: 0.142459
+  type: 'test'
+  ...
+# Subtest: workflow reseller tidak masuk menu PO manual dan tidak bisa dikirim manual
+ok 152 - workflow reseller tidak masuk menu PO manual dan tidak bisa dikirim manual
+  ---
+  duration_ms: 1.203949
+  type: 'test'
+  ...
+# Subtest: edit produk atau varian workflow mempertahankan stok lokal lama
+ok 153 - edit produk atau varian workflow mempertahankan stok lokal lama
+  ---
+  duration_ms: 1.835927
+  type: 'test'
+  ...
+# Subtest: default timeout workflow konsisten 7000 ms dan dependency teleproto dipasang oleh Vercel
+ok 154 - default timeout workflow konsisten 7000 ms dan dependency teleproto dipasang oleh Vercel
+  ---
+  duration_ms: 1.085649
+  type: 'test'
+  ...
+# Subtest: recorder menangkap lebih dari satu pesan supplier setelah satu aksi
+ok 155 - recorder menangkap lebih dari satu pesan supplier setelah satu aksi
+  ---
+  duration_ms: 1907.03558
+  type: 'test'
+  ...
+# Subtest: response yang dipilih admin diprioritaskan saat replay
+ok 156 - response yang dipilih admin diprioritaskan saat replay
+  ---
+  duration_ms: 0.343418
+  type: 'test'
+  ...
+# Subtest: dashboard membagi step teks menjadi jumlah pembelian atau teks lainnya
+ok 157 - dashboard membagi step teks menjadi jumlah pembelian atau teks lainnya
+  ---
+  duration_ms: 1.349534
+  type: 'test'
+  ...
+# Subtest: API quantity selalu merekam placeholder quantity dan mendukung pemilihan message_id
+ok 158 - API quantity selalu merekam placeholder quantity dan mendukung pemilihan message_id
+  ---
+  duration_ms: 0.532212
+  type: 'test'
+  ...
+# Subtest: migration v82.1 hanya menambah kolom recorder multi-message
+ok 159 - migration v82.1 hanya menambah kolom recorder multi-message
+  ---
+  duration_ms: 0.28977
+  type: 'test'
+  ...
+# Subtest: v82.2 mempunyai jurnal step unik per invoice untuk memblokir replay supplier
+ok 160 - v82.2 mempunyai jurnal step unik per invoice untuk memblokir replay supplier
+  ---
+  duration_ms: 1.744827
+  type: 'test'
+  ...
+# Subtest: runner tidak menjadwalkan ulang invoice yang sudah running
+ok 161 - runner tidak menjadwalkan ulang invoice yang sudah running
+  ---
+  duration_ms: 0.175662
+  type: 'test'
+  ...
+# Subtest: produk workflow bervarian dipilih langsung sebagai target varian
+ok 162 - produk workflow bervarian dipilih langsung sebagai target varian
+  ---
+  duration_ms: 1.478371
+  type: 'test'
+  ...
+# Subtest: receipt final seragam dan tidak mengandung tombol Salin Produk
+ok 163 - receipt final seragam dan tidak mengandung tombol Salin Produk
+  ---
+  duration_ms: 1.232418
+  type: 'test'
+  ...
+# Subtest: v82.3 migration membuat supplier manual, modal workflow, ledger, dan debit idempotent
+ok 164 - v82.3 migration membuat supplier manual, modal workflow, ledger, dan debit idempotent
+  ---
+  duration_ms: 1.096779
+  type: 'test'
+  ...
+# Subtest: db mendukung edit/salin workflow dan edit/hapus step
+ok 165 - db mendukung edit/salin workflow dan edit/hapus step
+  ---
+  duration_ms: 0.821932
+  type: 'test'
+  ...
+# Subtest: stok workflow dihitung dari saldo manual dibagi modal
+ok 166 - stok workflow dihitung dari saldo manual dibagi modal
+  ---
+  duration_ms: 0.771684
+  type: 'test'
+  ...
+# Subtest: payment workflow mengecek saldo dan mendebit modal setelah hasil supplier didapat
+ok 167 - payment workflow mengecek saldo dan mendebit modal setelah hasil supplier didapat
+  ---
+  duration_ms: 0.398269
+  type: 'test'
+  ...
+# Subtest: dashboard supplier ringkas dan workflow bisa edit/salin
+ok 168 - dashboard supplier ringkas dan workflow bisa edit/salin
+  ---
+  duration_ms: 2.046788
+  type: 'test'
+  ...
+# Subtest: produk workflow bervarian tetap dipilih langsung per varian dan menampilkan stok saldo/modal
+ok 169 - produk workflow bervarian tetap dipilih langsung per varian dan menampilkan stok saldo/modal
+  ---
+  duration_ms: 1.815595
+  type: 'test'
+  ...
+# Subtest: API edit workflow aktif kembali menjadi draft untuk keselamatan
+ok 170 - API edit workflow aktif kembali menjadi draft untuk keselamatan
+  ---
+  duration_ms: 0.707396
+  type: 'test'
+  ...
+# Subtest: bagian teks produk dapat direkam lalu diekstrak tanpa mengambil seluruh pesan
+ok 171 - bagian teks produk dapat direkam lalu diekstrak tanpa mengambil seluruh pesan
+  ---
+  duration_ms: 0.993626
+  type: 'test'
+  ...
+# Subtest: bagian angka stok dapat dipilih dan dibaca sebagai integer
+ok 172 - bagian angka stok dapat dipilih dan dibaca sebagai integer
+  ---
+  duration_ms: 0.221184
+  type: 'test'
+  ...
+# Subtest: stock probe berhenti tepat di step stok sehingga step pembelian setelahnya tidak dijalankan
+ok 173 - stock probe berhenti tepat di step stok sehingga step pembelian setelahnya tidak dijalankan
+  ---
+  duration_ms: 0.297099
+  type: 'test'
+  ...
+# Subtest: pemilihan produk dan varian melakukan refresh stok workflow dan gagal tertutup jika refresh gagal
+ok 174 - pemilihan produk dan varian melakukan refresh stok workflow dan gagal tertutup jika refresh gagal
+  ---
+  duration_ms: 1.550606
+  type: 'test'
+  ...
+# Subtest: tombol produk menggunakan Stok, habis merah, dan indikator halaman hijau dalam tanda kurung
+ok 175 - tombol produk menggunakan Stok, habis merah, dan indikator halaman hijau dalam tanda kurung
+  ---
+  duration_ms: 0.737577
+  type: 'test'
+  ...
+# Subtest: dashboard recorder menyediakan seleksi bagian produk dan angka stok
+ok 176 - dashboard recorder menyediakan seleksi bagian produk dan angka stok
+  ---
+  duration_ms: 2.463806
+  type: 'test'
+  ...
+# Subtest: stock probe live mengeksekusi prefix workflow dan tidak pernah mengirim step setelah capture_stock
+ok 177 - stock probe live mengeksekusi prefix workflow dan tidak pernah mengirim step setelah capture_stock
+  ---
+  duration_ms: 3811.171063
+  type: 'test'
+  ...
+# Subtest: migration v82.4 hanya menambah kolom ekstraksi dan live stock
+ok 178 - migration v82.4 hanya menambah kolom ekstraksi dan live stock
+  ---
+  duration_ms: 0.87859
+  type: 'test'
+  ...
+# Subtest: stok tidak bergantung pada angka contoh dan prefix-only membaca nilai terbaru
+ok 179 - stok tidak bergantung pada angka contoh dan prefix-only membaca nilai terbaru
+  ---
+  duration_ms: 0.82874
+  type: 'test'
+  ...
+# Subtest: suffix-only berarti seluruh bagian sebelum suffix adalah produk dinamis
+ok 180 - suffix-only berarti seluruh bagian sebelum suffix adalah produk dinamis
+  ---
+  duration_ms: 0.160876
+  type: 'test'
+  ...
+# Subtest: penanda balasan editable membedakan pesan dengan tombol yang sama
+ok 181 - penanda balasan editable membedakan pesan dengan tombol yang sama
+  ---
+  duration_ms: 0.603555
+  type: 'test'
+  ...
+# Subtest: penanda editable yang tidak cocok tidak fallback ke pesan ke-N
+ok 182 - penanda editable yang tidak cocok tidak fallback ke pesan ke-N
+  ---
+  duration_ms: 0.18405
+  type: 'test'
+  ...
+# Subtest: runtime extraction hanya memakai prefix dan suffix, bukan sample hasil rekaman
+ok 183 - runtime extraction hanya memakai prefix dan suffix, bukan sample hasil rekaman
+  ---
+  duration_ms: 1.782751
+  type: 'test'
+  ...
+# Subtest: editor step menyediakan penanda balasan serta batas teks stok dan produk yang editable
+ok 184 - editor step menyediakan penanda balasan serta batas teks stok dan produk yang editable
+  ---
+  duration_ms: 1.969348
+  type: 'test'
+  ...
+# Subtest: pesan customer saat proses otomatis tidak membocorkan supplier
+ok 185 - pesan customer saat proses otomatis tidak membocorkan supplier
+  ---
+  duration_ms: 1.3422
+  type: 'test'
+  ...
+# Subtest: timeout khusus step mengalahkan default workflow
+ok 186 - timeout khusus step mengalahkan default workflow
+  ---
+  duration_ms: 0.991763
+  type: 'test'
+  ...
+# Subtest: timeout khusus step dibatasi aman hingga 2 menit
+ok 187 - timeout khusus step dibatasi aman hingga 2 menit
+  ---
+  duration_ms: 0.958453
+  type: 'test'
+  ...
+# Subtest: runtime strict marker memakai matcher dan tidak berhenti hanya karena quiet window
+ok 188 - runtime strict marker memakai matcher dan tidak berhenti hanya karena quiet window
+  ---
+  duration_ms: 0.562378
+  type: 'test'
+  ...
+# Subtest: editor dan database mendukung waktu tunggu per step dengan fallback default
+ok 189 - editor dan database mendukung waktu tunggu per step dengan fallback default
+  ---
+  duration_ms: 2.45302
+  type: 'test'
+  ...
+# Subtest: migration v82.6 menambah kolom timeout per step tanpa mengubah workflow lama
+ok 190 - migration v82.6 menambah kolom timeout per step tanpa mengubah workflow lama
+  ---
+  duration_ms: 0.321092
+  type: 'test'
+  ...
+# Subtest: pengaturan bot memiliki ON OFF dan pesan maintenance editable
+ok 191 - pengaturan bot memiliki ON OFF dan pesan maintenance editable
+  ---
+  duration_ms: 2.875801
+  type: 'test'
+  ...
+# Subtest: mode maintenance memblokir pelanggan tetapi owner tetap bypass
+ok 192 - mode maintenance memblokir pelanggan tetapi owner tetap bypass
+  ---
+  duration_ms: 1.083142
+  type: 'test'
+  ...
+# Subtest: default maintenance message tidak menyebut supplier
+ok 193 - default maintenance message tidak menyebut supplier
+  ---
+  duration_ms: 0.758562
+  type: 'test'
+  ...
+# Subtest: workflow benar-benar melewati pesan sementara dan menunggu balasan yang cocok
+ok 194 - workflow benar-benar melewati pesan sementara dan menunggu balasan yang cocok
+  ---
+  duration_ms: 1055.73834
+  type: 'test'
+  ...
+1..194
+# tests 194
+# suites 0
+# pass 189
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6161.828212

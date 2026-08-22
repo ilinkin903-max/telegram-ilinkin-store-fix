@@ -1047,6 +1047,8 @@ async function getShopSettings() {
     customer_service_link: '',
     group_link: '',
     bot_menu_mode: 'both',
+    bot_enabled: 'true',
+    bot_maintenance_message: '🛠️ Bot sedang maintenance sementara.\n\nLayanan sedang dinonaktifkan selama ±15 menit untuk proses pemeliharaan. Silakan coba kembali setelah maintenance selesai.\n\nTerima kasih atas pengertiannya.',
     show_total_users: 'true',
     join_required_enabled: 'false',
     required_channel_id: '',
@@ -1102,6 +1104,8 @@ async function saveShopSettings(input = {}) {
     'customer_service_link',
     'group_link',
     'bot_menu_mode',
+    'bot_enabled',
+    'bot_maintenance_message',
     'show_total_users',
     'join_required_enabled',
     'required_channel_id',
@@ -2385,7 +2389,8 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     capture_stock: input.capture_stock === true,
     stock_extract_prefix: String(input.stock_extract_prefix || ''),
     stock_extract_suffix: String(input.stock_extract_suffix || ''),
-    stock_sample_text: String(input.stock_sample_text || '')
+    stock_sample_text: String(input.stock_sample_text || ''),
+    wait_timeout_ms: input.wait_timeout_ms === null || input.wait_timeout_ms === undefined || input.wait_timeout_ms === '' ? null : Math.max(1500, Math.min(120000, Number(input.wait_timeout_ms || 7000)))
   };
   const { data, error } = await sb().from('reseller_workflow_steps').insert(payload).select('*').single();
   if (error) throw error;
@@ -2445,6 +2450,7 @@ async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
   if (updates.response_snapshot !== undefined) payload.response_snapshot = updates.response_snapshot && typeof updates.response_snapshot === 'object' ? updates.response_snapshot : {};
   if (updates.response_snapshots !== undefined) payload.response_snapshots = Array.isArray(updates.response_snapshots) ? updates.response_snapshots : [];
   if (updates.response_selection_index !== undefined) payload.response_selection_index = Number.isInteger(Number(updates.response_selection_index)) ? Number(updates.response_selection_index) : -1;
+  if (updates.wait_timeout_ms !== undefined) payload.wait_timeout_ms = updates.wait_timeout_ms === null || updates.wait_timeout_ms === '' ? null : Math.max(1500, Math.min(120000, Number(updates.wait_timeout_ms || 7000)));
   const { data, error } = await sb().from('reseller_workflow_steps').update(payload).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
   return data || null;
@@ -2499,7 +2505,8 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       capture_stock: step.capture_stock === true,
       stock_extract_prefix: step.stock_extract_prefix || '',
       stock_extract_suffix: step.stock_extract_suffix || '',
-      stock_sample_text: ''
+      stock_sample_text: '',
+      wait_timeout_ms: step.wait_timeout_ms === null || step.wait_timeout_ms === undefined ? null : step.wait_timeout_ms
     });
   }
   return { workflow: copy, steps: await listResellerWorkflowSteps(copy.id) };

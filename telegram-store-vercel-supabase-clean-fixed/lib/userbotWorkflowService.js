@@ -201,14 +201,16 @@ async function getMessageById(client, target, messageId) {
   }
 }
 
-async function waitForSupplierResponses(client, target, beforeSnapshots = [], timeoutMs = 7000) {
+async function waitForSupplierResponses(client, target, beforeSnapshots = [], timeoutMs = 7000, options = {}) {
   const timeout = Math.max(1200, Number(timeoutMs || 7000));
+  const matcher = typeof options.matcher === 'function' ? options.matcher : null;
   const start = Date.now();
   const quietWindowMs = Math.min(2500, Math.max(1600, Math.round(timeout * 0.28)));
   const beforeMap = new Map((beforeSnapshots || []).filter(Boolean).map((snap) => [Number(snap.id || 0), snapshotSignature(snap)]));
   const collected = new Map();
   let lastChangeAt = 0;
   let latestSnapshots = [];
+  let matchedResponse = null;
 
   while (Date.now() - start < timeout) {
     await sleep(Date.now() - start < 1200 ? 350 : 500);
@@ -224,19 +226,23 @@ async function waitForSupplierResponses(client, target, beforeSnapshots = [], ti
         if (!previous || snapshotSignature(previous) !== signature) {
           collected.set(id, snap);
           changedThisPoll = true;
+          if (!matchedResponse && matcher && matcher(snap)) matchedResponse = snap;
         }
       }
     }
     if (changedThisPoll) lastChangeAt = Date.now();
-    if (collected.size && lastChangeAt && Date.now() - lastChangeAt >= quietWindowMs) break;
+    if (matchedResponse) break;
+    if (!matcher && collected.size && lastChangeAt && Date.now() - lastChangeAt >= quietWindowMs) break;
   }
 
   const responses = Array.from(collected.values()).sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
   const fallback = latestSnapshots[latestSnapshots.length - 1] || null;
   return {
     responses,
-    response: responses[responses.length - 1] || fallback,
-    changed: responses.length > 0
+    response: matchedResponse || responses[responses.length - 1] || fallback,
+    changed: responses.length > 0,
+    matched: Boolean(matchedResponse),
+    matched_response: matchedResponse
   };
 }
 
@@ -433,6 +439,14 @@ function parseStockNumber(value) {
   return Math.max(0, Math.floor(number));
 }
 
+
+function resolveStepTimeoutMs(workflow = {}, step = {}) {
+  const custom = Number(step?.wait_timeout_ms);
+  if (Number.isFinite(custom) && custom >= 1500) return Math.max(1500, Math.min(120000, Math.floor(custom)));
+  const fallback = Number(workflow?.step_timeout_ms || config.userbotStepTimeoutMs || 7000);
+  return Math.max(1500, Math.min(120000, Number.isFinite(fallback) ? Math.floor(fallback) : 7000));
+}
+
 function renderTemplate(value, context = {}) {
   const map = {
     quantity: context.quantity ?? 1,
@@ -479,7 +493,14 @@ async function executeActionWithClient(client, options = {}) {
     await clickMessageButton(clickable, actionValue);
   }
 
-  const waited = await waitForSupplierResponses(client, target, beforeSnapshots, options.timeout_ms || options.timeoutMs || 7000);
+  const strictExpected = options.wait_for_match === true && hasStrictEditableResponseMarker(options.response_snapshot || null);
+  const waited = await waitForSupplierResponses(
+    client,
+    target,
+    beforeSnapshots,
+    options.timeout_ms || options.timeoutMs || 7000,
+    strictExpected ? { matcher: (snapshot) => responseMatchesRecorded(snapshot, options.response_snapshot || null) } : {}
+  );
   return {
     target,
     action_type: actionType,
@@ -556,12 +577,15 @@ async function runWorkflowSteps(options = {}) {
     for (let index = startIndex; index < steps.length; index += 1) {
       const step = steps[index];
       if (typeof options.on_before_step === 'function') await options.on_before_step({ index, step, last_response: lastResponse });
+      const timeoutMs = resolveStepTimeoutMs(workflow, step);
       const action = await executeActionWithClient(client, {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
         message_id: lastResponse?.id || null,
-        timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+        timeout_ms: timeoutMs,
+        response_snapshot: step.response_snapshot || null,
+        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null),
         context
       });
       if (!action.response_changed || !(action.responses || []).length) {
@@ -588,7 +612,7 @@ async function runWorkflowSteps(options = {}) {
           target,
           action.responses || [],
           step.response_snapshot || null,
-          Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+          timeoutMs,
           Number(step.response_selection_index ?? -1)
         );
         if (!lastResponse && hasStrictEditableResponseMarker(step.response_snapshot || null)) {
@@ -645,12 +669,15 @@ async function runWorkflowStockProbe(options = {}) {
     let lastResponse = null;
     for (let index = 0; index <= stockIndex; index += 1) {
       const step = steps[index];
+      const timeoutMs = resolveStepTimeoutMs(workflow, step);
       const action = await executeActionWithClient(client, {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
         message_id: lastResponse?.id || null,
-        timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+        timeout_ms: timeoutMs,
+        response_snapshot: step.response_snapshot || null,
+        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null),
         context: options.context || { quantity: 1, invoice: 'STOCK-CHECK', telegram_id: 0, username: 'stock-check', custom_input: '' }
       });
       if (!action.response_changed || !(action.responses || []).length) {
@@ -698,6 +725,7 @@ module.exports = {
   deriveTextSelectionRule,
   extractTextByRule,
   parseStockNumber,
+  resolveStepTimeoutMs,
   runWorkflowStockProbe,
   runWorkflowSteps,
   __setClientFactoryForTests

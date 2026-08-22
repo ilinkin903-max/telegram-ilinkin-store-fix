@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "4.22.0",
+  "version": "4.23.0",
   "private": true,
-  "description": "Link Auto Order v82.5: boundary-based stock/product extraction, editable workflow response markers, and private automatic processing notices.",
+  "description": "Link Auto Order v82.6: per-step workflow timeout, strict matching waits, and editable Telegram maintenance mode.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

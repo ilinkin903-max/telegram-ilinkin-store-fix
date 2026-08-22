@@ -516,6 +516,27 @@ function settingEnabled(value, fallback = true) {
   return !['false', '0', 'off', 'no'].includes(String(value).trim().toLowerCase());
 }
 
+function botMaintenanceMessage(settings = {}) {
+  const custom = String(settings.bot_maintenance_message || '').trim();
+  if (custom) return custom;
+  return '🛠️ Bot sedang maintenance sementara.\n\nLayanan sedang dinonaktifkan selama ±15 menit untuk proses pemeliharaan. Silakan coba kembali setelah maintenance selesai.\n\nTerima kasih atas pengertiannya.';
+}
+
+async function blockCustomerDuringMaintenance(update = {}) {
+  const actor = update.message?.from || update.callback_query?.from || null;
+  if (!actor?.id || isOwner(actor.id)) return false;
+  const settings = await cachedSettings(true).catch(() => ({}));
+  if (settingEnabled(settings.bot_enabled, true)) return false;
+
+  const query = update.callback_query || null;
+  if (query) {
+    await answerCallback(query, { text: 'Bot sedang maintenance.', show_alert: false }).catch(() => null);
+  }
+  const chatId = update.message?.chat?.id || query?.message?.chat?.id || actor.id;
+  if (chatId) await tg.sendMessage(chatId, botMaintenanceMessage(settings)).catch(() => null);
+  return true;
+}
+
 function startReferralCode(text) {
   const body = String(text || '').trim().split(/\s+/).slice(1).join(' ').trim();
   const match = body.match(/^ref[_-]([a-z0-9]+)$/i);
@@ -2282,6 +2303,7 @@ async function handleCallbackQuery(query, req) {
 }
 
 async function handleUpdate(update, req) {
+  if ((update.message || update.callback_query) && await blockCustomerDuringMaintenance(update)) return null;
   if (update.poll_answer) return db.recordPollAnswer(update.poll_answer).catch((e) => console.error('Gagal simpan poll answer:', e.message));
   if (update.poll) return db.recordPollUpdate(update.poll).catch((e) => console.error('Gagal update poll:', e.message));
   if (update.message) return handleTextMessage(update.message, req);

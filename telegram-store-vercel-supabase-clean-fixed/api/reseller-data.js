@@ -773,6 +773,10 @@ module.exports = async function handler(req, res) {
       if (!actionValue) return json(res, 400, { ok: false, error: actionType === 'button' ? 'Teks tombol wajib diisi.' : 'Teks step wajib diisi.' });
 
       const updates = { action_type: actionType, text_category: textCategory, action_value: actionValue };
+      if (body.wait_timeout_ms !== undefined) {
+        const rawWait = String(body.wait_timeout_ms ?? '').trim();
+        updates.wait_timeout_ms = rawWait ? Math.max(1500, Math.min(120000, Number(rawWait || 7000))) : null;
+      }
       if (body.response_expected_text !== undefined) {
         // expected_text sengaja boleh kosong: kosong berarti pencocokan teks dimatikan dan, jika ada, tombol menjadi penanda.
         updates.response_snapshot = { ...(currentStep.response_snapshot || {}), expected_text: String(body.response_expected_text || '').trim() };
@@ -1193,6 +1197,8 @@ module.exports = async function handler(req, res) {
         customer_service_link: body.customer_service_link,
         group_link: body.group_link,
         bot_menu_mode: body.bot_menu_mode,
+        bot_enabled: body.bot_enabled,
+        bot_maintenance_message: body.bot_maintenance_message,
         show_total_users: body.show_total_users,
         join_required_enabled: body.join_required_enabled,
         required_channel_id: body.required_channel_id,
