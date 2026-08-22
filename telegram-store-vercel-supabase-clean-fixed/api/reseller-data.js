@@ -773,6 +773,7 @@ module.exports = async function handler(req, res) {
       if (!actionValue) return json(res, 400, { ok: false, error: actionType === 'button' ? 'Teks tombol wajib diisi.' : 'Teks step wajib diisi.' });
 
       const updates = { action_type: actionType, text_category: textCategory, action_value: actionValue };
+      if (body.response_mode !== undefined) updates.response_mode = actionType === 'button' && String(body.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait';
       if (body.wait_timeout_ms !== undefined) {
         const rawWait = String(body.wait_timeout_ms ?? '').trim();
         updates.wait_timeout_ms = rawWait ? Math.max(1500, Math.min(120000, Number(rawWait || 7000))) : null;
@@ -793,6 +794,7 @@ module.exports = async function handler(req, res) {
         // angka rekaman (mis. 32) tidak boleh menjadi patokan stok.
         updates.stock_sample_text = '';
       }
+      if (currentStep.capture_result === true || currentStep.capture_stock === true) updates.response_mode = 'wait';
       const step = await db.updateResellerWorkflowStep(workflow.id, currentStep.id, updates);
       return json(res, 200, { ok: true, data: step });
     }
@@ -836,28 +838,61 @@ module.exports = async function handler(req, res) {
       const existingSteps = await db.listResellerWorkflowSteps(workflow.id);
       const previousStep = existingSteps[existingSteps.length - 1] || null;
       const requestedMessageId = Number(body.message_id || 0);
-      if (previousStep && requestedMessageId) {
-        const mergedCandidates = [];
-        const seen = new Set();
-        [
-          ...(Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots : []),
-          ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
-        ].forEach((snap) => {
-          const id = Number(snap?.id || 0);
-          if (!id || seen.has(id)) return;
-          seen.add(id);
-          mergedCandidates.push(snap);
-        });
-        const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, previousStep.id, requestedMessageId, mergedCandidates);
-        workflow = await db.updateResellerWorkflow(workflow.id, {
-          last_message_id: selectedStep?.response_snapshot?.id || requestedMessageId,
-          last_message_snapshot: selectedStep?.response_snapshot || {},
-          recent_message_snapshots: mergedCandidates
-        }) || workflow;
+      if (previousStep && requestedMessageId && !Number(previousStep.response_snapshot?.id || 0)) {
+        const previousCandidates = Array.isArray(previousStep.response_snapshots)
+          ? previousStep.response_snapshots.filter((snap) => Number(snap?.id || 0) > 0)
+          : [];
+        const matchingCandidate = previousCandidates.find((snap) => Number(snap?.id || 0) === requestedMessageId) || null;
+        const sourceSnapshot = previousStep.source_message_snapshot && typeof previousStep.source_message_snapshot === 'object'
+          ? previousStep.source_message_snapshot
+          : {};
+
+        if (matchingCandidate) {
+          // Ada perubahan/balasan nyata pada message yang sama atau pesan baru: rekam sebagai balasan normal.
+          const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, previousStep.id, requestedMessageId, previousCandidates);
+          workflow = await db.updateResellerWorkflow(workflow.id, {
+            last_message_id: selectedStep?.response_snapshot?.id || requestedMessageId,
+            last_message_snapshot: selectedStep?.response_snapshot || matchingCandidate,
+            recent_message_snapshots: previousCandidates
+          }) || workflow;
+        } else if (Number(sourceSnapshot?.id || 0) === requestedMessageId && String(previousStep.action_type || '') === 'button') {
+          // Tombol berikutnya ditekan pada pesan Telegram yang sama, sementara klik sebelumnya
+          // memang tidak menghasilkan pesan/edit baru. Ini adalah rangkaian pilihan dalam SATU pesan.
+          const sameMessageStep = await db.updateResellerWorkflowStep(workflow.id, previousStep.id, {
+            response_mode: 'same_message',
+            response_snapshot: sourceSnapshot,
+            response_selection_index: -1
+          });
+          workflow = await db.updateResellerWorkflow(workflow.id, {
+            last_message_id: requestedMessageId,
+            last_message_snapshot: sourceSnapshot,
+            recent_message_snapshots: previousCandidates
+          }) || workflow;
+        } else {
+          const mergedCandidates = [];
+          const seen = new Set();
+          [
+            ...previousCandidates,
+            ...(Array.isArray(workflow.recent_message_snapshots) ? workflow.recent_message_snapshots : [])
+          ].forEach((snap) => {
+            const id = Number(snap?.id || 0);
+            if (!id || seen.has(id)) return;
+            seen.add(id);
+            mergedCandidates.push(snap);
+          });
+          if (mergedCandidates.some((snap) => Number(snap?.id || 0) === requestedMessageId)) {
+            const selectedStep = await db.selectResellerWorkflowStepResponse(workflow.id, previousStep.id, requestedMessageId, mergedCandidates);
+            workflow = await db.updateResellerWorkflow(workflow.id, {
+              last_message_id: selectedStep?.response_snapshot?.id || requestedMessageId,
+              last_message_snapshot: selectedStep?.response_snapshot || {},
+              recent_message_snapshots: mergedCandidates
+            }) || workflow;
+          }
+        }
       } else if (previousStep && !Number(previousStep.response_snapshot?.id || 0)) {
         // Bila admin lanjut dengan kirim teks tanpa menekan "Pilih Pesan Ini", finalisasi
-        // otomatis ke pesan terakhir yang masih terlihat. Seluruh pesan yang sempat direkam
-        // tetap disimpan sebagai kandidat/riwayat sehingga tidak hilang dari recorder.
+        // otomatis ke pesan terakhir yang benar-benar berubah. Jika tombol sebelumnya tidak
+        // menimbulkan balasan sama sekali, tandai sebagai lanjut pada pesan yang sama.
         const previousCandidates = Array.isArray(previousStep.response_snapshots) ? previousStep.response_snapshots.filter((snap) => Number(snap?.id || 0) > 0) : [];
         const visible = previousCandidates.filter((snap) => snap?.currently_visible !== false);
         const autoCandidate = visible[visible.length - 1] || previousCandidates[previousCandidates.length - 1] || null;
@@ -866,6 +901,18 @@ module.exports = async function handler(req, res) {
           workflow = await db.updateResellerWorkflow(workflow.id, {
             last_message_id: selectedStep?.response_snapshot?.id || autoCandidate.id,
             last_message_snapshot: selectedStep?.response_snapshot || autoCandidate,
+            recent_message_snapshots: previousCandidates
+          }) || workflow;
+        } else if (String(previousStep.action_type || '') === 'button' && Number(previousStep.source_message_snapshot?.id || 0)) {
+          const sourceSnapshot = previousStep.source_message_snapshot;
+          await db.updateResellerWorkflowStep(workflow.id, previousStep.id, {
+            response_mode: 'same_message',
+            response_snapshot: sourceSnapshot,
+            response_selection_index: -1
+          });
+          workflow = await db.updateResellerWorkflow(workflow.id, {
+            last_message_id: Number(sourceSnapshot.id),
+            last_message_snapshot: sourceSnapshot,
             recent_message_snapshots: previousCandidates
           }) || workflow;
         }
@@ -889,6 +936,7 @@ module.exports = async function handler(req, res) {
         action_value: actionValue,
         message_id: requestedMessageId || workflow.last_message_id || null,
         timeout_ms: Number(workflow.step_timeout_ms || config.userbotStepTimeoutMs || 7000),
+        recorder_mode: true,
         context
       });
       const rawResponses = Array.isArray(result.responses) ? result.responses : [];
@@ -905,6 +953,8 @@ module.exports = async function handler(req, res) {
         response_snapshots: responses,
         response_selection_index: -1,
         recorder_before_snapshots: Array.isArray(result.before_snapshots) ? result.before_snapshots : [],
+        source_message_snapshot: result.source_message_snapshot || {},
+        response_mode: 'wait',
         capture_result: false
       });
       const updated = await db.updateResellerWorkflow(workflow.id, {
@@ -921,7 +971,8 @@ module.exports = async function handler(req, res) {
           response: null,
           response_changed: result.response_changed,
           selection_required: responses.length > 1,
-          recorder_live: true
+          recorder_live: true,
+          source_message_snapshot: result.source_message_snapshot || null
         }
       });
     }
@@ -1121,6 +1172,8 @@ module.exports = async function handler(req, res) {
       if (!steps.length) return json(res, 400, { ok: false, error: 'Workflow belum memiliki step.' });
       const unresolvedStep = steps.find((step) => Array.isArray(step.response_snapshots) && step.response_snapshots.length > 1 && !Number(step.response_snapshot?.id || 0));
       if (unresolvedStep) return json(res, 400, { ok: false, error: `Step ${unresolvedStep.step_order} menerima beberapa pesan supplier. Pilih dulu pesan yang direkam untuk step tersebut.` });
+      const missingResponseStep = steps.find((step) => String(step.response_mode || 'wait') !== 'same_message' && !Number(step.response_snapshot?.id || 0));
+      if (missingResponseStep) return json(res, 400, { ok: false, error: `Step ${missingResponseStep.step_order} belum memiliki balasan supplier. Jika tombol ini memang hanya memilih opsi di pesan yang sama, lanjutkan rekaman dengan menekan tombol berikutnya pada pesan tersebut agar sistem menandainya otomatis.` });
       if (!steps.some((step) => step.capture_result === true)) return json(res, 400, { ok: false, error: 'Tandai balasan hasil supplier sebagai Hasil Produk terlebih dahulu.' });
       const resultStep = steps.find((step) => step.capture_result === true);
       const stockStep = steps.find((step) => step.capture_stock === true);

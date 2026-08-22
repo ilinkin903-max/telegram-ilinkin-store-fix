@@ -1,0 +1,7 @@
+Link Auto Order v82.8.0 - Workflow Regression Test
+
+- JavaScript syntax check: PASS (api, lib, public, scripts, tests)
+- Workflow-related tests v82 through v82.8: 62/62 PASS
+- New same-message multi-button replay scenario: PASS
+  /start -> Paket Pro -> 30 Hari -> 3 -> Konfirmasi -> result
+  Intermediate button clicks used the same Telegram message ID without requiring new supplier messages.

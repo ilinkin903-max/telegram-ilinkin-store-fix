@@ -527,6 +527,7 @@ async function executeActionWithClient(client, options = {}) {
   const target = normalizeTarget(options.target);
   const actionType = String(options.action_type || options.actionType || '').trim().toLowerCase();
   const actionValue = String(options.action_value ?? options.actionValue ?? '').trim();
+  const responseMode = String(options.response_mode || options.responseMode || 'wait').trim().toLowerCase() === 'same_message' ? 'same_message' : 'wait';
   if (!['text', 'button'].includes(actionType)) throw new Error('Jenis step harus text atau button.');
   if (!actionValue) throw new Error(actionType === 'button' ? 'Pilih tombol supplier.' : 'Teks yang dikirim tidak boleh kosong.');
 
@@ -535,6 +536,7 @@ async function executeActionWithClient(client, options = {}) {
   const beforeMessage = beforeMessages[beforeMessages.length - 1] || null;
   const before = snapshotMessage(beforeMessage);
   let previewValue = actionValue;
+  let actionSource = null;
 
   if (actionType === 'text') {
     previewValue = renderTemplate(actionValue, options.context || {});
@@ -543,17 +545,50 @@ async function executeActionWithClient(client, options = {}) {
   } else {
     let clickable = beforeMessage;
     if (options.message_id) clickable = await getMessageById(client, target, options.message_id) || beforeMessage;
+    actionSource = snapshotMessage(clickable);
     await clickMessageButton(clickable, actionValue);
   }
 
-  const strictExpected = options.wait_for_match === true && hasStrictEditableResponseMarker(options.response_snapshot || null);
-  const waited = await waitForSupplierResponses(
-    client,
-    target,
-    beforeSnapshots,
-    options.timeout_ms || options.timeoutMs || 7000,
-    strictExpected ? { matcher: (snapshot) => responseMatchesRecorded(snapshot, options.response_snapshot || null) } : {}
-  );
+  const strictExpected = responseMode !== 'same_message' && options.wait_for_match === true && hasStrictEditableResponseMarker(options.response_snapshot || null);
+  const requestedTimeout = Number(options.timeout_ms || options.timeoutMs || 7000);
+  let waited;
+  if (responseMode === 'same_message') {
+    // Callback pilihan pada satu pesan tidak perlu menunggu timeout balasan normal.
+    // Beri jeda singkat agar Telegram sempat memperbarui tombol/message, lalu lanjut.
+    await sleep(Math.max(250, Math.min(700, Number(options.same_message_settle_ms || 450))));
+    const latestSnapshots = await recentSupplierSnapshots(client, target, 20).catch(() => []);
+    const beforeMap = new Map(beforeSnapshots.map((snap) => [Number(snap?.id || 0), snapshotSignature(snap)]));
+    const changed = latestSnapshots.filter((snap) => {
+      const oldSignature = beforeMap.get(Number(snap?.id || 0));
+      return !oldSignature || oldSignature !== snapshotSignature(snap);
+    });
+    waited = {
+      responses: mergeRecorderSnapshots([], changed, { visible_snapshots: latestSnapshots, mark_visibility: true, limit: 50 }),
+      response: latestSnapshots[latestSnapshots.length - 1] || null,
+      changed: changed.length > 0
+    };
+  } else {
+    const waitTimeout = options.recorder_mode === true && actionType === 'button'
+      ? Math.min(Math.max(1200, requestedTimeout), 1800)
+      : requestedTimeout;
+    waited = await waitForSupplierResponses(
+      client,
+      target,
+      beforeSnapshots,
+      waitTimeout,
+      strictExpected ? { matcher: (snapshot) => responseMatchesRecorded(snapshot, options.response_snapshot || null) } : {}
+    );
+  }
+
+  let activeSource = actionSource;
+  if (actionType === 'button' && actionSource?.id) {
+    const currentSource = await getMessageById(client, target, actionSource.id).catch(() => null);
+    activeSource = snapshotMessage(currentSource) || actionSource;
+  }
+  const sameMessageResponse = responseMode === 'same_message'
+    ? ((waited.responses || []).find((snap) => Number(snap?.id || 0) === Number(actionSource?.id || 0)) || activeSource || waited.response || null)
+    : null;
+
   return {
     target,
     action_type: actionType,
@@ -561,9 +596,11 @@ async function executeActionWithClient(client, options = {}) {
     preview_value: previewValue,
     before,
     before_snapshots: beforeSnapshots,
+    source_message_snapshot: activeSource || actionSource || null,
     responses: waited.responses || [],
-    response: waited.response || null,
-    response_changed: waited.changed
+    response: sameMessageResponse || waited.response || null,
+    response_changed: waited.changed,
+    response_mode: responseMode
   };
 }
 
@@ -668,16 +705,30 @@ async function runWorkflowSteps(options = {}) {
       const step = steps[index];
       if (typeof options.on_before_step === 'function') await options.on_before_step({ index, step, last_response: lastResponse });
       const timeoutMs = resolveStepTimeoutMs(workflow, step);
+      const responseMode = String(step.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait';
       const action = await executeActionWithClient(client, {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
         message_id: lastResponse?.id || null,
         timeout_ms: timeoutMs,
+        response_mode: responseMode,
         response_snapshot: step.response_snapshot || null,
-        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null),
+        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null) && responseMode !== 'same_message',
         context
       });
+      if (responseMode === 'same_message') {
+        lastResponse = action.response || lastResponse;
+        if (!lastResponse?.id) {
+          const error = new Error(`Pesan supplier untuk rangkaian tombol pada step ${index + 1} tidak ditemukan.`);
+          error.code = 'SUPPLIER_SAME_MESSAGE_MISSING';
+          error.step_index = index;
+          error.action_sent = true;
+          throw error;
+        }
+        if (typeof options.on_step === 'function') await options.on_step({ index, step, action, response: lastResponse });
+        continue;
+      }
       if (!action.response_changed || !(action.responses || []).length) {
         const error = new Error(`Supplier belum memberi balasan baru setelah step ${index + 1}: ${step.action_type === 'button' ? 'klik ' : 'kirim '}${step.action_value}`);
         error.code = 'SUPPLIER_RESPONSE_TIMEOUT';
@@ -760,16 +811,27 @@ async function runWorkflowStockProbe(options = {}) {
     for (let index = 0; index <= stockIndex; index += 1) {
       const step = steps[index];
       const timeoutMs = resolveStepTimeoutMs(workflow, step);
+      const responseMode = String(step.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait';
       const action = await executeActionWithClient(client, {
         target,
         action_type: step.action_type,
         action_value: step.action_value,
         message_id: lastResponse?.id || null,
         timeout_ms: timeoutMs,
+        response_mode: responseMode,
         response_snapshot: step.response_snapshot || null,
-        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null),
+        wait_for_match: hasStrictEditableResponseMarker(step.response_snapshot || null) && responseMode !== 'same_message',
         context: options.context || { quantity: 1, invoice: 'STOCK-CHECK', telegram_id: 0, username: 'stock-check', custom_input: '' }
       });
+      if (responseMode === 'same_message') {
+        lastResponse = action.response || lastResponse;
+        if (!lastResponse?.id) {
+          const error = new Error(`Pesan supplier untuk rangkaian tombol saat cek stok pada step ${index + 1} tidak ditemukan.`);
+          error.code = 'WORKFLOW_STOCK_SAME_MESSAGE_MISSING';
+          throw error;
+        }
+        continue;
+      }
       if (!action.response_changed || !(action.responses || []).length) {
         const error = new Error(`Supplier belum memberi balasan saat cek stok pada step ${index + 1}.`);
         error.code = 'WORKFLOW_STOCK_RESPONSE_TIMEOUT';

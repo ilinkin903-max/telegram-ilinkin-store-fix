@@ -1842,6 +1842,8 @@ create table if not exists public.reseller_workflow_steps (
   response_snapshots jsonb not null default '[]'::jsonb,
   response_selection_index integer not null default 0,
   recorder_before_snapshots jsonb not null default '[]'::jsonb,
+  source_message_snapshot jsonb not null default '{}'::jsonb,
+  response_mode text not null default 'wait',
   text_category text not null default 'other',
   capture_result boolean not null default false,
   wait_timeout_ms integer null,
@@ -1852,6 +1854,8 @@ create table if not exists public.reseller_workflow_steps (
 alter table public.reseller_workflow_steps add column if not exists response_snapshots jsonb not null default '[]'::jsonb;
 alter table public.reseller_workflow_steps add column if not exists response_selection_index integer not null default 0;
 alter table public.reseller_workflow_steps add column if not exists recorder_before_snapshots jsonb not null default '[]'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists source_message_snapshot jsonb not null default '{}'::jsonb;
+alter table public.reseller_workflow_steps add column if not exists response_mode text not null default 'wait';
 alter table public.reseller_workflow_steps add column if not exists text_category text not null default 'other';
 alter table public.reseller_workflow_steps add column if not exists wait_timeout_ms integer null;
 

@@ -2382,6 +2382,8 @@ async function addResellerWorkflowStep(workflowId, input = {}) {
     response_snapshots: Array.isArray(input.response_snapshots) ? input.response_snapshots : [],
     response_selection_index: Number.isInteger(Number(input.response_selection_index)) ? Number(input.response_selection_index) : 0,
     recorder_before_snapshots: Array.isArray(input.recorder_before_snapshots) ? input.recorder_before_snapshots : [],
+    source_message_snapshot: input.source_message_snapshot && typeof input.source_message_snapshot === 'object' ? input.source_message_snapshot : {},
+    response_mode: String(input.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait',
     text_category: ['quantity','other'].includes(String(input.text_category || '').toLowerCase()) ? String(input.text_category).toLowerCase() : 'other',
     capture_result: input.capture_result === true,
     result_extract_prefix: String(input.result_extract_prefix || ''),
@@ -2419,7 +2421,8 @@ async function selectResellerWorkflowStepResponse(workflowId, stepId, messageId,
   const { data, error } = await sb().from('reseller_workflow_steps').update({
     response_snapshot: selectedSnapshot,
     response_snapshots: candidates,
-    response_selection_index: selectedIndex
+    response_selection_index: selectedIndex,
+    response_mode: 'wait'
   }).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
   return data || null;
@@ -2452,6 +2455,8 @@ async function updateResellerWorkflowStep(workflowId, stepId, updates = {}) {
   if (updates.response_snapshots !== undefined) payload.response_snapshots = Array.isArray(updates.response_snapshots) ? updates.response_snapshots : [];
   if (updates.response_selection_index !== undefined) payload.response_selection_index = Number.isInteger(Number(updates.response_selection_index)) ? Number(updates.response_selection_index) : -1;
   if (updates.recorder_before_snapshots !== undefined) payload.recorder_before_snapshots = Array.isArray(updates.recorder_before_snapshots) ? updates.recorder_before_snapshots : [];
+  if (updates.source_message_snapshot !== undefined) payload.source_message_snapshot = updates.source_message_snapshot && typeof updates.source_message_snapshot === 'object' ? updates.source_message_snapshot : {};
+  if (updates.response_mode !== undefined) payload.response_mode = String(updates.response_mode || 'wait').toLowerCase() === 'same_message' ? 'same_message' : 'wait';
   if (updates.wait_timeout_ms !== undefined) payload.wait_timeout_ms = updates.wait_timeout_ms === null || updates.wait_timeout_ms === '' ? null : Math.max(1500, Math.min(120000, Number(updates.wait_timeout_ms || 7000)));
   const { data, error } = await sb().from('reseller_workflow_steps').update(payload).eq('workflow_id', workflow).eq('id', step).select('*').maybeSingle();
   if (error) throw error;
@@ -2500,6 +2505,8 @@ async function cloneResellerWorkflow(sourceWorkflowId, input = {}) {
       response_snapshots: Array.isArray(step.response_snapshots) ? step.response_snapshots : [],
       response_selection_index: Number(step.response_selection_index ?? -1),
       recorder_before_snapshots: Array.isArray(step.recorder_before_snapshots) ? step.recorder_before_snapshots : [],
+      source_message_snapshot: step.source_message_snapshot || {},
+      response_mode: step.response_mode || 'wait',
       text_category: step.text_category || 'other',
       capture_result: step.capture_result === true,
       result_extract_prefix: step.result_extract_prefix || '',
@@ -2532,7 +2539,7 @@ async function setResellerWorkflowResultStep(workflowId, stepId, responseSnapsho
   if (clearError) throw clearError;
   const currentRows = await listResellerWorkflowSteps(workflow);
   const currentStep = currentRows.find((row) => String(row.id) === step) || null;
-  const updates = { capture_result: true, result_extract_prefix: '', result_extract_suffix: '', result_sample_text: '' };
+  const updates = { capture_result: true, response_mode: 'wait', result_extract_prefix: '', result_extract_suffix: '', result_sample_text: '' };
   if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) {
     const hadEditableText = currentStep?.response_snapshot && Object.prototype.hasOwnProperty.call(currentStep.response_snapshot, 'expected_text');
     updates.response_snapshot = hadEditableText
@@ -2559,7 +2566,7 @@ async function setResellerWorkflowStockStep(workflowId, stepId, responseSnapshot
   if (clearError) throw clearError;
   const currentRows = await listResellerWorkflowSteps(workflow);
   const currentStep = currentRows.find((row) => String(row.id) === step) || null;
-  const updates = { capture_stock: true, stock_extract_prefix: '', stock_extract_suffix: '', stock_sample_text: '' };
+  const updates = { capture_stock: true, response_mode: 'wait', stock_extract_prefix: '', stock_extract_suffix: '', stock_sample_text: '' };
   if (responseSnapshot && typeof responseSnapshot === 'object' && Object.keys(responseSnapshot).length) {
     const hadEditableText = currentStep?.response_snapshot && Object.prototype.hasOwnProperty.call(currentStep.response_snapshot, 'expected_text');
     updates.response_snapshot = hadEditableText
