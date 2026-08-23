@@ -18,7 +18,7 @@ test('v82.2 mempunyai jurnal step unik per invoice untuk memblokir replay suppli
 
 test('runner tidak menjadwalkan ulang invoice yang sudah running', () => {
   const runner = read('api/workflow-runner.js');
-  assert.match(runner, /const retryable = \['WORKFLOW_BUSY'\]\.includes\(code\)/);
+  assert.doesNotMatch(runner, /const retryable = \['WORKFLOW_BUSY'\]\.includes\(code\)/);
   assert.doesNotMatch(runner, /\['WORKFLOW_BUSY', 'WORKFLOW_STILL_RUNNING'\]/);
 });
 

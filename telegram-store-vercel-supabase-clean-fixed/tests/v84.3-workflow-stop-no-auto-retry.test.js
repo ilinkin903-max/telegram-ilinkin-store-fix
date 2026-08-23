@@ -29,8 +29,15 @@ test('fulfillment tidak menjalankan workflow lagi bila run sudah ATTENTION', () 
   const payment = read('lib/paymentService.js');
   assert.match(payment, /existingWorkflowRun/);
   assert.match(payment, /workflowRunStatus/);
-  assert.match(payment, /\['attention', 'canceled', 'cancelled', 'failed'\]/);
+  assert.match(payment, /existingWorkflowRun && workflowRunStatus !== 'queued'/);
   assert.match(payment, /Tidak ada retry otomatis/);
+});
+
+test('semua error workflow menjadi ATTENTION dan tidak kembali queued', () => {
+  const payment = read('lib/paymentService.js');
+  const catchBlock = payment.slice(payment.indexOf('async function processWorkflowDelivery'), payment.indexOf('async function retryWorkflowOrder'));
+  assert.match(catchBlock, /const status = 'attention'/);
+  assert.doesNotMatch(catchBlock, /WORKFLOW_BUSY.*?status,?\\s*'queued'/s);
 });
 
 test('debit supplier hanya dipanggil pada jalur delivery berhasil', () => {

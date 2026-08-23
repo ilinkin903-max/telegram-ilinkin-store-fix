@@ -40,7 +40,7 @@ module.exports = async function handler(req, res) {
     return res.status(409).json({
       ok: false,
       version: getAppVersion(),
-      state: retryable ? 'retry_limit' : 'attention',
+      state: 'attention',
       invoice,
       attempt,
       code: code || 'WORKFLOW_ERROR',

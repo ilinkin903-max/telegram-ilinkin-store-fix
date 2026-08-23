@@ -792,10 +792,10 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
           order_ref: invoice, workflow_id: workflow.id, telegram_id: Number(order?.telegram_id || transaction?.telegram_id || 0),
           product_code: transaction?.product_code || order?.product_code || product?.kode || '', variant_key: transaction?.variant_key || order?.variant_key || '',
           quantity: orderQuantity, supplier_id: workflow.supplier_id, supplier_unit_cost_idr: manualSupplier.unitCost, supplier_cost_total_idr: manualSupplier.totalCost,
-          status: 'queued', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
+          status: 'attention', current_step: 0, error_code: supplierError.code, error_message: supplierError.message
         });
       } else {
-        run = await db.patchResellerWorkflowRun(invoice, { status: 'queued', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
+        run = await db.patchResellerWorkflowRun(invoice, { status: 'attention', error_code: supplierError.code, error_message: supplierError.message }).catch(() => run);
       }
       const buyerNotified = await sendWorkflowFailureNotice(order?.telegram_id || transaction?.telegram_id, invoice);
       return { handled: true, pending: true, error: supplierError, transaction, workflow_run: run, workflow_failure_notified: buyerNotified };
@@ -818,7 +818,7 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
       supplier_id: manualSupplier.supplier?.id || workflow.supplier_id || null,
       supplier_unit_cost_idr: manualSupplier.unitCost,
       supplier_cost_total_idr: manualSupplier.totalCost,
-      supplier_balance_debited_at: null,
+      supplier_balance_debited_at: forceRestart ? (run?.supplier_balance_debited_at || null) : null,
       status: 'queued', current_step: 0, result_text: '', last_message_id: null, last_message_snapshot: {},
       error_code: '', error_message: '', started_at: null, finished_at: null
     });
@@ -960,7 +960,9 @@ async function processWorkflowDelivery({ order, product, transaction, buyer = {}
         supplier_completed: true
       };
     }
-    const status = error?.code === 'WORKFLOW_BUSY' ? 'queued' : 'attention';
+    // HARD STOP: semua error workflow adalah terminal sampai owner melakukan
+    // retry manual. Jangan pernah mengembalikan status ke queued.
+    const status = 'attention';
     run = await db.patchResellerWorkflowRun(invoice, {
       status,
       error_code: String(error?.code || 'WORKFLOW_ERROR'),
@@ -991,6 +993,14 @@ async function retryWorkflowOrder(orderRef, actor = {}, options = {}) {
   const product = await db.getProductByCode(transaction.product_code);
   if (!isWorkflowProduct(product, transaction)) throw new Error('Produk/varian pada invoice ini bukan Workflow Reseller.');
   const buyer = Object.keys(actor || {}).length ? actor : (await db.getUserByTelegramId(transaction.telegram_id).catch(() => null)) || {};
+  const existingRun = await db.getResellerWorkflowRun(invoice).catch(() => null);
+  if (!options.forceRestart && existingRun) {
+    const state = String(existingRun.status || '').toLowerCase();
+    const error = new Error(existingRun.error_message || `Workflow reseller dihentikan (${state || 'unknown'}). Retry otomatis dinonaktifkan.`);
+    error.code = existingRun.error_code || 'WORKFLOW_STOPPED';
+    error.workflow_status = state;
+    throw error;
+  }
   const result = await processWorkflowDelivery({
     order: {
       invoice_ref: invoice,
@@ -1204,16 +1214,20 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
     if (poWaiting && isWorkflowProduct(product, result.transaction || order)) {
       const existingWorkflowRun = await db.getResellerWorkflowRun(invoice).catch(() => null);
       const workflowRunStatus = String(existingWorkflowRun?.status || '').toLowerCase();
-      if (['attention', 'canceled', 'cancelled', 'failed'].includes(workflowRunStatus)) {
-        const stoppedError = new Error(existingWorkflowRun?.error_message || 'Workflow reseller dihentikan karena mengalami kendala. Tidak ada retry otomatis.');
-        stoppedError.code = existingWorkflowRun?.error_code || 'WORKFLOW_ATTENTION';
+      if (existingWorkflowRun && workflowRunStatus !== 'queued') {
+        // HARD STOP: setelah workflow pernah mulai/running/gagal, payment watcher
+        // tidak boleh memanggil workflow lagi. Hanya tombol retry manual owner
+        // dengan forceRestart=true yang boleh memulai ulang.
+        const stoppedError = new Error(existingWorkflowRun?.error_message || 'Workflow reseller sudah dihentikan. Tidak ada retry otomatis.');
+        stoppedError.code = existingWorkflowRun?.error_code || 'WORKFLOW_STOPPED';
         workflowResult = {
           handled: true,
           pending: true,
           error: stoppedError,
           transaction: result.transaction,
           workflow_run: existingWorkflowRun,
-          workflow_failure_notified: true
+          workflow_failure_notified: true,
+          retry_scheduled: false
         };
       } else {
         workflowResult = await processWorkflowDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });

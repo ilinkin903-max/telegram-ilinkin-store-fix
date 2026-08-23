@@ -118,14 +118,12 @@ test('workflow activation tidak menghapus stok lokal dan menyimpan snapshot link
   assert.match(sql, /previous_link_snapshot\s+jsonb/i);
 });
 
-test('workflow hanya retry otomatis sebelum mulai dan tidak membuat runner berantai saat sudah running', () => {
+test('workflow tidak retry otomatis dan tidak membuat runner berantai', () => {
   const payment = fs.readFileSync(path.join(__dirname, '..', 'lib', 'paymentService.js'), 'utf8');
   const runner = fs.readFileSync(path.join(__dirname, '..', 'api', 'workflow-runner.js'), 'utf8');
-  assert.match(payment, /scheduleWorkflowRetry\(invoice,\s*0\)/);
-  assert.match(runner, /WORKFLOW_BUSY/);
-  assert.match(runner, /WORKFLOW_BUSY/);
-  assert.match(runner, /WORKFLOW_STILL_RUNNING tidak dijadwalkan ulang/);
-  assert.match(runner, /'attention'/);
+  assert.doesNotMatch(payment, /scheduleWorkflowRetry\(invoice,\s*0\)/);
+  assert.match(runner, /v84\.3: worker tidak pernah menjadwalkan ulang/);
+  assert.match(runner, /state: 'attention'/);
 });
 
 test('teleproto loader memprioritaskan CommonJS untuk menghindari directory import error Vercel', () => {
