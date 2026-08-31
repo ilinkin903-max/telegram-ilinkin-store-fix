@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "84.6.0",
+  "version": "84.6.1",
   "private": true,
-  "description": "Link Auto Order v84.6: shared and separate stock pools per variant.",
+  "description": "Link Auto Order v84.6.1: variant stock-source selection persists and shared stock is editable.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",
