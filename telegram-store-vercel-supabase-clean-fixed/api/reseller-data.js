@@ -1218,8 +1218,19 @@ module.exports = async function handler(req, res) {
     if (action === 'workflow-delete') {
       const workflow = await db.getResellerWorkflow(body.workflow_id || '');
       if (!workflow) return json(res, 404, { ok: false, error: 'Workflow tidak ditemukan.' });
+
+      // Pastikan workflow tidak sedang dipakai sebagai active link saat delete.
       await restoreWorkflowProductLink(workflow).catch((error) => console.error('restore workflow link saat hapus gagal:', error.message || error));
-      await db.deleteResellerWorkflow(workflow.id);
+
+      try {
+        await db.deleteResellerWorkflow(workflow.id);
+      } catch (error) {
+        console.error('hapus workflow gagal:', error.message || error);
+        return json(res, 409, {
+          ok: false,
+          error: 'Workflow belum dapat dihapus. History run/step sudah dicoba dibersihkan terlebih dahulu. Silakan ulangi sekali lagi.'
+        });
+      }
       return json(res, 200, { ok: true });
     }
 

@@ -2370,6 +2370,21 @@ async function updateResellerWorkflow(id, updates = {}) {
 async function deleteResellerWorkflow(id) {
   const value = String(id || '').trim();
   if (!value) return false;
+
+  // History/run tables intentionally use ON DELETE RESTRICT. Hapus semua child
+  // record terlebih dahulu agar workflow parent dapat dihapus tanpa FK violation.
+  // Run-step jurnal dihapus lebih dulu karena tabel ini juga memiliki FK
+  // reseller_workflow_id -> reseller_workflows dengan RESTRICT.
+  const cleanupTargets = [
+    { table: 'reseller_workflow_run_steps', column: 'workflow_id' },
+    { table: 'reseller_workflow_runs', column: 'workflow_id' }
+  ];
+
+  for (const target of cleanupTargets) {
+    const { error } = await sb().from(target.table).delete().eq(target.column, value);
+    if (error && !isMissingTableError(error)) throw error;
+  }
+
   const { error } = await sb().from('reseller_workflows').delete().eq('id', value);
   if (error) throw error;
   return true;

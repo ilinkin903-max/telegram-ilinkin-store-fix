@@ -1,0 +1,20 @@
+Link Auto Order v84.5.0
+Workflow delete FK fix
+
+Focused tests:
+- v84.5 delete workflow FK regression: 3/3 PASS
+- v82.9 quantity button regression: 6/6 PASS
+- v82.10 dynamic button label regression: 4/4 PASS
+- v82.11 workflow failure/cancel stats regression: 5/5 PASS
+
+Total focused regression tests: 18/18 PASS
+
+Syntax checks:
+- lib/db.js: PASS
+- api/reseller-data.js: PASS
+- api/reseller.js: PASS
+
+Verified delete order:
+1. reseller_workflow_run_steps
+2. reseller_workflow_runs
+3. reseller_workflows
