@@ -68,3 +68,18 @@ test('bot variant selection and order stock checks pass product context for shar
   assert.match(code, /stockOfVariant\(variant,\s*product\)\.length < 1/);
   assert.match(code, /stockOfVariant\(variant,\s*product\)\.length/);
 });
+
+test('checkout SQL functions and db fallback support shared stock variant fulfillment without insufficient stock errors', () => {
+  const schema = read('supabase/schema.sql');
+  const compat = read('supabase/v81.2-database-compat.sql');
+  const migration = read('supabase/update-v84.6.2-shared-variant-stock.sql');
+  const db = read('lib/db.js');
+
+  for (const sql of [schema, compat, migration]) {
+    assert.match(sql, /lower\(coalesce\(v_variant->>'stock_mode','separate'\)\) = 'shared'/);
+    assert.match(sql, /update public\.products set stock = v_rest/);
+  }
+
+  assert.match(db, /fulfillSharedOrderFallback/);
+  assert.match(db, /isShared && \/INSUFFICIENT_STOCK\/i\.test\(message\)/);
+});

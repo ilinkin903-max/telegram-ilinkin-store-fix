@@ -1227,6 +1227,144 @@ async function getUserByTelegramId(telegramId) {
   return data;
 }
 
+async function fulfillSharedOrderFallback(payloadOrder, product, totalPrice, buyer, selectedVariant) {
+  const invoice = payloadOrder.invoice_ref;
+  const isWallet = payloadOrder.payment_method === 'wallet';
+  const qty = Math.max(1, Number(payloadOrder.quantity || 1));
+
+  const { data: existingTx } = await sb().from('transactions').select('*').eq('order_ref', invoice).maybeSingle();
+  if (existingTx) {
+    return {
+      delivered: Array.isArray(existingTx.delivered_items) ? existingTx.delivered_items.map(String) : [],
+      transaction: existingTx,
+      already_completed: true,
+      po_waiting: false,
+      po_order: null,
+      wallet: null
+    };
+  }
+
+  const { data: freshProduct, error: prodErr } = await sb().from('products').select('*').ilike('code', payloadOrder.product_code).maybeSingle();
+  if (prodErr || !freshProduct) throw new Error('Produk untuk invoice ini tidak ditemukan.');
+  const stock = Array.isArray(freshProduct.stock) ? freshProduct.stock : [];
+  if (stock.length < qty) {
+    throw new Error('Stok produk tidak mencukupi.');
+  }
+
+  let freshUser = null;
+  let mainUsed = 0;
+  let refUsed = 0;
+  if (isWallet) {
+    const { data: u, error: userErr } = await sb().from('bot_users').select('*').eq('telegram_id', payloadOrder.telegram_id).maybeSingle();
+    if (userErr || !u) throw new Error('Pengguna tidak ditemukan.');
+    freshUser = u;
+    const balanceTotal = Math.max(0, Number(freshUser.balance_main || 0)) + Math.max(0, Number(freshUser.balance_referral || 0));
+    if (balanceTotal < totalPrice) {
+      throw new Error('Saldo tidak mencukupi. Silakan top up atau gunakan QRIS.');
+    }
+    mainUsed = Math.min(Math.max(0, Number(freshUser.balance_main || 0)), totalPrice);
+    refUsed = Math.max(0, totalPrice - mainUsed);
+    const newMain = Math.max(0, Number(freshUser.balance_main || 0) - mainUsed);
+    const newRef = Math.max(0, Number(freshUser.balance_referral || 0) - refUsed);
+
+    const { error: updateUErr } = await sb().from('bot_users').update({
+      balance_main: newMain,
+      balance_referral: newRef,
+      transaction_count: Math.max(0, Number(freshUser.transaction_count || 0)) + 1,
+      spending: Math.max(0, Number(freshUser.spending || 0)) + totalPrice,
+      first_name: buyer?.first_name || freshUser.first_name,
+      username: buyer?.username || freshUser.username,
+      updated_at: new Date().toISOString()
+    }).eq('telegram_id', payloadOrder.telegram_id);
+    if (updateUErr) throw updateUErr;
+
+    if (mainUsed > 0) {
+      await sb().from('wallet_ledger').insert({
+        entry_key: `order:${invoice}:main`,
+        telegram_id: payloadOrder.telegram_id,
+        wallet_type: 'main',
+        direction: 'debit',
+        amount: mainUsed,
+        balance_after: newMain,
+        reason: 'Pembayaran produk dengan saldo utama',
+        reference: invoice,
+        created_at: new Date().toISOString()
+      }).catch(() => null);
+    }
+    if (refUsed > 0) {
+      await sb().from('wallet_ledger').insert({
+        entry_key: `order:${invoice}:referral`,
+        telegram_id: payloadOrder.telegram_id,
+        wallet_type: 'referral',
+        direction: 'debit',
+        amount: refUsed,
+        balance_after: newRef,
+        reason: 'Pembayaran produk dengan saldo referral',
+        reference: invoice,
+        created_at: new Date().toISOString()
+      }).catch(() => null);
+    }
+  }
+
+  const delivered = stock.slice(0, qty);
+  const remainingStock = stock.slice(qty);
+  const variants = Array.isArray(freshProduct.variants) ? freshProduct.variants : [];
+  const vIdx = variants.findIndex((v, i) => variantKey(v, i) === String(payloadOrder.variant_key).toUpperCase());
+  if (vIdx >= 0) {
+    variants[vIdx].sold = Math.max(0, Number(variants[vIdx].sold || 0)) + qty;
+  }
+  const { error: updateProdErr } = await sb().from('products').update({
+    stock: remainingStock,
+    variants: variants,
+    sold: Math.max(0, Number(freshProduct.sold || 0)) + qty,
+    updated_at: new Date().toISOString()
+  }).eq('id', freshProduct.id);
+  if (updateProdErr) throw updateProdErr;
+
+  const profitAmount = payloadOrder.cost_source === 'unset' ? 0 : (totalPrice - payloadOrder.fee - payloadOrder.cost_total);
+  const txPayload = {
+    telegram_id: payloadOrder.telegram_id,
+    username: buyer?.username || null,
+    product_name: freshProduct.name,
+    product_code: freshProduct.code,
+    variant_key: payloadOrder.variant_key,
+    variant_name: payloadOrder.variant_name,
+    unit_price: payloadOrder.unit_price,
+    quantity: qty,
+    total_price: totalPrice,
+    payment_fee: payloadOrder.fee,
+    cost_unit: payloadOrder.cost_unit,
+    cost_total: payloadOrder.cost_total,
+    cost_source: payloadOrder.cost_source,
+    cost_updated_at: payloadOrder.cost_source === 'unset' ? null : new Date().toISOString(),
+    profit_amount: profitAmount,
+    payment_method: payloadOrder.payment_method,
+    wallet_main_used: mainUsed,
+    wallet_referral_used: refUsed,
+    order_ref: invoice,
+    delivered_items: delivered,
+    delivered_text: delivered.join('\n'),
+    created_at: new Date().toISOString()
+  };
+  const { data: insertedTx, error: txErr } = await sb().from('transactions').insert(txPayload).select().maybeSingle();
+  if (txErr && !String(txErr.message || '').includes('duplicate')) throw txErr;
+
+  return {
+    delivered,
+    transaction: insertedTx || txPayload,
+    already_completed: false,
+    po_waiting: false,
+    po_order: null,
+    wallet: isWallet ? {
+      main_used: mainUsed,
+      referral_used: refUsed,
+      balance_main: Math.max(0, Number(freshUser?.balance_main || 0) - mainUsed),
+      balance_referral: Math.max(0, Number(freshUser?.balance_referral || 0) - refUsed),
+      balance_total: (Math.max(0, Number(freshUser?.balance_main || 0) - mainUsed) + Math.max(0, Number(freshUser?.balance_referral || 0) - refUsed))
+    } : null
+  };
+}
+
 async function completeOrder(order, product, totalPrice, buyer = {}) {
   const invoice = String(order?.invoice_ref || '').trim();
   if (!invoice) throw new Error('Invoice lokal tidak ditemukan.');
@@ -1266,6 +1404,10 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   const { data, error } = rpcResult;
   if (error) {
     const message = String(error.message || error);
+    const isShared = selectedVariant && String(selectedVariant.stock_mode || '').trim().toLowerCase() === 'shared';
+    if (!isPo && isShared && /INSUFFICIENT_STOCK/i.test(message)) {
+      return await fulfillSharedOrderFallback(payloadOrder, product, totalPrice, buyer, selectedVariant);
+    }
     if (isPo && /fulfill_po_(?:wallet|paid)_order_v69|schema cache|could not find the function/i.test(message)) {
       throw new Error('Fungsi Pre-Order per varian v69 belum tersedia. Jalankan supabase/update-v69-po-variant-voucher-ui.sql terlebih dahulu.');
     }
