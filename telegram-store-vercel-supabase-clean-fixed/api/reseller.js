@@ -667,16 +667,26 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var existing=product.variants||[];
     return existing.map(function(v,i){
       var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+      var isShared=variantUsesSharedStock(v);
       var el=document.querySelector('[data-stock-field="'+sku.replace(/"/g,'&quot;')+'"]');
-      var input=el?cleanListText(el.value):[];
       var isSupplierVariant=isExternalSupplierLink(v); var isWorkflowVariant=isWorkflowSupplierLink(v);
-      var stock=isSupplierVariant ? (isWorkflowVariant ? variantStock(v) : []) : (mode==='append' ? variantStock(v).concat(input) : input);
+      var stock;
+      if(isShared){
+        stock=[];
+      } else if(isSupplierVariant){
+        stock=isWorkflowVariant ? variantStock(v) : [];
+      } else if(el){
+        var input=cleanListText(el.value);
+        stock=mode==='append' ? variantStock(v).concat(input) : input;
+      } else {
+        stock=variantStock(v);
+      }
       return {
         name:v.name||v.nama||'',
         price:v.price||v.harga||0,
         cost_price:v.cost_price||v.cost||0,
         sku:sku,
-        stock_mode:variantUsesSharedStock(v)?'shared':'separate',
+        stock_mode:isShared?'shared':'separate',
         stock:stock,
         bulk_prices:Array.isArray(v.bulk_prices)?v.bulk_prices:parseBulkArray(variantBulkText(v)),
         description:v.description||v.deskripsi||'',
@@ -705,10 +715,11 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var n=wrap.querySelectorAll('.addVariantCard').length+1;
     var div=document.createElement('div');
     div.className='addVariantCard';
+    var isShared=String(data.stock_mode||'')==='shared';
     div.innerHTML='<div class="addVariantCardTitle"><b>Varian '+n+'</b><div><label class="miniSwitch"><input type="checkbox" data-vfield="active" '+(data.active===false?'':'checked')+'><span>ON</span></label> <button class="btn small red" type="button" data-remove-variant>Hapus</button></div></div>'+ 
       '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-vfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(data.name||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-vfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(data.price||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-vfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(data.cost_price||data.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-vfield="sku" placeholder="Contoh: BULAN1" value="'+esc(data.sku||'')+'"></div></div>'+ 
       '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-vfield="delivery"><option value="" '+(!data.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(data.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(data.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Bisa berbeda untuk setiap varian. PRE-ORDER tidak memotong stok saat pembayaran.</p></div>'+ 
-      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-vfield="stock_mode"><option value="separate" '+(String(data.stock_mode||'separate')==='separate'?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(String(data.stock_mode||'')==='shared'?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared = semua varian memakai stok produk yang sama. Cocok untuk beda garansi/durasi.</p></div><div class="row"><div class="field"><label class="label">Stok Varian</label><textarea class="textarea" data-vfield="stock" placeholder="Contoh, pisahkan koma atau baris baru:\nakun1,akun2,akun3">'+esc(data.stock||'')+'</textarea></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-vfield="bulk" placeholder="Contoh:\n5:9000,10:8000">'+esc(data.bulk||'')+'</textarea></div></div>'+
+      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-vfield="stock_mode"><option value="separate" '+(!isShared?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(isShared?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared = semua varian memakai stok produk yang sama. Cocok untuk beda garansi/durasi.</p></div><div class="row"><div class="field" data-vfield-stock-wrap><label class="label">Stok Varian</label><textarea class="textarea" data-vfield="stock" placeholder="Contoh, pisahkan koma atau baris baru:\nakun1,akun2,akun3">'+esc(data.stock||'')+'</textarea></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-vfield="bulk" placeholder="Contoh:\n5:9000,10:8000">'+esc(data.bulk||'')+'</textarea></div></div>'+
       '<div class="row"><div class="field"><label class="label">Deskripsi Varian</label><textarea class="textarea" data-vfield="description" placeholder="Contoh: Canva EDU 1 tahun untuk satu user.">'+esc(data.description||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan Varian</label><textarea class="textarea" data-vfield="snk" placeholder="Contoh: Garansi 7 hari, jangan ganti password.">'+esc(data.snk||'')+'</textarea></div></div>';
     wrap.appendChild(div);
     var remove=div.querySelector('[data-remove-variant]');
@@ -720,10 +731,15 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function refreshVariantTitles(){ document.querySelectorAll('#addVariantCards .addVariantCard').forEach(function(card,i){ var b=card.querySelector('.addVariantCardTitle b'); if(b) b.textContent='Varian '+(i+1); }); }
   function refreshAddSharedStockVisibility(){
     var wrap=document.getElementById('addSharedStockWrap');
-    if(!wrap) return;
     var shared=false;
-    document.querySelectorAll('#addVariantCards [data-vfield="stock_mode"]').forEach(function(el){ if(String(el.value||'')==='shared') shared=true; });
-    wrap.classList.toggle('hidden', !shared);
+    document.querySelectorAll('#addVariantCards .addVariantCard').forEach(function(card){
+      var modeEl=card.querySelector('[data-vfield="stock_mode"]');
+      var isShared=modeEl && String(modeEl.value||'')==='shared';
+      if(isShared) shared=true;
+      var stockWrap=card.querySelector('[data-vfield-stock-wrap]');
+      if(stockWrap) stockWrap.classList.toggle('hidden', isShared);
+    });
+    if(wrap) wrap.classList.toggle('hidden', !shared);
   }
   function toggleAddVariantBuilder(){
     var chk=document.getElementById('addVariantToggle');
@@ -1271,13 +1287,14 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     v=v||{};
     var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
     var supplierVariant=isExternalSupplierLink(v); var workflowVariant=isWorkflowSupplierLink(v);
+    var isShared=variantUsesSharedStock(v);
     var deliveryField=supplierVariant
       ? '<div class="field"><label class="label">Sistem Pengiriman Varian</label><div class="variantMainCompact">'+(workflowVariant?'WORKFLOW RESELLER · BOT SUPPLIER':'SUPPLIER OTOMATIS · PRODSELLER')+'</div><p class="help">Link reseller tetap dipertahankan saat nama, harga, deskripsi, atau SnK varian diedit.</p></div>'
       : '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-evfield="delivery"><option value="" '+(!v.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(v.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(v.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Gunakan PRE-ORDER hanya pada varian yang ingin Anda kirim manual setelah pembayaran.</p></div>';
     return '<div class="addVariantCard" data-edit-variant-card data-old-sku="'+esc(sku)+'">'+
-      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> '+(supplierVariant?'<span class="chip green">SUPPLIER</span>':'<span class="chip yellow">Stok diatur dari Stok/Kelola</span>')+' '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
+      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> '+(supplierVariant?'<span class="chip green">SUPPLIER</span>':(isShared?'<span class="chip cyan">STOK BERSAMA</span>':'<span class="chip yellow">Stok diatur dari Stok/Kelola</span>'))+' '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
       '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-evfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(v.name||v.nama||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-evfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(v.price||v.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-evfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(v.cost_price||v.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-evfield="sku" placeholder="Contoh: BULAN1" value="'+esc(sku)+'"></div></div>'+deliveryField+
-      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-evfield="stock_mode"><option value="separate" '+(String(v.stock_mode||'separate')!=='shared'?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(String(v.stock_mode||'')==='shared'?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared memakai stok produk utama; Separate memakai stok khusus varian.</p></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-evfield="bulk" placeholder="Contoh:\n5:9000\n10:8000">'+esc(variantBulkText(v)||'')+'</textarea></div>'+ 
+      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-evfield="stock_mode"><option value="separate" '+(!isShared?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(isShared?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared memakai stok produk utama; Separate memakai stok khusus varian.</p></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-evfield="bulk" placeholder="Contoh:\n5:9000\n10:8000">'+esc(variantBulkText(v)||'')+'</textarea></div>'+ 
       '<div class="row"><div class="field"><label class="label">Deskripsi Varian</label><textarea class="textarea tall" data-evfield="description" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin menggunakan email pembeli.">'+esc(v.description||v.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan Varian</label><textarea class="textarea tall" data-evfield="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(v.snk||v.terms||'')+'</textarea></div></div>'+ 
       '</div>';
   }
@@ -1305,13 +1322,14 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       var sku=String(val('sku')||oldSku).toUpperCase();
       var old=bySku[oldSku]||bySku[sku]||existing[i]||{};
       var name=val('name');
+      var isShared=val('stock_mode')==='shared';
       if(name){ var isSupplierVariant=isExternalSupplierLink(old); var isWorkflowVariant=isWorkflowSupplierLink(old); rows.push({
         name:name,
         price:val('price'),
         cost_price:val('cost'),
         sku:sku,
         stock_mode:val('stock_mode')==='shared'?'shared':'separate',
-        stock:isSupplierVariant?(isWorkflowVariant?variantStock(old):[]):variantStock(old),
+        stock:isShared ? [] : (isSupplierVariant?(isWorkflowVariant?variantStock(old):[]):variantStock(old)),
         bulk_prices:parseBulkArray(val('bulk')),
         description:val('description'),
         snk:val('snk'),
@@ -1369,7 +1387,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ deliveryEditor+
       '<div class="row3 '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Jual Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier / Item</label><input class="input" name="cost_price" type="number" min="0" placeholder="Contoh: 9000" value="'+esc(p.cost_price||'')+'"><p class="help">Berlaku untuk checkout berikutnya.</p></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
       '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
-      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editSharedStockWrap" class="field sharedStockField"><label class="label">Stok Produk Bersama</label><textarea class="textarea tall" id="editSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\\n'))+'</textarea><p class="help">Dipakai oleh semua varian yang memilih STOK BERSAMA.</p></div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
+      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editSharedStockWrap" class="field sharedStockField"><label class="label">Stok Produk Bersama</label><textarea class="textarea tall" id="editSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea><p class="help">Dipakai oleh semua varian yang memilih STOK BERSAMA.</p></div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
       '<div class="editSaveDock"><div><b>Simpan perubahan produk?</b><small>Tombol tetap terlihat selama Anda mengedit.</small></div><button class="btn cyan" type="submit">Simpan Perubahan</button></div></form>';
   }
   function openEditProduct(code){
@@ -1422,16 +1440,22 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function openStockProduct(code){
     var p=findProduct(code); if(!p)return;
     var hasVar=(p.variants||[]).length>0;
-    var html='<form id="modalAppendStockForm" class="form"><p class="help">Tambahkan stok. Varian Shared menggunakan stok produk utama; Varian Separate memiliki stok sendiri.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
+    var html='<form id="modalAppendStockForm" class="form"><p class="help">Tambahkan stok produk atau varian. Varian STOK BERSAMA menggunakan pool produk utama; Varian STOK TERPISAH memiliki stok masing-masing.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      if(hasSharedVariant(p))html+='<div class="variantCard" style="background:#e5fbff"><h3>🔗 Stok Produk Bersama</h3><p class="help">Pool ini dipakai semua varian mode STOK BERSAMA.</p><p class="help">Stok saat ini: '+((p.data||[]).length)+'</p><label class="label">Tambah Stok Bersama</label><textarea class="textarea" id="appendSharedStock" placeholder="Satu stok per baris"></textarea></div>';
-      html+='<div class="variantList">'+(p.variants||[]).map(function(v,i){
-        var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
-        if(variantUsesSharedStock(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip cyan">STOK BERSAMA</span></h3><p class="help">Menggunakan pool produk: '+variantStock(v,p).length+'</p></div>';
-        if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis dari supplier.</p></div>';
-        return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Stok terpisah: '+variantStock(v,p).length+'</p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris"></textarea></div>';
-      }).join('')+'</div>';
-    }else html+='<label class="label">Tambah Stok Produk</label><textarea class="textarea tall" id="appendDefaultStock" placeholder="Satu stok per baris"></textarea>';
+      var sharedVars=(p.variants||[]).filter(variantUsesSharedStock);
+      var separateVars=(p.variants||[]).filter(function(v){ return !variantUsesSharedStock(v); });
+      if(sharedVars.length>0){
+        var sharedNames=sharedVars.map(function(v){ return esc(v.name||v.nama||v.sku); }).join(', ');
+        html+='<div class="variantCard" style="background:#e5fbff;border:1px solid #7de3f4"><h3>🔗 Stok Produk Bersama</h3><p class="help">Digunakan bersama oleh: <b>'+sharedNames+'</b></p><p class="help">Stok saat ini: <b>'+((p.data||[]).length)+'</b></p><label class="label">Tambah Stok Bersama</label><textarea class="textarea" id="appendSharedStock" placeholder="Satu stok per baris"></textarea></div>';
+      }
+      if(separateVars.length>0){
+        html+='<div class="variantList">'+separateVars.map(function(v,i){
+          var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+          if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis dari supplier.</p></div>';
+          return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Stok terpisah saat ini: <b>'+variantStock(v,p).length+'</b></p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris"></textarea></div>';
+        }).join('')+'</div>';
+      }
+    }else html+='<p class="help">Stok saat ini: <b>'+((p.data||[]).length)+'</b></p><label class="label">Tambah Stok Produk</label><textarea class="textarea tall" id="appendDefaultStock" placeholder="Satu stok per baris"></textarea>';
     html+='<button class="btn lime" type="submit">Tambahkan Stok</button></form>';
     openModal('Tambah Stok - '+p.nama,html);
     document.getElementById('modalAppendStockForm').onsubmit=async function(e){
@@ -1444,15 +1468,21 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function openManageProduct(code){
     var p=findProduct(code);if(!p)return;
     var hasVar=(p.variants||[]).length>0;
-    var html='<form id="modalManageStockForm" class="form"><p class="help">Kelola stok. Shared = pool produk utama. Separate = stok khusus varian.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
+    var html='<form id="modalManageStockForm" class="form"><p class="help">Kelola dan edit stok produk atau varian. Varian STOK BERSAMA menggunakan pool produk utama; Varian STOK TERPISAH memiliki stok masing-masing.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      if(hasSharedVariant(p))html+='<div class="variantCard" style="background:#e5fbff"><h3>🔗 Stok Produk Bersama</h3><p class="help">Pool stok bersama untuk seluruh varian Shared.</p><textarea class="textarea tall" id="manageSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea></div>';
-      html+='<div class="variantList">'+(p.variants||[]).map(function(v,i){
-        var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
-        if(variantUsesSharedStock(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip cyan">STOK BERSAMA</span></h3><p class="help">Pool produk: '+variantStock(v,p).length+'</p></div>';
-        if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis.</p></div>';
-        return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><label class="label">Stok Varian Terpisah</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v,p).join('\n'))+'</textarea></div>';
-      }).join('')+'</div>';
+      var sharedVars=(p.variants||[]).filter(variantUsesSharedStock);
+      var separateVars=(p.variants||[]).filter(function(v){ return !variantUsesSharedStock(v); });
+      if(sharedVars.length>0){
+        var sharedNames=sharedVars.map(function(v){ return esc(v.name||v.nama||v.sku); }).join(', ');
+        html+='<div class="variantCard" style="background:#e5fbff;border:1px solid #7de3f4"><h3>🔗 Stok Produk Bersama</h3><p class="help">Digunakan bersama oleh: <b>'+sharedNames+'</b> (Total: '+((p.data||[]).length)+' stok)</p><label class="label">Kelola Stok Bersama</label><textarea class="textarea tall" id="manageSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea></div>';
+      }
+      if(separateVars.length>0){
+        html+='<div class="variantList">'+separateVars.map(function(v,i){
+          var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+          if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis.</p></div>';
+          return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Total: '+variantStock(v,p).length+' stok</p><label class="label">Kelola Stok Varian Terpisah</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v,p).join('\n'))+'</textarea></div>';
+        }).join('')+'</div>';
+      }
     }else html+='<label class="label">Stok Produk</label><textarea class="textarea tall" id="manageDefaultStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea>';
     html+='<button class="btn yellow" type="submit">Simpan Kelola Stok</button></form>';
     openModal('Kelola Stok - '+p.nama,html);

@@ -157,6 +157,7 @@ function normalizeVariant(item, index = 0) {
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
     delivery_mode: normalizeDeliveryMode(item?.delivery_mode ?? item?.deliveryMode ?? item?.pengiriman, ''),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
+    stock_mode: String(item?.stock_mode || item?.stockMode || item?.stock_source || '').trim().toLowerCase() === 'shared' ? 'shared' : 'separate',
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || []),
     supplier_source: String(item?.supplier_source || item?.supplierSource || '').trim().toLowerCase(),
@@ -225,7 +226,12 @@ function findVariant(product, key) {
 
 function variantStockCount(product) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  return variants.reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
+  const hasShared = variants.some((v) => String(v.stock_mode || '').toLowerCase() === 'shared');
+  const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
+  const separateStock = variants
+    .filter((v) => String(v.stock_mode || '').toLowerCase() !== 'shared')
+    .reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
+  return sharedStock + separateStock;
 }
 
 function variantDeliveryMode(product, variantOrKey = null) {
@@ -241,13 +247,21 @@ function productAvailableStock(product, variantKeyValue = '') {
     const found = findVariant(product, variantKeyValue);
     if (!found.variant) return 0;
     if (variantDeliveryMode(product, found.variant) === 'po') return 0;
+    if (String(found.variant.stock_mode || '').toLowerCase() === 'shared') {
+      return Array.isArray(product?.data) ? product.data.length : 0;
+    }
     return Array.isArray(found.variant.stock) ? found.variant.stock.length : 0;
   }
   if (variants.length) {
-    return variants.reduce((sum, variant) => {
-      if (variantDeliveryMode(product, variant) === 'po') return sum;
-      return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
-    }, 0);
+    const hasShared = variants.some((v) => String(v.stock_mode || '').toLowerCase() === 'shared');
+    const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
+    const separateStock = variants
+      .filter((v) => String(v.stock_mode || '').toLowerCase() !== 'shared')
+      .reduce((sum, variant) => {
+        if (variantDeliveryMode(product, variant) === 'po') return sum;
+        return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
+      }, 0);
+    return sharedStock + separateStock;
   }
   if (normalizeDeliveryMode(product?.delivery_mode, 'auto') === 'po') return 0;
   return Array.isArray(product?.data) ? product.data.length : 0;

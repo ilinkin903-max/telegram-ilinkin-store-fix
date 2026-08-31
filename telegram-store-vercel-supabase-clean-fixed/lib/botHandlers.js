@@ -837,7 +837,10 @@ function variantKey(variant, index = 0) {
     .replace(/\s+/g, '-');
 }
 
-function stockOfVariant(variant) {
+function stockOfVariant(variant, product = null) {
+  if (String(variant?.stock_mode || '').trim().toLowerCase() === 'shared' && product) {
+    return Array.isArray(product?.data) ? product.data : [];
+  }
   return Array.isArray(variant?.stock) ? variant.stock : [];
 }
 
@@ -942,10 +945,15 @@ function isPoOrder(product, order = {}) {
 function productStockTotal(product) {
   const allVariants = Array.isArray(product?.variants) ? product.variants : [];
   if (allVariants.length) {
-    return activeVariantsWithIndex(product).reduce((sum, item) => {
+    const active = activeVariantsWithIndex(product);
+    const hasShared = active.some(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() === 'shared');
+    const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
+    const separateStock = active.reduce((sum, item) => {
       if (isPoProduct(product, item.variant)) return sum;
-      return sum + stockOfVariant(item.variant).length;
+      if (String(item.variant?.stock_mode || '').trim().toLowerCase() === 'shared') return sum;
+      return sum + stockOfVariant(item.variant, product).length;
     }, 0);
+    return sharedStock + separateStock;
   }
   return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
 }
@@ -1022,7 +1030,7 @@ function readyStockForVariant(product, variant, availabilityMap = null) {
   const supplierStock = supplierStockForSelection(product, variant, availabilityMap);
   if (supplierStock !== null) return supplierStock;
   if (isPoProduct(product, variant)) return 0;
-  return stockOfVariant(variant).length;
+  return stockOfVariant(variant, product).length;
 }
 
 function readyStockForProduct(product, availabilityMap = null) {
@@ -1034,7 +1042,12 @@ function readyStockForProduct(product, availabilityMap = null) {
     if (directSupplierStock !== null) return directSupplierStock;
     return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
   }
-  return variants.reduce((sum, { variant }) => sum + readyStockForVariant(product, variant, availabilityMap), 0);
+  const hasShared = variants.some(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() === 'shared');
+  const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
+  const separateStock = variants
+    .filter(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() !== 'shared')
+    .reduce((sum, { variant }) => sum + readyStockForVariant(product, variant, availabilityMap), 0);
+  return sharedStock + separateStock;
 }
 
 function isBuyableProduct(product) {
