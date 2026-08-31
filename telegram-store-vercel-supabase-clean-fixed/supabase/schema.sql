@@ -330,6 +330,7 @@ as $$
       coalesce(profit_amount, 0)::bigint as profit_amount,
       (created_at at time zone 'Asia/Jakarta')::date as local_date
     from public.transactions
+    where lower(coalesce(status, 'completed')) <> 'canceled'
   ), today as (
     select (now() at time zone 'Asia/Jakarta')::date as d
   )

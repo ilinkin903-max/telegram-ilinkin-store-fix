@@ -840,7 +840,7 @@ async function getAnalytics() {
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: true });
   if (error) throw error;
-  const rows = data || [];
+  const rows = (data || []).filter((row) => String(row.status || 'completed').toLowerCase() !== 'canceled');
   const daily = Array.from({ length: 7 }, (_, i) => {
     const key = addDaysKey(firstKey, i);
     return { date: key, label: wibKeyLabel(key), orders: 0, revenue: 0, quantity: 0 };
@@ -1193,7 +1193,8 @@ async function listTransactionsInRange(startAt, endAt = null, maxRows = 10000) {
   for (let from = 0; from < cap; from += pageSize) {
     const to = Math.min(cap - 1, from + pageSize - 1);
     let query = sb().from('transactions')
-      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at')
+      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at,status')
+      .neq('status', 'canceled')
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: true })
@@ -1279,30 +1280,34 @@ async function fulfillSharedOrderFallback(payloadOrder, product, totalPrice, buy
     if (updateUErr) throw updateUErr;
 
     if (mainUsed > 0) {
-      await sb().from('wallet_ledger').insert({
-        entry_key: `order:${invoice}:main`,
-        telegram_id: payloadOrder.telegram_id,
-        wallet_type: 'main',
-        direction: 'debit',
-        amount: mainUsed,
-        balance_after: newMain,
-        reason: 'Pembayaran produk dengan saldo utama',
-        reference: invoice,
-        created_at: new Date().toISOString()
-      }).catch(() => null);
+      try {
+        await sb().from('wallet_ledger').insert({
+          entry_key: `order:${invoice}:main`,
+          telegram_id: payloadOrder.telegram_id,
+          wallet_type: 'main',
+          direction: 'debit',
+          amount: mainUsed,
+          balance_after: newMain,
+          reason: 'Pembayaran produk dengan saldo utama',
+          reference: invoice,
+          created_at: new Date().toISOString()
+        });
+      } catch (_) { /* ledger insert optional */ }
     }
     if (refUsed > 0) {
-      await sb().from('wallet_ledger').insert({
-        entry_key: `order:${invoice}:referral`,
-        telegram_id: payloadOrder.telegram_id,
-        wallet_type: 'referral',
-        direction: 'debit',
-        amount: refUsed,
-        balance_after: newRef,
-        reason: 'Pembayaran produk dengan saldo referral',
-        reference: invoice,
-        created_at: new Date().toISOString()
-      }).catch(() => null);
+      try {
+        await sb().from('wallet_ledger').insert({
+          entry_key: `order:${invoice}:referral`,
+          telegram_id: payloadOrder.telegram_id,
+          wallet_type: 'referral',
+          direction: 'debit',
+          amount: refUsed,
+          balance_after: newRef,
+          reason: 'Pembayaran produk dengan saldo referral',
+          reference: invoice,
+          created_at: new Date().toISOString()
+        });
+      } catch (_) { /* ledger insert optional */ }
     }
   }
 
