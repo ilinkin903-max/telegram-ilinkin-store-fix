@@ -472,7 +472,11 @@ begin
      limit 1;
 
     if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
-    v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
+      v_stock := coalesce(v_product.stock, '[]'::jsonb);
+    else
+      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    end if;
   else
     v_stock := coalesce(v_product.stock, '[]'::jsonb);
   end if;
@@ -504,6 +508,9 @@ begin
            sold = coalesce(sold, 0) + v_quantity,
            updated_at = v_now
      where id = v_product.id;
+    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
+      update public.products set stock = v_rest, updated_at = v_now where id = v_product.id;
+    end if;
   else
     update public.products
        set stock = v_rest,
@@ -1106,7 +1113,11 @@ begin
      )) = upper(v_variant_key)
      limit 1;
     if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
-    v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
+      v_stock := coalesce(v_product.stock, '[]'::jsonb);
+    else
+      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    end if;
   else
     v_stock := coalesce(v_product.stock, '[]'::jsonb);
   end if;

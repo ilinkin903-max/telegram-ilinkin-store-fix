@@ -122,6 +122,7 @@ function parseVariants(value) {
         ? String(item.delivery_mode || item.deliveryMode).trim().toLowerCase()
         : '',
       active: item.active === undefined ? true : boolOf(item.active),
+      stock_mode: String(item.stock_mode || item.stockMode || item.stock_source || '').trim().toLowerCase() === 'shared' ? 'shared' : 'separate',
       stock: parseStockList(item.stock || item.stok || item.data || []),
       bulk_prices: parseBulkPrices(item.bulk_prices || item.bulkPrices || item.grosir || []),
       supplier_source: String(item.supplier_source || item.supplierSource || '').trim().toLowerCase(),
