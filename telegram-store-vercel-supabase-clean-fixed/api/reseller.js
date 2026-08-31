@@ -1305,11 +1305,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var n=wrap.querySelectorAll('[data-edit-variant-card]').length;
     wrap.insertAdjacentHTML('beforeend', editVariantCardHtml(data||{}, n, true));
     wireEditVariantRemoveButtons();
-    var card=wrap.lastElementChild;
-    var source=card?card.querySelector('[data-evfield="stock_mode"]'):null;
-    if(source) source.onchange=function(){ refreshEditSharedStockVisibility(window.__editingProduct||null); };
     refreshEditVariantTitles();
-    refreshEditSharedStockVisibility(window.__editingProduct||null);
   }
   function wireEditVariantRemoveButtons(){ document.querySelectorAll('[data-remove-edit-variant]').forEach(function(btn){ btn.onclick=function(){ var card=btn.closest('[data-edit-variant-card]'); if(card) card.remove(); refreshEditVariantTitles(); }; }); }
   function collectEditVariants(product){
@@ -1348,18 +1344,6 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function compileEditVariants(product){
     return collectEditVariants(product);
   }
-  function refreshEditSharedStockVisibility(product){
-    var wrap=document.getElementById('editSharedStockWrap');
-    if(!wrap) return;
-    var shared=false;
-    document.querySelectorAll('#editVariantCards [data-evfield="stock_mode"]').forEach(function(el){ if(String(el.value||'')==='shared') shared=true; });
-    wrap.classList.toggle('hidden', !shared);
-    if(shared && product){
-      var field=document.getElementById('editSharedStock');
-      if(field && !field.dataset.loaded) field.value=(Array.isArray(product.data)?product.data:[]).join('\n');
-      if(field) field.dataset.loaded='1';
-    }
-  }
   function toggleEditVariantBuilder(){
     var chk=document.getElementById('editVariantToggle');
     var box=document.getElementById('editVariantBuilder');
@@ -1387,7 +1371,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ deliveryEditor+
       '<div class="row3 '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Jual Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier / Item</label><input class="input" name="cost_price" type="number" min="0" placeholder="Contoh: 9000" value="'+esc(p.cost_price||'')+'"><p class="help">Berlaku untuk checkout berikutnya.</p></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
       '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
-      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editSharedStockWrap" class="field sharedStockField"><label class="label">Stok Produk Bersama</label><textarea class="textarea tall" id="editSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea><p class="help">Dipakai oleh semua varian yang memilih STOK BERSAMA.</p></div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
+      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
       '<div class="editSaveDock"><div><b>Simpan perubahan produk?</b><small>Tombol tetap terlihat selama Anda mengedit.</small></div><button class="btn cyan" type="submit">Simpan Perubahan</button></div></form>';
   }
   function openEditProduct(code){
@@ -1398,8 +1382,6 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var addBtn=document.getElementById('addEditVariantRowBtn'); if(addBtn) addBtn.onclick=function(){ addEditVariantRow({}); };
     wireEditVariantRemoveButtons();
     toggleEditVariantBuilder();
-    refreshEditSharedStockVisibility(p);
-    document.querySelectorAll('#editVariantCards [data-evfield="stock_mode"]').forEach(function(el){ el.onchange=function(){ refreshEditSharedStockVisibility(p); }; });
     document.getElementById('modalEditForm').onsubmit=async function(e){
       e.preventDefault();
       var d=formDataRaw(e.target);
@@ -1420,13 +1402,6 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
           d.deskripsi=variants[0].description||'Produk dengan varian.';
           d.snk=variants[0].snk||'Syarat mengikuti varian yang dipilih.';
           d.bulk_text='';
-          var anyShared=variants.some(function(v){ return v.stock_mode==='shared'; });
-          if(anyShared){
-            var sharedInput=document.getElementById('editSharedStock');
-            d.stock_text=sharedInput?cleanListText(sharedInput.value).join('\n'):'';
-          } else {
-            delete d.stock_text;
-          }
         }
       } else {
         d.variants=[];

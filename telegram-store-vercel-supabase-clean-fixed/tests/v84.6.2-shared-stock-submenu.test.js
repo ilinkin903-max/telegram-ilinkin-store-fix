@@ -56,3 +56,15 @@ test('storeService normalizes shared stock and calculates available pool correct
   assert.match(code, /function variantStock\(variant,\s*product = null\)/);
   assert.match(code, /hasSharedVariants \? baseStock : 0/);
 });
+
+test('edit product modal removes shared stock pool editor and keeps stock management in Stok/Kelola', () => {
+  const code = read('api/reseller.js');
+  assert.doesNotMatch(code, /id="editSharedStock"/);
+  assert.doesNotMatch(code, /id="editSharedStockWrap"/);
+});
+
+test('bot variant selection and order stock checks pass product context for shared variants', () => {
+  const code = read('lib/botHandlers.js');
+  assert.match(code, /stockOfVariant\(variant,\s*product\)\.length < 1/);
+  assert.match(code, /stockOfVariant\(variant,\s*product\)\.length/);
+});

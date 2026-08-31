@@ -1101,7 +1101,7 @@ function orderUnitPrice(product, order = {}) {
 
 function availableStockForOrder(product, order = {}) {
   const variant = selectedVariant(product, order);
-  if (variant) return stockOfVariant(variant).length;
+  if (variant) return stockOfVariant(variant, product).length;
   return Array.isArray(product.data) ? product.data.length : 0;
 }
 
@@ -1797,7 +1797,7 @@ async function handleVariantSelection(query, code, indexText) {
   if (isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant)) {
     const availabilityMap = isSupplierProduct(product, variant) ? await supplierAvailabilityForProducts([product]).catch(() => new Map()) : new Map();
     if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
-  } else if (!isPoProduct(product, variant) && stockOfVariant(variant).length < 1) {
+  } else if (!isPoProduct(product, variant) && stockOfVariant(variant, product).length < 1) {
     return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, variant, index);
