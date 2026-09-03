@@ -493,11 +493,11 @@ function homeKeyboard(req, userId, settings = {}) {
   const storeUrl = getStorefrontUrl(req);
 
   if (menuMode !== 'products' && storeUrl) {
-    rows.push([styledButton('‹🛍️› Buka Marketplace', { web_app: { url: storeUrl } }, 'primary')]);
+    rows.push([styledButton('‹🛍️› Buka Marketplace', { web_app: { url: storeUrl } }, 'success')]);
   }
   const nokosUrl = normalizeTelegramTargetUrl(settings.nokos_link);
   if (menuMode !== 'marketplace') {
-    const productRow = [styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'success')];
+    const productRow = [styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'primary')];
     if (nokosUrl) productRow.push(styledButton('‹📱› Nokos', { url: nokosUrl }, 'primary'));
     rows.push(productRow);
   } else if (nokosUrl) {
