@@ -19,7 +19,7 @@ test('SQL shared mode reads product stock and syncs the remaining pool back',()=
  const s=read('supabase/schema.sql');
  assert.match(s,/v_variant->>'stock_mode'/);
  assert.match(s,/v_stock := coalesce\(v_product\.stock/);
- assert.match(s,/set stock = v_rest/);
+ assert.match(s,/set stock = v_rest, updated_at = v_now/);
  assert.match(s,/array\[v_variant_idx::text, 'stock'\], v_rest/);
 });
 test('migration is non-destructive',()=>{

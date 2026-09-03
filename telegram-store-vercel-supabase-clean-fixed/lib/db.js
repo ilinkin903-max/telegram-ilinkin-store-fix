@@ -157,7 +157,6 @@ function normalizeVariant(item, index = 0) {
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
     delivery_mode: normalizeDeliveryMode(item?.delivery_mode ?? item?.deliveryMode ?? item?.pengiriman, ''),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
-    stock_mode: String(item?.stock_mode || item?.stockMode || item?.stock_source || '').trim().toLowerCase() === 'shared' ? 'shared' : 'separate',
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || []),
     supplier_source: String(item?.supplier_source || item?.supplierSource || '').trim().toLowerCase(),
@@ -226,12 +225,7 @@ function findVariant(product, key) {
 
 function variantStockCount(product) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const hasShared = variants.some((v) => String(v.stock_mode || '').toLowerCase() === 'shared');
-  const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
-  const separateStock = variants
-    .filter((v) => String(v.stock_mode || '').toLowerCase() !== 'shared')
-    .reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
-  return sharedStock + separateStock;
+  return variants.reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
 }
 
 function variantDeliveryMode(product, variantOrKey = null) {
@@ -247,21 +241,13 @@ function productAvailableStock(product, variantKeyValue = '') {
     const found = findVariant(product, variantKeyValue);
     if (!found.variant) return 0;
     if (variantDeliveryMode(product, found.variant) === 'po') return 0;
-    if (String(found.variant.stock_mode || '').toLowerCase() === 'shared') {
-      return Array.isArray(product?.data) ? product.data.length : 0;
-    }
     return Array.isArray(found.variant.stock) ? found.variant.stock.length : 0;
   }
   if (variants.length) {
-    const hasShared = variants.some((v) => String(v.stock_mode || '').toLowerCase() === 'shared');
-    const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
-    const separateStock = variants
-      .filter((v) => String(v.stock_mode || '').toLowerCase() !== 'shared')
-      .reduce((sum, variant) => {
-        if (variantDeliveryMode(product, variant) === 'po') return sum;
-        return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
-      }, 0);
-    return sharedStock + separateStock;
+    return variants.reduce((sum, variant) => {
+      if (variantDeliveryMode(product, variant) === 'po') return sum;
+      return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
+    }, 0);
   }
   if (normalizeDeliveryMode(product?.delivery_mode, 'auto') === 'po') return 0;
   return Array.isArray(product?.data) ? product.data.length : 0;
@@ -840,7 +826,7 @@ async function getAnalytics() {
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: true });
   if (error) throw error;
-  const rows = (data || []).filter((row) => String(row.status || 'completed').toLowerCase() !== 'canceled');
+  const rows = data || [];
   const daily = Array.from({ length: 7 }, (_, i) => {
     const key = addDaysKey(firstKey, i);
     return { date: key, label: wibKeyLabel(key), orders: 0, revenue: 0, quantity: 0 };
@@ -1193,8 +1179,7 @@ async function listTransactionsInRange(startAt, endAt = null, maxRows = 10000) {
   for (let from = 0; from < cap; from += pageSize) {
     const to = Math.min(cap - 1, from + pageSize - 1);
     let query = sb().from('transactions')
-      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at,status')
-      .neq('status', 'canceled')
+      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at')
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: true })
@@ -1226,148 +1211,6 @@ async function getUserByTelegramId(telegramId) {
   const { data, error } = await sb().from('bot_users').select('*').eq('telegram_id', Number(telegramId)).maybeSingle();
   if (error) throw error;
   return data;
-}
-
-async function fulfillSharedOrderFallback(payloadOrder, product, totalPrice, buyer, selectedVariant) {
-  const invoice = payloadOrder.invoice_ref;
-  const isWallet = payloadOrder.payment_method === 'wallet';
-  const qty = Math.max(1, Number(payloadOrder.quantity || 1));
-
-  const { data: existingTx } = await sb().from('transactions').select('*').eq('order_ref', invoice).maybeSingle();
-  if (existingTx) {
-    return {
-      delivered: Array.isArray(existingTx.delivered_items) ? existingTx.delivered_items.map(String) : [],
-      transaction: existingTx,
-      already_completed: true,
-      po_waiting: false,
-      po_order: null,
-      wallet: null
-    };
-  }
-
-  const { data: freshProduct, error: prodErr } = await sb().from('products').select('*').ilike('code', payloadOrder.product_code).maybeSingle();
-  if (prodErr || !freshProduct) throw new Error('Produk untuk invoice ini tidak ditemukan.');
-  const stock = Array.isArray(freshProduct.stock) ? freshProduct.stock : [];
-  if (stock.length < qty) {
-    throw new Error('Stok produk tidak mencukupi.');
-  }
-
-  let freshUser = null;
-  let mainUsed = 0;
-  let refUsed = 0;
-  if (isWallet) {
-    const { data: u, error: userErr } = await sb().from('bot_users').select('*').eq('telegram_id', payloadOrder.telegram_id).maybeSingle();
-    if (userErr || !u) throw new Error('Pengguna tidak ditemukan.');
-    freshUser = u;
-    const balanceTotal = Math.max(0, Number(freshUser.balance_main || 0)) + Math.max(0, Number(freshUser.balance_referral || 0));
-    if (balanceTotal < totalPrice) {
-      throw new Error('Saldo tidak mencukupi. Silakan top up atau gunakan QRIS.');
-    }
-    mainUsed = Math.min(Math.max(0, Number(freshUser.balance_main || 0)), totalPrice);
-    refUsed = Math.max(0, totalPrice - mainUsed);
-    const newMain = Math.max(0, Number(freshUser.balance_main || 0) - mainUsed);
-    const newRef = Math.max(0, Number(freshUser.balance_referral || 0) - refUsed);
-
-    const { error: updateUErr } = await sb().from('bot_users').update({
-      balance_main: newMain,
-      balance_referral: newRef,
-      transaction_count: Math.max(0, Number(freshUser.transaction_count || 0)) + 1,
-      spending: Math.max(0, Number(freshUser.spending || 0)) + totalPrice,
-      first_name: buyer?.first_name || freshUser.first_name,
-      username: buyer?.username || freshUser.username,
-      updated_at: new Date().toISOString()
-    }).eq('telegram_id', payloadOrder.telegram_id);
-    if (updateUErr) throw updateUErr;
-
-    if (mainUsed > 0) {
-      try {
-        await sb().from('wallet_ledger').insert({
-          entry_key: `order:${invoice}:main`,
-          telegram_id: payloadOrder.telegram_id,
-          wallet_type: 'main',
-          direction: 'debit',
-          amount: mainUsed,
-          balance_after: newMain,
-          reason: 'Pembayaran produk dengan saldo utama',
-          reference: invoice,
-          created_at: new Date().toISOString()
-        });
-      } catch (_) { /* ledger insert optional */ }
-    }
-    if (refUsed > 0) {
-      try {
-        await sb().from('wallet_ledger').insert({
-          entry_key: `order:${invoice}:referral`,
-          telegram_id: payloadOrder.telegram_id,
-          wallet_type: 'referral',
-          direction: 'debit',
-          amount: refUsed,
-          balance_after: newRef,
-          reason: 'Pembayaran produk dengan saldo referral',
-          reference: invoice,
-          created_at: new Date().toISOString()
-        });
-      } catch (_) { /* ledger insert optional */ }
-    }
-  }
-
-  const delivered = stock.slice(0, qty);
-  const remainingStock = stock.slice(qty);
-  const variants = Array.isArray(freshProduct.variants) ? freshProduct.variants : [];
-  const vIdx = variants.findIndex((v, i) => variantKey(v, i) === String(payloadOrder.variant_key).toUpperCase());
-  if (vIdx >= 0) {
-    variants[vIdx].sold = Math.max(0, Number(variants[vIdx].sold || 0)) + qty;
-  }
-  const { error: updateProdErr } = await sb().from('products').update({
-    stock: remainingStock,
-    variants: variants,
-    sold: Math.max(0, Number(freshProduct.sold || 0)) + qty,
-    updated_at: new Date().toISOString()
-  }).eq('id', freshProduct.id);
-  if (updateProdErr) throw updateProdErr;
-
-  const profitAmount = payloadOrder.cost_source === 'unset' ? 0 : (totalPrice - payloadOrder.fee - payloadOrder.cost_total);
-  const txPayload = {
-    telegram_id: payloadOrder.telegram_id,
-    username: buyer?.username || null,
-    product_name: freshProduct.name,
-    product_code: freshProduct.code,
-    variant_key: payloadOrder.variant_key,
-    variant_name: payloadOrder.variant_name,
-    unit_price: payloadOrder.unit_price,
-    quantity: qty,
-    total_price: totalPrice,
-    payment_fee: payloadOrder.fee,
-    cost_unit: payloadOrder.cost_unit,
-    cost_total: payloadOrder.cost_total,
-    cost_source: payloadOrder.cost_source,
-    cost_updated_at: payloadOrder.cost_source === 'unset' ? null : new Date().toISOString(),
-    profit_amount: profitAmount,
-    payment_method: payloadOrder.payment_method,
-    wallet_main_used: mainUsed,
-    wallet_referral_used: refUsed,
-    order_ref: invoice,
-    delivered_items: delivered,
-    delivered_text: delivered.join('\n'),
-    created_at: new Date().toISOString()
-  };
-  const { data: insertedTx, error: txErr } = await sb().from('transactions').insert(txPayload).select().maybeSingle();
-  if (txErr && !String(txErr.message || '').includes('duplicate')) throw txErr;
-
-  return {
-    delivered,
-    transaction: insertedTx || txPayload,
-    already_completed: false,
-    po_waiting: false,
-    po_order: null,
-    wallet: isWallet ? {
-      main_used: mainUsed,
-      referral_used: refUsed,
-      balance_main: Math.max(0, Number(freshUser?.balance_main || 0) - mainUsed),
-      balance_referral: Math.max(0, Number(freshUser?.balance_referral || 0) - refUsed),
-      balance_total: (Math.max(0, Number(freshUser?.balance_main || 0) - mainUsed) + Math.max(0, Number(freshUser?.balance_referral || 0) - refUsed))
-    } : null
-  };
 }
 
 async function completeOrder(order, product, totalPrice, buyer = {}) {
@@ -1409,10 +1252,6 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   const { data, error } = rpcResult;
   if (error) {
     const message = String(error.message || error);
-    const isShared = selectedVariant && String(selectedVariant.stock_mode || '').trim().toLowerCase() === 'shared';
-    if (!isPo && isShared && /INSUFFICIENT_STOCK/i.test(message)) {
-      return await fulfillSharedOrderFallback(payloadOrder, product, totalPrice, buyer, selectedVariant);
-    }
     if (isPo && /fulfill_po_(?:wallet|paid)_order_v69|schema cache|could not find the function/i.test(message)) {
       throw new Error('Fungsi Pre-Order per varian v69 belum tersedia. Jalankan supabase/update-v69-po-variant-voucher-ui.sql terlebih dahulu.');
     }

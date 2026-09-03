@@ -1,0 +1,40 @@
+LINK AUTO ORDER v84.7.0 - TEST REPORT
+Tanggal pemeriksaan: 3 September 2026 (Asia/Jakarta)
+
+HASIL AKHIR
+- Status: LULUS
+- Total test suite proyek: 296
+- Lulus: 296
+- Gagal: 0
+- Dilewati: 0
+- Test khusus v84.7.0: 10/10 lulus
+- Pemeriksaan runtime buyer lookup: lulus
+- Pemeriksaan sintaks file JavaScript utama: lulus
+- Kompilasi inline JavaScript Dashboard Manager: lulus
+
+FITUR YANG DIVERIFIKASI
+1. Tombol Chat Pembeli tersedia pada kartu penjualan, detail transaksi, pesanan PRE-ORDER, dialog pengiriman PRE-ORDER, daftar user, pengaturan saldo user, dan statistik top user.
+2. Pencarian pembeli menerima Telegram ID, nama, @username, dan username tanpa @.
+3. Pencarian server-side tetap dilindungi autentikasi owner Dashboard Manager.
+4. Lookup ID memprioritaskan username Telegram terbaru dan membuang username lama ketika user telah mengganti atau melepas username.
+5. Username membuka tautan percakapan Telegram; ID menjadi fallback ketika username tidak tersedia.
+6. Cache menu memakai TTL singkat dan menggabungkan request bersamaan untuk mengurangi pembacaan database/supplier berulang.
+7. Callback navigasi menu diakui lebih awal agar indikator loading Telegram cepat berhenti.
+8. Tombol cek keanggotaan tetap memaksa verifikasi terbaru.
+9. Saldo dan stok supplier pada checkout tetap diverifikasi secara live.
+10. Cache saldo/riwayat dibersihkan setelah top up atau transaksi berhasil.
+11. Statistik, pengaturan, saldo, dan pembaruan profil pada menu utama dijalankan paralel.
+
+PERINTAH VALIDASI
+- npm test
+- node --test tests/v84.7-buyer-chat-fast-menu.test.js
+- node --check api/reseller.js
+- node --check api/reseller-data.js
+- node --check lib/botHandlers.js
+- Runtime invocation endpoint buyer-lookup dengan data mock terisolasi
+
+CATATAN LINGKUNGAN UJI
+Registry NPM tidak dapat dijangkau dari lingkungan pemeriksaan karena kegagalan DNS. Agar seluruh test logika tetap dapat dijalankan, dependency test double lokal yang terisolasi digunakan untuk axios, dotenv, dan qrcode. Test double hanya berada di node_modules selama pemeriksaan, tidak mengubah package.json/package-lock.json, dan dihapus sebelum arsip rilis dibuat. Integrasi jaringan nyata tidak dipanggil oleh rangkaian unit/regression test ini.
+
+MIGRATION DATABASE
+- Tidak ada migration SQL baru untuk v84.7.0.

@@ -330,7 +330,6 @@ as $$
       coalesce(profit_amount, 0)::bigint as profit_amount,
       (created_at at time zone 'Asia/Jakarta')::date as local_date
     from public.transactions
-    where lower(coalesce(status, 'completed')) <> 'canceled'
   ), today as (
     select (now() at time zone 'Asia/Jakarta')::date as d
   )
@@ -473,11 +472,7 @@ begin
      limit 1;
 
     if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
-    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
-      v_stock := coalesce(v_product.stock, '[]'::jsonb);
-    else
-      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
-    end if;
+    v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
   else
     v_stock := coalesce(v_product.stock, '[]'::jsonb);
   end if;
@@ -497,33 +492,18 @@ begin
 
   if v_variant_key <> '' then
     v_variants := coalesce(v_product.variants, '[]'::jsonb);
-    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
-      v_variants := jsonb_set(
-        v_variants,
-        array[v_variant_idx::text, 'sold'],
-        to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity),
-        true
-      );
-      update public.products
-         set stock = v_rest,
-             variants = v_variants,
-             sold = coalesce(sold, 0) + v_quantity,
-             updated_at = v_now
-       where id = v_product.id;
-    else
-      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
-      v_variants := jsonb_set(
-        v_variants,
-        array[v_variant_idx::text, 'sold'],
-        to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity),
-        true
-      );
-      update public.products
-         set variants = v_variants,
-             sold = coalesce(sold, 0) + v_quantity,
-             updated_at = v_now
-       where id = v_product.id;
-    end if;
+    v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    v_variants := jsonb_set(
+      v_variants,
+      array[v_variant_idx::text, 'sold'],
+      to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity),
+      true
+    );
+    update public.products
+       set variants = v_variants,
+           sold = coalesce(sold, 0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
   else
     update public.products
        set stock = v_rest,
@@ -1126,11 +1106,7 @@ begin
      )) = upper(v_variant_key)
      limit 1;
     if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
-    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
-      v_stock := coalesce(v_product.stock, '[]'::jsonb);
-    else
-      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
-    end if;
+    v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
   else
     v_stock := coalesce(v_product.stock, '[]'::jsonb);
   end if;
@@ -1145,22 +1121,13 @@ begin
 
   if v_variant_key <> '' then
     v_variants := coalesce(v_product.variants, '[]'::jsonb);
-    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
-      v_variants := jsonb_set(
-        v_variants, array[v_variant_idx::text, 'sold'],
-        to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity), true
-      );
-      update public.products set stock = v_rest, variants = v_variants, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
-       where id = v_product.id;
-    else
-      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
-      v_variants := jsonb_set(
-        v_variants, array[v_variant_idx::text, 'sold'],
-        to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity), true
-      );
-      update public.products set variants = v_variants, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
-       where id = v_product.id;
-    end if;
+    v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    v_variants := jsonb_set(
+      v_variants, array[v_variant_idx::text, 'sold'],
+      to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity), true
+    );
+    update public.products set variants = v_variants, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
+     where id = v_product.id;
   else
     update public.products set stock = v_rest, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
      where id = v_product.id;

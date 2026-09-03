@@ -200,10 +200,7 @@ function parseFlashSalePromoCodes(value) {
     }).slice(0, 100);
 }
 
-function variantStock(variant, product = null) {
-  if (String(variant?.stock_mode || '').trim().toLowerCase() === 'shared' && product) {
-    return Array.isArray(product?.data) ? product.data.length : 0;
-  }
+function variantStock(variant) {
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
 
@@ -255,13 +252,11 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
   const workflow = workflowSelection(product, variant);
   const availability = supplier ? supplierAvailabilityFromProduct(product, supplier.productId, variant?.supplier_stock) : null;
   const deliveryMode = db.normalizeDeliveryMode(variant?.delivery_mode, '');
-  const stockMode = String(variant?.stock_mode || '').trim().toLowerCase() === 'shared' ? 'shared' : 'separate';
   return {
     key,
     name: String(variant?.name || `Varian ${index + 1}`),
     price,
-    stock_mode: stockMode,
-    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : variantStock(variant, product)),
+    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : variantStock(variant)),
     sold: Number(variant?.sold || 0),
     active: variant?.active !== false,
     description: String(variant?.description || ''),
@@ -313,11 +308,8 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock).availableStock || 0)))
     : null;
   const workflowAvailableStock = isWorkflow ? workflowAvailabilityFromProduct(product, null).availableStock : null;
-  const hasSharedVariants = variants.some((v) => v.stock_mode === 'shared');
-  const sharedStock = hasSharedVariants ? baseStock : 0;
-  const separateStock = variants.filter((v) => v.stock_mode !== 'shared').reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0);
   const stock = variants.length
-    ? (sharedStock + separateStock)
+    ? variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0)
     : (isSupplier ? supplierAvailableStock : (isWorkflow ? workflowAvailableStock : (isPo ? 0 : baseStock)));
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))

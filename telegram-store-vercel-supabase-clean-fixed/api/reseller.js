@@ -188,6 +188,9 @@ module.exports = async function handler(req, res) {
     .supplierPanel{background:#d9fbff}.supplierHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.supplierStat{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:12px;background:#fff}.supplierStat:nth-child(2){background:var(--lime)}.supplierStat:nth-child(3){background:var(--yellow)}.supplierStat:nth-child(4){background:#e6d7ff}.supplierStat small{display:block;font-size:10px;text-transform:uppercase}.supplierStat b{display:block;font-size:20px;margin-top:5px}.supplierToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.supplierToolbar .input{flex:1;min-width:220px}.supplierGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.supplierCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px;display:flex;flex-direction:column;gap:9px}.supplierCard.selected{background:#f3ffe0}.supplierCardTop{display:flex;gap:10px;align-items:flex-start}.supplierThumb{width:64px;height:64px;object-fit:cover;border:2px solid #000;border-radius:8px;background:#eee}.supplierThumbFallback{width:64px;height:64px;border:2px solid #000;border-radius:8px;background:var(--cyan);display:grid;place-items:center;font-size:25px}.supplierCard h3{margin:0;font-size:17px;line-height:1.2}.supplierMeta{font-size:12px;line-height:1.5;color:#333}.supplierPriceRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.supplierOrderList{display:grid;gap:9px}.supplierOrder{border:2px solid #000;border-radius:8px;background:#fff;padding:10px;font-size:12px;line-height:1.5}.supplierOrder.error{background:#ffd8d8}.supplierOrder.delivered{background:#e4ffd1}.supplierConfigWarning{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:14px;background:var(--yellow);margin-bottom:12px}.supplierApiBadge{display:inline-flex;border:2px solid #000;border-radius:999px;padding:4px 8px;font-size:10px;background:var(--lime)}
     .workflowPanel{background:#eefcff}.workflowStatus{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0}.workflowStat{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:10px;background:#fff}.workflowStat b{display:block;font-size:17px;margin-top:4px}.workflowRecorder{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:12px;margin-top:12px}.workflowMessage{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:13px;min-height:150px}.workflowMessage pre{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-weight:800;margin:8px 0}.workflowButtons{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.workflowButtons .workflowButtonSelected{background:#36c66b!important;border-color:#126b36!important;color:#fff!important;box-shadow:0 0 0 2px #126b36 inset,3px 3px 0 rgba(0,0,0,.18)}.workflowButtons .workflowButtonSelected::before{content:'✓ ';font-weight:900}.workflowButtons .workflowButtonQuantity{background:#7b61ff!important;color:#fff!important;border-color:#4d39b7!important}.workflowButtonPicker{display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:2px dashed #000;border-radius:8px;background:#f7f7ff}.workflowButtonPicker button.selected{background:#36c66b!important;border-color:#126b36!important;color:#fff!important}.workflowButtonPicker button:disabled{opacity:.5}.workflowSteps{display:grid;gap:8px}.workflowStep{border:2px solid #000;border-radius:8px;background:#fff;padding:10px;font-size:12px;line-height:1.45}.workflowStep.result{background:#e2ffd4}.workflowStep .stepResponse{margin-top:6px;padding:7px;border:2px dashed #000;background:#f8f8f8;white-space:pre-wrap;word-break:break-word;max-height:130px;overflow:auto}.workflowList{display:grid;gap:9px}.workflowCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px}.workflowCard.active{background:#e4ffd1}.workflowRun.attention{background:#ffd8d8}.workflowRun.delivered{background:#e4ffd1}.workflowPlaceholder{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}.workflowPlaceholder button{font-size:11px}.workflowDanger{background:#ffd8d8;border:2px solid #000;padding:9px;border-radius:7px}.workflowHint{background:#fff6b9;border:2px solid #000;padding:9px;border-radius:7px;font-size:12px;line-height:1.45}.workflowMessageChoice{border:2px solid #000;border-radius:8px;padding:10px;margin-top:9px;background:#fff}.workflowMessageChoice.selected{background:#e4ffd1;box-shadow:3px 3px 0 #000}.workflowMessageChoice.pending{background:#fff6b9}.workflowMessageChoice .messageHead{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.workflowMessageChoice pre{max-height:180px;overflow:auto}.workflowSelectableText{width:100%;min-height:120px;max-height:220px;resize:vertical;border:2px solid #000;border-radius:7px;background:#f8f8f8;padding:9px;font:800 12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}.workflowMessageChoice.selected .workflowSelectableText{background:#fff}.workflowSelectionInfo{font-size:11px;font-weight:800;margin-top:6px}.workflowCategoryBox{border:2px solid #000;border-radius:8px;padding:10px;background:#f5f5ff}.workflowCategoryBox.quantity{background:#e5fbff}.workflowSelectionWarning{background:#ffdca8;border:2px solid #000;border-radius:7px;padding:8px;margin-top:8px;font-size:12px;font-weight:800}
     @media(max-width:700px){.supplierHero,.workflowStatus{grid-template-columns:1fr 1fr}.supplierPriceRow{grid-template-columns:1fr}.supplierToolbar .input{min-width:100%}.workflowRecorder{grid-template-columns:1fr}}
+    /* v84.7: chat pembeli langsung dari dashboard */
+    .buyerChatLookup{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:end;border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#d9fbff;padding:11px;margin-bottom:12px}.buyerChatLookup .field{min-width:0}.buyerChatLookup .btn{min-height:46px;white-space:nowrap}.buyerChatBtn{background:var(--cyan)!important;color:#000!important}.orderActions{grid-template-columns:repeat(3,minmax(0,1fr))}.poActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.poActions .btn{width:100%}.buyerResultList{display:grid;gap:8px}.buyerResult{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:2px solid #000;border-radius:8px;background:#f8fafc;padding:9px}.buyerResult small{display:block;color:#64748b;margin-top:3px}.buyerResult .btn{white-space:nowrap}.userActions{flex-wrap:wrap;min-width:220px}.userActions .buyerChatBtn{min-width:66px}.topUserActions{display:flex;justify-content:flex-end;margin-top:8px}.topUserActions .btn{min-width:120px}.modalBuyerActions{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px}
+    @media(max-width:760px){.buyerChatLookup{grid-template-columns:1fr}.buyerChatLookup .btn{width:100%}.orderActions{grid-template-columns:1fr 1fr}.orderActions .buyerChatBtn{grid-column:1/-1}.poActions{grid-template-columns:1fr}.buyerResult{grid-template-columns:1fr}.buyerResult .btn{width:100%}.modalBuyerActions{grid-template-columns:1fr}.userActions{min-width:0}}
 </style>
 </head>
 <body>
@@ -288,9 +291,9 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     </div>
   </section>
 
-  <section id="orders" class="section"><div class="panel"><h2 class="sectionTitle">Penjualan</h2><div id="orderList" class="orderGrid"></div></div></section>
-  <section id="poOrders" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Pesanan Pre-Order</h2><p class="help">Hanya pesanan yang pembayarannya sudah berhasil. Masukkan produk/akun, lalu kirim ke chat pembeli.</p></div></div><div class="poNotice"><b>Alur aman:</b> pembayaran berhasil → pesanan masuk di sini → Anda tempel akun/produk → konfirmasi → bot mengirim ke pembeli → status menjadi TERKIRIM.</div><div id="poOrderList" class="poGrid"></div></div></section>
-  <section id="users" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Users</h2><p class="help">Ringkasan pelanggan dan aktivitas transaksi.</p></div></div><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><div id="userList" class="userCardGrid"></div></div></section>
+  <section id="orders" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Penjualan</h2><p class="help">Klik <b>Chat Pembeli</b> untuk membuka percakapan Telegram dari username, atau dari ID Telegram bila username tidak tersedia.</p></div></div><div id="orderList" class="orderGrid"></div></div></section>
+  <section id="poOrders" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Pesanan Pre-Order</h2><p class="help">Hanya pesanan yang pembayarannya sudah berhasil. Anda dapat chat pembeli terlebih dahulu, lalu masukkan produk/akun dan kirim melalui bot.</p></div></div><div class="poNotice"><b>Alur aman:</b> pembayaran berhasil → pesanan masuk di sini → chat pembeli bila perlu → tempel akun/produk → konfirmasi → bot mengirim ke pembeli → status menjadi TERKIRIM.</div><div id="poOrderList" class="poGrid"></div></div></section>
+  <section id="users" class="section"><div class="panel"><div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Users</h2><p class="help">Cari dan buka chat pelanggan menggunakan ID Telegram, nama, atau @username. Nama akan dicocokkan ke akun pelanggan yang tersimpan.</p></div></div><div class="buyerChatLookup"><div class="field"><label class="label" for="buyerChatLookupInput">Chat Pembeli Langsung</label><input class="input" id="buyerChatLookupInput" autocomplete="off" placeholder="Masukkan ID, nama, atau @username"></div><button class="btn cyan" id="buyerChatLookupOpen" type="button">💬 Cari & Chat</button></div><div class="userTools"><button class="btn small lime" type="button" data-user-sort="latest">Terbaru</button><button class="btn small purple" type="button" data-user-sort="transactions">Transaksi Terbanyak</button><button class="btn small yellow" type="button" data-user-sort="spending">Spending Terbanyak</button></div><div id="userList" class="userCardGrid"></div></div></section>
   <section id="broadcast" class="section">
     <div class="forms broadcastGrid">
       <div class="panel broadcastPanel">
@@ -608,6 +611,116 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function formDataRaw(form){ return Object.fromEntries(new FormData(form).entries()); }
   function searchQuery(){ var el=document.getElementById('search'); return String((el&&el.value)||'').trim().toLowerCase(); }
   function textMatch(parts,q){ if(!q) return true; return parts.map(function(x){ return String(x==null?'':x).toLowerCase(); }).join(' ').indexOf(q)>=0; }
+  function cleanTelegramUsername(value){ return String(value==null?'':value).trim().replace(/^@+/, '').replace(/[^A-Za-z0-9_]/g,''); }
+  function cleanTelegramId(value){ var id=String(value==null?'':value).trim(); return /^\d+$/.test(id)?id:''; }
+  function resolveBuyerRecord(record){
+    var source=record||{};
+    var id=cleanTelegramId(source.telegram_id||source.user_id||source.id);
+    var username=cleanTelegramUsername(source.username);
+    var firstName=String(source.first_name||source.name||'').trim();
+    var stored=null;
+    if(id) stored=(state.users||[]).find(function(u){return cleanTelegramId(u.telegram_id)===id;})||null;
+    if(!stored&&username) stored=(state.users||[]).find(function(u){return cleanTelegramUsername(u.username).toLowerCase()===username.toLowerCase();})||null;
+    if(stored){
+      id=id||cleanTelegramId(stored.telegram_id);
+      username=username||cleanTelegramUsername(stored.username);
+      firstName=firstName||String(stored.first_name||'').trim();
+    }
+    return {telegram_id:id,username:username,first_name:firstName};
+  }
+  function buyerDisplayName(record){
+    var buyer=resolveBuyerRecord(record);
+    if(buyer.username) return '@'+buyer.username;
+    if(buyer.first_name&&buyer.telegram_id) return buyer.first_name+' · ID '+buyer.telegram_id;
+    if(buyer.first_name) return buyer.first_name;
+    return buyer.telegram_id?'ID '+buyer.telegram_id:'Akun Telegram tidak tersedia';
+  }
+  function buyerChatButton(record,label,extraClass){
+    var buyer=resolveBuyerRecord(record);
+    if(!buyer.telegram_id&&!buyer.username) return '';
+    return '<button class="btn small buyerChatBtn '+esc(extraClass||'cyan')+'" type="button" data-chat-user="'+esc(buyer.telegram_id)+'" data-chat-username="'+esc(buyer.username)+'" data-chat-name="'+esc(buyer.first_name)+'" aria-label="Buka chat Telegram '+esc(buyerDisplayName(buyer))+'">'+esc(label||'💬 Chat Pembeli')+'</button>';
+  }
+  async function openBuyerChat(record){
+    var buyer=resolveBuyerRecord(record);
+    if(buyer.telegram_id){
+      var refreshed=await apiSafe('buyer-lookup',[],{q:buyer.telegram_id});
+      var exact=(refreshed||[]).find(function(row){return cleanTelegramId(row.telegram_id)===buyer.telegram_id;})||null;
+      if(exact) buyer={telegram_id:buyer.telegram_id,username:cleanTelegramUsername(exact.username),first_name:String(exact.first_name||buyer.first_name||'').trim()};
+    }
+    if(!buyer.username&&!buyer.telegram_id) return toast('ID atau username Telegram pembeli tidak tersedia.',true);
+    try{ if(tg&&tg.HapticFeedback&&typeof tg.HapticFeedback.impactOccurred==='function') tg.HapticFeedback.impactOccurred('light'); }catch(e){}
+    if(buyer.username){
+      var publicUrl='https://t.me/'+buyer.username;
+      try{
+        if(tg&&typeof tg.openTelegramLink==='function'){ tg.openTelegramLink(publicUrl); return; }
+      }catch(e){}
+      var opened=null;
+      try{ opened=window.open(publicUrl,'_blank','noopener,noreferrer'); }catch(e){}
+      if(!opened) window.location.href=publicUrl;
+      return;
+    }
+    try{
+      window.location.href='tg://user?id='+encodeURIComponent(buyer.telegram_id);
+      toast('Membuka akun Telegram ID '+buyer.telegram_id+'...');
+    }catch(e){
+      toast('Telegram tidak dapat membuka ID ini. Salin ID '+buyer.telegram_id+' dan cari dari Telegram.',true);
+    }
+  }
+  function allBuyerRecords(){
+    var merged={};
+    function add(row){
+      var buyer=resolveBuyerRecord(row);
+      var key=buyer.telegram_id?('id:'+buyer.telegram_id):(buyer.username?('user:'+buyer.username.toLowerCase()):'');
+      if(!key) return;
+      var current=merged[key]||{telegram_id:'',username:'',first_name:''};
+      current.telegram_id=current.telegram_id||buyer.telegram_id;
+      current.username=current.username||buyer.username;
+      current.first_name=current.first_name||buyer.first_name;
+      merged[key]=current;
+    }
+    (state.users||[]).forEach(add); (state.orders||[]).forEach(add); (state.poOrders||[]).forEach(add);
+    return Object.keys(merged).map(function(key){return merged[key];});
+  }
+  function buyerLookupMatches(value){
+    var raw=String(value||'').trim();
+    var needle=raw.replace(/^@+/, '').toLowerCase();
+    if(!needle) return [];
+    var rows=allBuyerRecords();
+    var exact=rows.filter(function(u){
+      return cleanTelegramId(u.telegram_id)===raw || cleanTelegramUsername(u.username).toLowerCase()===needle || String(u.first_name||'').trim().toLowerCase()===needle;
+    });
+    if(exact.length) return exact;
+    return rows.filter(function(u){
+      return [u.telegram_id,u.username,u.first_name].map(function(v){return String(v||'').toLowerCase();}).join(' ').indexOf(needle)>=0;
+    });
+  }
+  async function openBuyerLookup(){
+    var input=document.getElementById('buyerChatLookupInput');
+    var button=document.getElementById('buyerChatLookupOpen');
+    var value=String(input&&input.value||'').trim();
+    if(!value) return toast('Masukkan ID, nama, atau @username pembeli.',true);
+    if(/^@+/.test(value)) return openBuyerChat({username:cleanTelegramUsername(value)});
+    var originalText=button?button.textContent:'';
+    if(button){button.disabled=true;button.textContent='Mencari...';}
+    try{
+      var rows=buyerLookupMatches(value);
+      if(!rows.length) rows=await apiSafe('buyer-lookup',[],{q:value});
+      if(!rows.length&&cleanTelegramId(value)) rows=[{telegram_id:cleanTelegramId(value),username:'',first_name:''}];
+      if(!rows.length&&/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(value)) rows=[{telegram_id:'',username:cleanTelegramUsername(value),first_name:''}];
+      if(!rows.length) return toast('Pembeli tidak ditemukan. Coba ID, nama lengkap, atau @username lain.',true);
+      if(rows.length===1) return openBuyerChat(rows[0]);
+      var body='<p class="help">Ditemukan '+rows.length+' akun. Pilih pembeli yang benar.</p><div class="buyerResultList">'+rows.slice(0,30).map(function(u){return '<div class="buyerResult"><div><b>'+esc(buyerDisplayName(u))+'</b><small>ID '+esc(u.telegram_id||'-')+(u.username?' · @'+esc(u.username):'')+'</small></div>'+buyerChatButton(u,'💬 Buka Chat','cyan')+'</div>';}).join('')+'</div>';
+      openModal('Pilih Pembeli',body);
+    }finally{
+      if(button){button.disabled=false;button.textContent=originalText||'💬 Cari & Chat';}
+    }
+  }
+  document.addEventListener('click',function(event){
+    var target=event.target&&event.target.closest?event.target.closest('.buyerChatBtn'):null;
+    if(!target) return;
+    event.preventDefault(); event.stopPropagation();
+    openBuyerChat({telegram_id:target.dataset.chatUser||'',username:target.dataset.chatUsername||'',first_name:target.dataset.chatName||''}).catch(function(error){toast(error&&error.message?error.message:'Gagal membuka chat Telegram.',true);});
+  });
   function normalizePromoTargetPart(value){ return String(value||'').trim().toUpperCase().replace(/\s+/g,'-'); }
   function normalizePromoTargetToken(value){ var raw=String(value||'').trim(); if(!raw) return ''; var parts=raw.split('::'); var product=normalizePromoTargetPart(parts.shift()); var variant=normalizePromoTargetPart(parts.join('::')); if(!product || product==='SEMUA' || product==='ALL' || product==='-') return ''; return variant ? product+'::'+variant : product; }
   function parsePromoTargets(value){ var rows=Array.isArray(value)?value:String(value||'').split(/[,|\n]+/); var seen={}; return rows.map(normalizePromoTargetToken).filter(function(x){ if(!x||seen[x]) return false; seen[x]=1; return true; }); }
@@ -667,26 +780,16 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var existing=product.variants||[];
     return existing.map(function(v,i){
       var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
-      var isShared=variantUsesSharedStock(v);
       var el=document.querySelector('[data-stock-field="'+sku.replace(/"/g,'&quot;')+'"]');
+      var input=el?cleanListText(el.value):[];
       var isSupplierVariant=isExternalSupplierLink(v); var isWorkflowVariant=isWorkflowSupplierLink(v);
-      var stock;
-      if(isShared){
-        stock=[];
-      } else if(isSupplierVariant){
-        stock=isWorkflowVariant ? variantStock(v) : [];
-      } else if(el){
-        var input=cleanListText(el.value);
-        stock=mode==='append' ? variantStock(v).concat(input) : input;
-      } else {
-        stock=variantStock(v);
-      }
+      var stock=isSupplierVariant ? (isWorkflowVariant ? variantStock(v) : []) : (mode==='append' ? variantStock(v).concat(input) : input);
       return {
         name:v.name||v.nama||'',
         price:v.price||v.harga||0,
         cost_price:v.cost_price||v.cost||0,
         sku:sku,
-        stock_mode:isShared?'shared':'separate',
+        stock_mode:variantUsesSharedStock(v)?'shared':'separate',
         stock:stock,
         bulk_prices:Array.isArray(v.bulk_prices)?v.bulk_prices:parseBulkArray(variantBulkText(v)),
         description:v.description||v.deskripsi||'',
@@ -715,11 +818,10 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var n=wrap.querySelectorAll('.addVariantCard').length+1;
     var div=document.createElement('div');
     div.className='addVariantCard';
-    var isShared=String(data.stock_mode||'')==='shared';
     div.innerHTML='<div class="addVariantCardTitle"><b>Varian '+n+'</b><div><label class="miniSwitch"><input type="checkbox" data-vfield="active" '+(data.active===false?'':'checked')+'><span>ON</span></label> <button class="btn small red" type="button" data-remove-variant>Hapus</button></div></div>'+ 
       '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-vfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(data.name||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-vfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(data.price||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-vfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(data.cost_price||data.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-vfield="sku" placeholder="Contoh: BULAN1" value="'+esc(data.sku||'')+'"></div></div>'+ 
       '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-vfield="delivery"><option value="" '+(!data.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(data.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(data.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Bisa berbeda untuk setiap varian. PRE-ORDER tidak memotong stok saat pembayaran.</p></div>'+ 
-      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-vfield="stock_mode"><option value="separate" '+(!isShared?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(isShared?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared = semua varian memakai stok produk yang sama. Cocok untuk beda garansi/durasi.</p></div><div class="row"><div class="field" data-vfield-stock-wrap><label class="label">Stok Varian</label><textarea class="textarea" data-vfield="stock" placeholder="Contoh, pisahkan koma atau baris baru:\nakun1,akun2,akun3">'+esc(data.stock||'')+'</textarea></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-vfield="bulk" placeholder="Contoh:\n5:9000,10:8000">'+esc(data.bulk||'')+'</textarea></div></div>'+
+      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-vfield="stock_mode"><option value="separate" '+(String(data.stock_mode||'separate')==='separate'?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(String(data.stock_mode||'')==='shared'?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared = semua varian memakai stok produk yang sama. Cocok untuk beda garansi/durasi.</p></div><div class="row"><div class="field"><label class="label">Stok Varian</label><textarea class="textarea" data-vfield="stock" placeholder="Contoh, pisahkan koma atau baris baru:\nakun1,akun2,akun3">'+esc(data.stock||'')+'</textarea></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-vfield="bulk" placeholder="Contoh:\n5:9000,10:8000">'+esc(data.bulk||'')+'</textarea></div></div>'+
       '<div class="row"><div class="field"><label class="label">Deskripsi Varian</label><textarea class="textarea" data-vfield="description" placeholder="Contoh: Canva EDU 1 tahun untuk satu user.">'+esc(data.description||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan Varian</label><textarea class="textarea" data-vfield="snk" placeholder="Contoh: Garansi 7 hari, jangan ganti password.">'+esc(data.snk||'')+'</textarea></div></div>';
     wrap.appendChild(div);
     var remove=div.querySelector('[data-remove-variant]');
@@ -731,15 +833,10 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function refreshVariantTitles(){ document.querySelectorAll('#addVariantCards .addVariantCard').forEach(function(card,i){ var b=card.querySelector('.addVariantCardTitle b'); if(b) b.textContent='Varian '+(i+1); }); }
   function refreshAddSharedStockVisibility(){
     var wrap=document.getElementById('addSharedStockWrap');
+    if(!wrap) return;
     var shared=false;
-    document.querySelectorAll('#addVariantCards .addVariantCard').forEach(function(card){
-      var modeEl=card.querySelector('[data-vfield="stock_mode"]');
-      var isShared=modeEl && String(modeEl.value||'')==='shared';
-      if(isShared) shared=true;
-      var stockWrap=card.querySelector('[data-vfield-stock-wrap]');
-      if(stockWrap) stockWrap.classList.toggle('hidden', isShared);
-    });
-    if(wrap) wrap.classList.toggle('hidden', !shared);
+    document.querySelectorAll('#addVariantCards [data-vfield="stock_mode"]').forEach(function(el){ if(String(el.value||'')==='shared') shared=true; });
+    wrap.classList.toggle('hidden', !shared);
   }
   function toggleAddVariantBuilder(){
     var chk=document.getElementById('addVariantToggle');
@@ -1287,14 +1384,13 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     v=v||{};
     var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
     var supplierVariant=isExternalSupplierLink(v); var workflowVariant=isWorkflowSupplierLink(v);
-    var isShared=variantUsesSharedStock(v);
     var deliveryField=supplierVariant
       ? '<div class="field"><label class="label">Sistem Pengiriman Varian</label><div class="variantMainCompact">'+(workflowVariant?'WORKFLOW RESELLER · BOT SUPPLIER':'SUPPLIER OTOMATIS · PRODSELLER')+'</div><p class="help">Link reseller tetap dipertahankan saat nama, harga, deskripsi, atau SnK varian diedit.</p></div>'
       : '<div class="field"><label class="label">Sistem Pengiriman Varian</label><select class="select" data-evfield="delivery"><option value="" '+(!v.delivery_mode?'selected':'')+'>Ikuti pengaturan produk</option><option value="auto" '+(String(v.delivery_mode||'')==='auto'?'selected':'')+'>AUTO · kirim dari stok</option><option value="po" '+(String(v.delivery_mode||'')==='po'?'selected':'')+'>PRE-ORDER · seller kirim manual</option></select><p class="help">Gunakan PRE-ORDER hanya pada varian yang ingin Anda kirim manual setelah pembayaran.</p></div>';
     return '<div class="addVariantCard" data-edit-variant-card data-old-sku="'+esc(sku)+'">'+
-      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> '+(supplierVariant?'<span class="chip green">SUPPLIER</span>':(isShared?'<span class="chip cyan">STOK BERSAMA</span>':'<span class="chip yellow">Stok diatur dari Stok/Kelola</span>'))+' '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
+      '<div class="addVariantCardTitle"><b>Varian '+(i+1)+'</b><div><label class="miniSwitch"><input type="checkbox" data-evfield="active" '+(variantActive(v)?'checked':'')+'><span>ON</span></label> '+(supplierVariant?'<span class="chip green">SUPPLIER</span>':'<span class="chip yellow">Stok diatur dari Stok/Kelola</span>')+' '+(allowRemove?'<button class="btn small red" type="button" data-remove-edit-variant>Hapus</button>':'')+'</div></div>'+ 
       '<div class="row4"><div class="field"><label class="label">Nama Varian</label><input class="input" data-evfield="name" placeholder="Contoh: 1 Bulan" value="'+esc(v.name||v.nama||'')+'"></div><div class="field"><label class="label">Harga Jual Varian</label><input class="input" data-evfield="price" type="number" placeholder="Contoh: 10000" value="'+esc(v.price||v.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier</label><input class="input" data-evfield="cost" type="number" min="0" placeholder="Contoh: 7000" value="'+esc(v.cost_price||v.cost||'')+'"></div><div class="field"><label class="label">Kode Varian</label><input class="input" data-evfield="sku" placeholder="Contoh: BULAN1" value="'+esc(sku)+'"></div></div>'+deliveryField+
-      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-evfield="stock_mode"><option value="separate" '+(!isShared?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(isShared?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared memakai stok produk utama; Separate memakai stok khusus varian.</p></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-evfield="bulk" placeholder="Contoh:\n5:9000\n10:8000">'+esc(variantBulkText(v)||'')+'</textarea></div>'+ 
+      '<div class="field"><label class="label">Sumber Stok Varian</label><select class="select" data-evfield="stock_mode"><option value="separate" '+(String(v.stock_mode||'separate')!=='shared'?'selected':'')+'>STOK TERPISAH · khusus varian ini</option><option value="shared" '+(String(v.stock_mode||'')==='shared'?'selected':'')+'>STOK BERSAMA · gunakan Stok Produk utama</option></select><p class="help">Shared memakai stok produk utama; Separate memakai stok khusus varian.</p></div><div class="field"><label class="label">Harga Grosir Varian</label><textarea class="textarea" data-evfield="bulk" placeholder="Contoh:\n5:9000\n10:8000">'+esc(variantBulkText(v)||'')+'</textarea></div>'+ 
       '<div class="row"><div class="field"><label class="label">Deskripsi Varian</label><textarea class="textarea tall" data-evfield="description" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin menggunakan email pembeli.">'+esc(v.description||v.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan Varian</label><textarea class="textarea tall" data-evfield="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(v.snk||v.terms||'')+'</textarea></div></div>'+ 
       '</div>';
   }
@@ -1305,7 +1401,11 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var n=wrap.querySelectorAll('[data-edit-variant-card]').length;
     wrap.insertAdjacentHTML('beforeend', editVariantCardHtml(data||{}, n, true));
     wireEditVariantRemoveButtons();
+    var card=wrap.lastElementChild;
+    var source=card?card.querySelector('[data-evfield="stock_mode"]'):null;
+    if(source) source.onchange=function(){ refreshEditSharedStockVisibility(window.__editingProduct||null); };
     refreshEditVariantTitles();
+    refreshEditSharedStockVisibility(window.__editingProduct||null);
   }
   function wireEditVariantRemoveButtons(){ document.querySelectorAll('[data-remove-edit-variant]').forEach(function(btn){ btn.onclick=function(){ var card=btn.closest('[data-edit-variant-card]'); if(card) card.remove(); refreshEditVariantTitles(); }; }); }
   function collectEditVariants(product){
@@ -1318,14 +1418,13 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       var sku=String(val('sku')||oldSku).toUpperCase();
       var old=bySku[oldSku]||bySku[sku]||existing[i]||{};
       var name=val('name');
-      var isShared=val('stock_mode')==='shared';
       if(name){ var isSupplierVariant=isExternalSupplierLink(old); var isWorkflowVariant=isWorkflowSupplierLink(old); rows.push({
         name:name,
         price:val('price'),
         cost_price:val('cost'),
         sku:sku,
         stock_mode:val('stock_mode')==='shared'?'shared':'separate',
-        stock:isShared ? [] : (isSupplierVariant?(isWorkflowVariant?variantStock(old):[]):variantStock(old)),
+        stock:isSupplierVariant?(isWorkflowVariant?variantStock(old):[]):variantStock(old),
         bulk_prices:parseBulkArray(val('bulk')),
         description:val('description'),
         snk:val('snk'),
@@ -1343,6 +1442,18 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   }
   function compileEditVariants(product){
     return collectEditVariants(product);
+  }
+  function refreshEditSharedStockVisibility(product){
+    var wrap=document.getElementById('editSharedStockWrap');
+    if(!wrap) return;
+    var shared=false;
+    document.querySelectorAll('#editVariantCards [data-evfield="stock_mode"]').forEach(function(el){ if(String(el.value||'')==='shared') shared=true; });
+    wrap.classList.toggle('hidden', !shared);
+    if(shared && product){
+      var field=document.getElementById('editSharedStock');
+      if(field && !field.dataset.loaded) field.value=(Array.isArray(product.data)?product.data:[]).join('\n');
+      if(field) field.dataset.loaded='1';
+    }
   }
   function toggleEditVariantBuilder(){
     var chk=document.getElementById('editVariantToggle');
@@ -1371,7 +1482,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ deliveryEditor+
       '<div class="row3 '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Jual Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier / Item</label><input class="input" name="cost_price" type="number" min="0" placeholder="Contoh: 9000" value="'+esc(p.cost_price||'')+'"><p class="help">Berlaku untuk checkout berikutnya.</p></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
       '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
-      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
+      '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editSharedStockWrap" class="field sharedStockField"><label class="label">Stok Produk Bersama</label><textarea class="textarea tall" id="editSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\\n'))+'</textarea><p class="help">Dipakai oleh semua varian yang memilih STOK BERSAMA.</p></div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
       '<div class="editSaveDock"><div><b>Simpan perubahan produk?</b><small>Tombol tetap terlihat selama Anda mengedit.</small></div><button class="btn cyan" type="submit">Simpan Perubahan</button></div></form>';
   }
   function openEditProduct(code){
@@ -1382,6 +1493,8 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var addBtn=document.getElementById('addEditVariantRowBtn'); if(addBtn) addBtn.onclick=function(){ addEditVariantRow({}); };
     wireEditVariantRemoveButtons();
     toggleEditVariantBuilder();
+    refreshEditSharedStockVisibility(p);
+    document.querySelectorAll('#editVariantCards [data-evfield="stock_mode"]').forEach(function(el){ el.onchange=function(){ refreshEditSharedStockVisibility(p); }; });
     document.getElementById('modalEditForm').onsubmit=async function(e){
       e.preventDefault();
       var d=formDataRaw(e.target);
@@ -1402,6 +1515,13 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
           d.deskripsi=variants[0].description||'Produk dengan varian.';
           d.snk=variants[0].snk||'Syarat mengikuti varian yang dipilih.';
           d.bulk_text='';
+          var anyShared=variants.some(function(v){ return v.stock_mode==='shared'; });
+          if(anyShared){
+            var sharedInput=document.getElementById('editSharedStock');
+            d.stock_text=sharedInput?cleanListText(sharedInput.value).join('\n'):'';
+          } else {
+            delete d.stock_text;
+          }
         }
       } else {
         d.variants=[];
@@ -1415,22 +1535,16 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function openStockProduct(code){
     var p=findProduct(code); if(!p)return;
     var hasVar=(p.variants||[]).length>0;
-    var html='<form id="modalAppendStockForm" class="form"><p class="help">Tambahkan stok produk atau varian. Varian STOK BERSAMA menggunakan pool produk utama; Varian STOK TERPISAH memiliki stok masing-masing.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
+    var html='<form id="modalAppendStockForm" class="form"><p class="help">Tambahkan stok. Varian Shared menggunakan stok produk utama; Varian Separate memiliki stok sendiri.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      var sharedVars=(p.variants||[]).filter(variantUsesSharedStock);
-      var separateVars=(p.variants||[]).filter(function(v){ return !variantUsesSharedStock(v); });
-      if(sharedVars.length>0){
-        var sharedNames=sharedVars.map(function(v){ return esc(v.name||v.nama||v.sku); }).join(', ');
-        html+='<div class="variantCard" style="background:#e5fbff;border:1px solid #7de3f4"><h3>🔗 Stok Produk Bersama</h3><p class="help">Digunakan bersama oleh: <b>'+sharedNames+'</b></p><p class="help">Stok saat ini: <b>'+((p.data||[]).length)+'</b></p><label class="label">Tambah Stok Bersama</label><textarea class="textarea" id="appendSharedStock" placeholder="Satu stok per baris"></textarea></div>';
-      }
-      if(separateVars.length>0){
-        html+='<div class="variantList">'+separateVars.map(function(v,i){
-          var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
-          if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis dari supplier.</p></div>';
-          return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Stok terpisah saat ini: <b>'+variantStock(v,p).length+'</b></p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris"></textarea></div>';
-        }).join('')+'</div>';
-      }
-    }else html+='<p class="help">Stok saat ini: <b>'+((p.data||[]).length)+'</b></p><label class="label">Tambah Stok Produk</label><textarea class="textarea tall" id="appendDefaultStock" placeholder="Satu stok per baris"></textarea>';
+      if(hasSharedVariant(p))html+='<div class="variantCard" style="background:#e5fbff"><h3>🔗 Stok Produk Bersama</h3><p class="help">Pool ini dipakai semua varian mode STOK BERSAMA.</p><p class="help">Stok saat ini: '+((p.data||[]).length)+'</p><label class="label">Tambah Stok Bersama</label><textarea class="textarea" id="appendSharedStock" placeholder="Satu stok per baris"></textarea></div>';
+      html+='<div class="variantList">'+(p.variants||[]).map(function(v,i){
+        var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+        if(variantUsesSharedStock(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip cyan">STOK BERSAMA</span></h3><p class="help">Menggunakan pool produk: '+variantStock(v,p).length+'</p></div>';
+        if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis dari supplier.</p></div>';
+        return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Stok terpisah: '+variantStock(v,p).length+'</p><label class="label">Tambah Stok Varian</label><textarea class="textarea" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris"></textarea></div>';
+      }).join('')+'</div>';
+    }else html+='<label class="label">Tambah Stok Produk</label><textarea class="textarea tall" id="appendDefaultStock" placeholder="Satu stok per baris"></textarea>';
     html+='<button class="btn lime" type="submit">Tambahkan Stok</button></form>';
     openModal('Tambah Stok - '+p.nama,html);
     document.getElementById('modalAppendStockForm').onsubmit=async function(e){
@@ -1443,21 +1557,15 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function openManageProduct(code){
     var p=findProduct(code);if(!p)return;
     var hasVar=(p.variants||[]).length>0;
-    var html='<form id="modalManageStockForm" class="form"><p class="help">Kelola dan edit stok produk atau varian. Varian STOK BERSAMA menggunakan pool produk utama; Varian STOK TERPISAH memiliki stok masing-masing.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
+    var html='<form id="modalManageStockForm" class="form"><p class="help">Kelola stok. Shared = pool produk utama. Separate = stok khusus varian.</p><input type="hidden" name="kode" value="'+esc(p.kode)+'">';
     if(hasVar){
-      var sharedVars=(p.variants||[]).filter(variantUsesSharedStock);
-      var separateVars=(p.variants||[]).filter(function(v){ return !variantUsesSharedStock(v); });
-      if(sharedVars.length>0){
-        var sharedNames=sharedVars.map(function(v){ return esc(v.name||v.nama||v.sku); }).join(', ');
-        html+='<div class="variantCard" style="background:#e5fbff;border:1px solid #7de3f4"><h3>🔗 Stok Produk Bersama</h3><p class="help">Digunakan bersama oleh: <b>'+sharedNames+'</b> (Total: '+((p.data||[]).length)+' stok)</p><label class="label">Kelola Stok Bersama</label><textarea class="textarea tall" id="manageSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea></div>';
-      }
-      if(separateVars.length>0){
-        html+='<div class="variantList">'+separateVars.map(function(v,i){
-          var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
-          if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis.</p></div>';
-          return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><p class="help">Total: '+variantStock(v,p).length+' stok</p><label class="label">Kelola Stok Varian Terpisah</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v,p).join('\n'))+'</textarea></div>';
-        }).join('')+'</div>';
-      }
+      if(hasSharedVariant(p))html+='<div class="variantCard" style="background:#e5fbff"><h3>🔗 Stok Produk Bersama</h3><p class="help">Pool stok bersama untuk seluruh varian Shared.</p><textarea class="textarea tall" id="manageSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea></div>';
+      html+='<div class="variantList">'+(p.variants||[]).map(function(v,i){
+        var sku=String(v.sku||v.kode||('VAR'+(i+1))).toUpperCase();
+        if(variantUsesSharedStock(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip cyan">STOK BERSAMA</span></h3><p class="help">Pool produk: '+variantStock(v,p).length+'</p></div>';
+        if(isExternalSupplierLink(v))return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+' <span class="chip green">'+(isWorkflowSupplierLink(v)?'WORKFLOW':'SUPPLIER')+'</span></h3><p class="help">Stok otomatis.</p></div>';
+        return '<div class="variantCard"><h3>'+esc(v.name||v.nama||sku)+'</h3><label class="label">Stok Varian Terpisah</label><textarea class="textarea tall" data-stock-field="'+esc(sku)+'" placeholder="Satu stok per baris">'+esc(variantStock(v,p).join('\n'))+'</textarea></div>';
+      }).join('')+'</div>';
     }else html+='<label class="label">Stok Produk</label><textarea class="textarea tall" id="manageDefaultStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\n'))+'</textarea>';
     html+='<button class="btn yellow" type="submit">Simpan Kelola Stok</button></form>';
     openModal('Kelola Stok - '+p.nama,html);
@@ -1509,21 +1617,21 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function openOrderProducts(ref){
     var o=state.orders.find(function(x){return String(x.order_ref||'')===String(ref||'');});
     if(!o) return;
-    var user=o.username?'@'+esc(o.username):esc(o.telegram_id);
+    var user=esc(buyerDisplayName(o));
     var text=orderProductText(o);
-    openModal('Detail Penjualan', '<div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(o.order_ref||'-'))+'</div><div class="detailItem"><b>User</b><br>'+user+'</div><div class="detailItem"><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(o.quantity||1)+' item</div><div class="detailItem"><b>Total Dibayar</b><br>'+rupiah(o.total_price)+'</div><div class="detailItem"><b>Fee Pembayaran</b><br>'+rupiah(o.payment_fee||0)+'</div><div class="detailItem"><b>Status</b><br>'+esc(orderStatusLabel(o))+'</div><div class="detailItem"><b>Tanggal</b><br>'+new Date(o.created_at).toLocaleString('id-ID')+'</div></div><div class="field" style="margin-top:12px"><label class="label">Produk yang diterima pembeli</label><textarea class="textarea tall" readonly>'+esc(text)+'</textarea></div><button class="btn yellow" type="button" id="editOrderCostFromDetail">Atur / Koreksi Modal Checkout</button>');
+    openModal('Detail Penjualan', '<div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(o.order_ref||'-'))+'</div><div class="detailItem"><b>User</b><br>'+user+'</div><div class="detailItem"><b>Produk</b><br>'+esc(o.product_name||'-')+(o.variant_name?' - '+esc(o.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(o.quantity||1)+' item</div><div class="detailItem"><b>Total Dibayar</b><br>'+rupiah(o.total_price)+'</div><div class="detailItem"><b>Fee Pembayaran</b><br>'+rupiah(o.payment_fee||0)+'</div><div class="detailItem"><b>Status</b><br>'+esc(orderStatusLabel(o))+'</div><div class="detailItem"><b>Tanggal</b><br>'+new Date(o.created_at).toLocaleString('id-ID')+'</div></div><div class="field" style="margin-top:12px"><label class="label">Produk yang diterima pembeli</label><textarea class="textarea tall" readonly>'+esc(text)+'</textarea></div><div class="actions modalBuyerActions">'+buyerChatButton(o,'💬 Chat Pembeli','cyan')+'<button class="btn yellow" type="button" id="editOrderCostFromDetail">Atur / Koreksi Modal Checkout</button></div>');
     var edit=document.getElementById('editOrderCostFromDetail'); if(edit) edit.onclick=function(){ openOrderCost(o.order_ref); };
   }
   function orderMatches(o,q){ return textMatch([o.order_ref,o.product_name,o.variant_name,o.username,o.telegram_id,o.total_price,o.quantity,o.created_at,o.cost_total,o.profit_amount,o.status,orderProductText(o)],q); }
   function renderOrders(){
     var q=searchQuery(); var rows=state.orders.filter(function(o){return orderMatches(o,q);}); updateSearchCounter();
     document.getElementById('orderList').innerHTML=rows.map(function(o){
-      var user=o.username?'@'+esc(o.username):esc(o.telegram_id);
+      var user=esc(buyerDisplayName(o));
       var rawRef=String(o.order_ref||('INV-'+String(o.created_at||'').replace(/[^0-9]/g,'').slice(-10)));
       var ref=esc(displayRef(rawRef));
       var name=esc(o.product_name)+(o.variant_name?' <span class="chip yellow">'+esc(o.variant_name)+'</span>':'');
       var canceled=orderStatusValue(o)==='canceled';
-      return '<article class="orderCard'+(canceled?' orderCanceled':'')+'"><div class="orderRef">'+ref+'</div><div class="orderTitleRow"><b class="orderTitle">'+name+'</b><button class="orderStatusButton '+(canceled?'canceled':'completed')+'" type="button" data-order-status="'+esc(rawRef)+'">'+orderStatusLabel(o)+'</button></div><div class="orderMeta">×'+esc(o.quantity||1)+' · Total <b>'+rupiah(o.total_price)+'</b><br>Fee pembayaran: '+rupiah(o.payment_fee||0)+'<br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div><div class="actions"><button class="btn small purple" type="button" data-order-products="'+esc(rawRef)+'">Detail</button><button class="btn small yellow" type="button" data-order-cost="'+esc(rawRef)+'">Atur Modal</button></div></article>';
+      return '<article class="orderCard'+(canceled?' orderCanceled':'')+'"><div class="orderRef">'+ref+'</div><div class="orderTitleRow"><b class="orderTitle">'+name+'</b><button class="orderStatusButton '+(canceled?'canceled':'completed')+'" type="button" data-order-status="'+esc(rawRef)+'">'+orderStatusLabel(o)+'</button></div><div class="orderMeta">×'+esc(o.quantity||1)+' · Total <b>'+rupiah(o.total_price)+'</b><br>Fee pembayaran: '+rupiah(o.payment_fee||0)+'<br>👤 '+user+'<br>🗓 '+new Date(o.created_at).toLocaleString('id-ID')+'</div><div class="actions orderActions">'+buyerChatButton(o,'💬 Chat Pembeli','cyan')+'<button class="btn small purple" type="button" data-order-products="'+esc(rawRef)+'">Detail</button><button class="btn small yellow" type="button" data-order-cost="'+esc(rawRef)+'">Atur Modal</button></div></article>';
     }).join('')||'<div class="empty">Belum ada order.</div>';
     document.querySelectorAll('[data-order-products]').forEach(function(btn){btn.onclick=function(){openOrderProducts(btn.dataset.orderProducts);};});
     document.querySelectorAll('[data-order-cost]').forEach(function(btn){btn.onclick=function(){openOrderCost(btn.dataset.orderCost);};});
@@ -1542,7 +1650,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var text=String(input&&input.value||'').trim();
     if(!text) return toast('Masukkan produk/akun yang akan dikirim.',true);
     var preview=text.length>900?text.slice(0,900)+'\n…':text;
-    var body='<div class="statusConfirm"><div class="statusConfirmIcon success">➤</div><h3>Kirim produk ke pembeli sekarang?</h3><p>Pastikan akun/produk sudah benar. Setelah Telegram berhasil menerima pesan, status PO akan menjadi <b>TERKIRIM</b>.</p><div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(po.order_ref||'-'))+'</div><div class="detailItem"><b>Pembeli</b><br>'+(po.username?'@'+esc(po.username):'ID '+esc(po.telegram_id))+'</div><div class="detailItem"><b>Produk</b><br>'+esc(po.product_name||po.product_code||'-')+(po.variant_name?' · '+esc(po.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(po.quantity||1)+' item</div></div><div class="field" style="margin-top:10px"><label class="label">Produk / akun yang akan dikirim</label><pre class="detailItem" style="max-height:220px;overflow:auto;white-space:pre-wrap">'+esc(preview)+'</pre></div><div class="statusConfirmActions"><button class="btn lime" id="confirmPoSend" type="button">Kirim ke Pembeli</button><button class="btn" id="cancelPoSend" type="button">Periksa Lagi</button></div></div>';
+    var body='<div class="statusConfirm"><div class="statusConfirmIcon success">➤</div><h3>Kirim produk ke pembeli sekarang?</h3><p>Pastikan akun/produk sudah benar. Setelah Telegram berhasil menerima pesan, status PO akan menjadi <b>TERKIRIM</b>.</p><div class="detailGrid"><div class="detailItem"><b>Invoice</b><br>'+esc(displayRef(po.order_ref||'-'))+'</div><div class="detailItem"><b>Pembeli</b><br>'+esc(buyerDisplayName(po))+'</div><div class="detailItem"><b>Produk</b><br>'+esc(po.product_name||po.product_code||'-')+(po.variant_name?' · '+esc(po.variant_name):'')+'</div><div class="detailItem"><b>Jumlah</b><br>'+esc(po.quantity||1)+' item</div></div><div class="field" style="margin-top:10px"><label class="label">Produk / akun yang akan dikirim</label><pre class="detailItem" style="max-height:220px;overflow:auto;white-space:pre-wrap">'+esc(preview)+'</pre></div><div class="statusConfirmActions">'+buyerChatButton(po,'💬 Chat Pembeli','cyan')+'<button class="btn lime" id="confirmPoSend" type="button">Kirim ke Pembeli</button><button class="btn" id="cancelPoSend" type="button">Periksa Lagi</button></div></div>';
     openModal('Konfirmasi Pengiriman PRE-ORDER',body);
     document.getElementById('cancelPoSend').onclick=closeModal;
     document.getElementById('confirmPoSend').onclick=async function(){
@@ -1564,10 +1672,11 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       var delivered=status==='delivered';
       var label=waiting?'MENUNGGU DIKIRIM':(delivered?'TERKIRIM':'DIBATALKAN');
       var badgeClass=waiting?'waiting':(delivered?'delivered':'');
-      var user=o.username?'@'+esc(o.username):'ID '+esc(o.telegram_id);
+      var user=esc(buyerDisplayName(o));
+      var chatButton=buyerChatButton(o,'💬 Chat Pembeli','cyan');
       var editor=waiting
-        ? '<div class="field"><label class="label">Produk / Akun untuk Pembeli</label><textarea class="textarea poDelivery" data-po-text="'+esc(o.order_ref)+'" placeholder="Tempel akun, password, link, lisensi, atau data produk yang akan diterima pembeli."></textarea><p class="help">Data baru dikirim setelah Anda menekan Kirim dan mengonfirmasi.</p></div><button class="btn lime" type="button" data-po-send="'+esc(o.order_ref)+'">Kirim Produk ke Pembeli</button>'
-        : (delivered?'<div class="detailItem"><b>Produk yang sudah dikirim</b><br><pre style="white-space:pre-wrap;margin:7px 0 0">'+esc(o.delivery_text||'-')+'</pre></div>':'<div class="detailItem">Pesanan dibatalkan. Produk tidak dapat dikirim dari menu PO.</div>');
+        ? '<div class="field"><label class="label">Produk / Akun untuk Pembeli</label><textarea class="textarea poDelivery" data-po-text="'+esc(o.order_ref)+'" placeholder="Tempel akun, password, link, lisensi, atau data produk yang akan diterima pembeli."></textarea><p class="help">Data baru dikirim setelah Anda menekan Kirim dan mengonfirmasi.</p></div><div class="poActions">'+chatButton+'<button class="btn lime" type="button" data-po-send="'+esc(o.order_ref)+'">Kirim Produk ke Pembeli</button></div>'
+        : (delivered?'<div class="detailItem"><b>Produk yang sudah dikirim</b><br><pre style="white-space:pre-wrap;margin:7px 0 0">'+esc(o.delivery_text||'-')+'</pre></div><div class="poActions">'+chatButton+'</div>':'<div class="detailItem">Pesanan dibatalkan. Produk tidak dapat dikirim dari menu PO.</div><div class="poActions">'+chatButton+'</div>');
       return '<article class="poCard '+(delivered?'delivered':'')+'"><div class="poHead"><div><h3>'+esc(o.product_name||o.product_code||'-')+'</h3><div class="poMeta">'+(o.variant_name?esc(o.variant_name)+' · ':'')+esc(o.quantity||1)+' item · '+rupiah(o.total_price||0)+'</div></div><span class="poStatus '+badgeClass+'">'+label+'</span></div><div class="poMeta"><b>Invoice:</b> '+esc(displayRef(o.order_ref||'-'))+'<br><b>Pembeli:</b> '+user+'<br><b>Dibayar:</b> '+(o.paid_at?new Date(o.paid_at).toLocaleString('id-ID'):'-')+(o.delivered_at?'<br><b>Dikirim:</b> '+new Date(o.delivered_at).toLocaleString('id-ID'):'')+'</div>'+editor+'</article>';
     }).join('')||'<div class="empty">Belum ada pesanan PRE-ORDER.</div>';
     document.querySelectorAll('[data-po-send]').forEach(function(btn){btn.onclick=function(){openPoDeliveryConfirm(btn.dataset.poSend);};});
@@ -1582,10 +1691,10 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     if(state.userSort==='transactions') rows.sort(function(a,b){return Number(b.transaction_count||0)-Number(a.transaction_count||0);});
     else if(state.userSort==='spending') rows.sort(function(a,b){return Number(b.spending||0)-Number(a.spending||0);});
     document.getElementById('userList').innerHTML=rows.map(function(u){
-      var display=u.username?'@'+esc(u.username):esc(u.first_name||'Tanpa username');
+      var display=esc(buyerDisplayName(u));
       var initial=String(u.first_name||u.username||'U').slice(0,1).toUpperCase();
       var main=Number(u.balance_main||0), referral=Number(u.balance_referral||0), total=main+referral;
-      return '<article class="userCard walletUserCard"><div class="userIdentity"><div class="userAvatar">'+esc(initial)+'</div><div class="userMain"><b>'+display+'</b><small>ID '+esc(u.telegram_id)+(u.referral_code?' · Ref '+esc(u.referral_code):'')+'</small></div></div><div class="userMetric userTransactions"><span>Transaksi</span><b>'+esc(u.transaction_count||0)+'</b></div><div class="userMetric userSpending"><span>Spending</span><b>'+rupiah(u.spending||0)+'</b></div><div class="userWallet"><span><small>Utama</small><b>'+rupiah(main)+'</b></span><span><small>Referral</small><b>'+rupiah(referral)+'</b></span><span><small>Total</small><b>'+rupiah(total)+'</b></span></div><div class="userActions"><button class="btn cyan userBalanceBtn" data-balance-user="'+esc(u.telegram_id)+'">Atur Saldo</button><button class="btn red userDelete" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></div></article>';
+      return '<article class="userCard walletUserCard"><div class="userIdentity"><div class="userAvatar">'+esc(initial)+'</div><div class="userMain"><b>'+display+'</b><small>ID '+esc(u.telegram_id)+(u.referral_code?' · Ref '+esc(u.referral_code):'')+'</small></div></div><div class="userMetric userTransactions"><span>Transaksi</span><b>'+esc(u.transaction_count||0)+'</b></div><div class="userMetric userSpending"><span>Spending</span><b>'+rupiah(u.spending||0)+'</b></div><div class="userWallet"><span><small>Utama</small><b>'+rupiah(main)+'</b></span><span><small>Referral</small><b>'+rupiah(referral)+'</b></span><span><small>Total</small><b>'+rupiah(total)+'</b></span></div><div class="userActions">'+buyerChatButton(u,'💬 Chat','cyan')+'<button class="btn small yellow userBalanceBtn" data-balance-user="'+esc(u.telegram_id)+'">Saldo</button><button class="btn small red userDelete" data-del-user="'+esc(u.telegram_id)+'">Hapus</button></div></article>';
     }).join('')||'<div class="empty">Belum ada user.</div>';
     document.querySelectorAll('[data-balance-user]').forEach(function(btn){btn.onclick=function(){openUserBalance(btn.dataset.balanceUser);};});
     document.querySelectorAll('[data-del-user]').forEach(function(btn){btn.onclick=async function(){ if(confirm('Hapus user '+btn.dataset.delUser+'?')) await post('delete-user',{telegram_id:btn.dataset.delUser});};});
@@ -1596,7 +1705,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     if(!u) return toast('User tidak ditemukan.',true);
     var display=u.username?'@'+esc(u.username):esc(u.first_name||'Tanpa username');
     var main=Number(u.balance_main||0), referral=Number(u.balance_referral||0);
-    var body='<form id="userBalanceForm" class="form"><div class="balanceEditorSummary"><div class="detailItem"><b>User</b><br>'+display+'<br><small>ID '+esc(u.telegram_id)+'</small></div><div class="detailItem"><b>Saldo Saat Ini</b><br>'+rupiah(main+referral)+'</div><div class="detailItem"><b>Kode Referral</b><br>'+esc(u.referral_code||'-')+'</div></div><div class="row"><div class="field"><label class="label">Saldo Utama</label><input class="input" type="number" min="0" step="1" name="balance_main" value="'+esc(main)+'" required><p class="help">Saldo hasil top up atau penyesuaian admin.</p></div><div class="field"><label class="label">Saldo Referral</label><input class="input" type="number" min="0" step="1" name="balance_referral" value="'+esc(referral)+'" required><p class="help">Saldo hadiah dari program referral.</p></div></div><div class="field balanceReason"><label class="label">Catatan Penyesuaian</label><input class="input" name="reason" maxlength="180" value="Penyesuaian saldo dari Reseller Dashboard" placeholder="Contoh: Koreksi top up atau bonus pelanggan"></div><input type="hidden" name="telegram_id" value="'+esc(u.telegram_id)+'"><div class="variantMainCompact" id="balanceEditorPreview">Total saldo baru: '+rupiah(main+referral)+'</div><button class="btn lime" type="submit">Simpan Perubahan Saldo</button></form>';
+    var body='<form id="userBalanceForm" class="form"><div class="balanceEditorSummary"><div class="detailItem"><b>User</b><br>'+display+'<br><small>ID '+esc(u.telegram_id)+'</small></div><div class="detailItem"><b>Saldo Saat Ini</b><br>'+rupiah(main+referral)+'</div><div class="detailItem"><b>Kode Referral</b><br>'+esc(u.referral_code||'-')+'</div></div><div class="row"><div class="field"><label class="label">Saldo Utama</label><input class="input" type="number" min="0" step="1" name="balance_main" value="'+esc(main)+'" required><p class="help">Saldo hasil top up atau penyesuaian admin.</p></div><div class="field"><label class="label">Saldo Referral</label><input class="input" type="number" min="0" step="1" name="balance_referral" value="'+esc(referral)+'" required><p class="help">Saldo hadiah dari program referral.</p></div></div><div class="field balanceReason"><label class="label">Catatan Penyesuaian</label><input class="input" name="reason" maxlength="180" value="Penyesuaian saldo dari Reseller Dashboard" placeholder="Contoh: Koreksi top up atau bonus pelanggan"></div><input type="hidden" name="telegram_id" value="'+esc(u.telegram_id)+'"><div class="variantMainCompact" id="balanceEditorPreview">Total saldo baru: '+rupiah(main+referral)+'</div><div class="actions modalBuyerActions">'+buyerChatButton(u,'💬 Chat Pembeli','cyan')+'<button class="btn lime" type="submit">Simpan Perubahan Saldo</button></div></form>';
     openModal('Atur Saldo User',body);
     var f=document.getElementById('userBalanceForm');
     function preview(){ var total=Math.max(0,Number(f.balance_main.value||0))+Math.max(0,Number(f.balance_referral.value||0)); var box=document.getElementById('balanceEditorPreview'); if(box)box.textContent='Total saldo baru: '+rupiah(total); }
@@ -1744,7 +1853,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var d=state.deepStats||{};
     var box=document.getElementById('deepStatsBox'); if(box){ var rows=[['Omset Hari Ini',rupiah(d.revenue_today)],['Profit Bersih Hari Ini',rupiah(d.profit_today)],['Omset Bulan Ini',rupiah(d.revenue_month)],['Profit Bersih Bulan Ini',rupiah(d.profit_month)],['Total Omset Semua Waktu',rupiah(d.revenue_total)],['Total Modal Tercatat',rupiah(d.cost_total)],['Total Profit Bersih',rupiah(d.profit_total)],['Rata-rata Nilai Order',rupiah(d.average_order_value)],['Total Item Terjual',d.quantity_sold||0],['Estimasi Checkout Berhasil',(d.conversion_rate||0)+'%'],['Promo Otomatis Aktif',d.active_promos||0],['Pending Order Aktif',d.pending_orders||0]]; box.innerHTML=rows.map(function(r){return '<div class="detailItem"><b>'+esc(r[0])+'</b><br><span style="font-size:22px">'+esc(r[1])+'</span></div>';}).join(''); }
     var low=document.getElementById('lowStockList'); if(low){ low.innerHTML=(d.low_stock||[]).map(function(p){return '<div class="voucher"><b>'+esc(p.name)+'</b><br><span class="chip red">Stok '+esc(p.stock)+'</span></div>';}).join('')||'<div class="empty">Tidak ada stok kritis.</div>'; }
-    var tu=document.getElementById('topUsersList'); if(tu){ tu.innerHTML=(d.top_users||[]).map(function(u,i){return '<div class="voucher"><b>'+(i+1)+'. '+(u.username?'@'+esc(u.username):esc(u.first_name||u.telegram_id))+'</b><br>Transaksi '+esc(u.transaction_count||0)+' | Spending '+rupiah(u.spending||0)+'</div>';}).join('')||'<div class="empty">Belum ada user.</div>'; }
+    var tu=document.getElementById('topUsersList'); if(tu){ tu.innerHTML=(d.top_users||[]).map(function(u,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(buyerDisplayName(u))+'</b><br>Transaksi '+esc(u.transaction_count||0)+' | Spending '+rupiah(u.spending||0)+'<div class="topUserActions">'+buyerChatButton(u,'💬 Chat Pembeli','cyan')+'</div></div>';}).join('')||'<div class="empty">Belum ada user.</div>'; }
     var hr=document.getElementById('hourlyStats'); if(hr){ hr.innerHTML=(d.hourly||[]).filter(function(x){return x.orders>0;}).map(function(x){return '<span class="chip yellow">'+String(x.hour).padStart(2,'0')+'.00: '+x.orders+' order / '+rupiah(x.revenue)+'</span>';}).join(' ')||'<div class="empty">Belum ada data jam ramai.</div>'; }
   }
 
@@ -1761,6 +1870,8 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   document.querySelectorAll('[data-tab]').forEach(function(btn){btn.onclick=function(){ switchTab(btn.dataset.tab,{smooth:btn.classList.contains('settingsSubBtn'),scrollTarget:btn.dataset.scrollTarget}); if(btn.dataset.tab==='supplierSettings') loadSupplier(false); if(btn.dataset.tab==='workflowSettings') loadWorkflow(false); };});
   var refreshLicense=document.getElementById('refreshLicense'); if(refreshLicense) refreshLicense.onclick=async function(){ state.license=await apiSafe('license-status',{}); renderLicense(); toast('Status lisensi diperbarui'); }; try{ var lastTab=localStorage.getItem('admin_active_tab'); if(lastTab==='vouchers') lastTab='promos'; if(lastTab && document.getElementById(lastTab)){ switchTab(lastTab); if(lastTab==='supplierSettings') loadSupplier(false); if(lastTab==='workflowSettings') loadWorkflow(false); } }catch(e){}
   document.getElementById('search').oninput=function(){ renderProducts(); renderOrders(); renderPoOrders(); renderUsers(); renderUnifiedPromos(); };
+  var buyerLookupButton=document.getElementById('buyerChatLookupOpen'); if(buyerLookupButton) buyerLookupButton.onclick=function(){openBuyerLookup().catch(function(error){toast(error&&error.message?error.message:'Gagal mencari pembeli.',true);});};
+  var buyerLookupInput=document.getElementById('buyerChatLookupInput'); if(buyerLookupInput) buyerLookupInput.onkeydown=function(event){ if(event.key==='Enter'){ event.preventDefault(); openBuyerLookup().catch(function(error){toast(error&&error.message?error.message:'Gagal mencari pembeli.',true);}); } };
   document.querySelectorAll('[data-promo-sub]').forEach(function(btn){btn.onclick=function(){ if(btn.dataset.promoSub==='create') promoUnifiedReset(); else setPromoSub(btn.dataset.promoSub||'list'); };});
   document.getElementById('addForm').onsubmit=async function(e){
     e.preventDefault();

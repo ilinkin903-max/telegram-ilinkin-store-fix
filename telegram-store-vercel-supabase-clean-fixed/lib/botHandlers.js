@@ -14,35 +14,131 @@ const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('.
 
 const PRODUCT_PAGE_SIZE = 10;
 const BOT_CACHE_MS = 30 * 1000;
+const BOT_SETTINGS_CACHE_MS = 8 * 1000;
+const BOT_MAINTENANCE_CACHE_MS = 4 * 1000;
+const BOT_STATS_CACHE_MS = 15 * 1000;
+const BOT_PRODUCTS_CACHE_MS = 12 * 1000;
+const BOT_WALLET_CACHE_MS = 3 * 1000;
+const BOT_HISTORY_CACHE_MS = 5 * 1000;
+const BOT_MEMBERSHIP_CACHE_MS = 15 * 1000;
+const BOT_SUPPLIER_CACHE_MS = 10 * 1000;
+const BOT_USER_TOUCH_CACHE_MS = 30 * 1000;
+const FAST_MENU_CALLBACKS = new Set([
+  'wallet', 'daftarproduk', 'stok', 'riwayattransaksi', 'caraorder', 'kembaliawal', 'noop'
+]);
 const botReadCache = {
-  stats: { at: 0, value: null },
-  settings: { at: 0, value: null },
-  products: { at: 0, value: null }
+  stats: { at: 0, value: null, promise: null },
+  settings: { at: 0, value: null, promise: null },
+  products: { at: 0, value: null, promise: null },
+  supplierBalance: { at: 0, value: null, promise: null },
+  wallets: new Map(),
+  histories: new Map(),
+  memberships: new Map(),
+  supplierProducts: new Map(),
+  userTouches: new Map()
 };
 
+function botCacheHasValue(entry) {
+  return Boolean(entry) && entry.value !== undefined && entry.value !== null;
+}
+
 function botCacheFresh(entry, ttl = BOT_CACHE_MS) {
-  return Boolean(entry?.value) && (Date.now() - Number(entry.at || 0)) < ttl;
+  return botCacheHasValue(entry) && (Date.now() - Number(entry.at || 0)) < ttl;
 }
 
-async function cachedStats() {
-  if (botCacheFresh(botReadCache.stats)) return botReadCache.stats.value;
-  const value = await db.getStats();
-  botReadCache.stats = { at: Date.now(), value };
-  return value;
+function botMapCacheEntry(map, key, maxEntries = 1200) {
+  const normalizedKey = String(key || '');
+  let entry = map.get(normalizedKey);
+  if (!entry) {
+    if (map.size >= maxEntries) {
+      const oldest = map.keys().next();
+      if (!oldest.done) map.delete(oldest.value);
+    }
+    entry = { at: 0, value: null, promise: null };
+    map.set(normalizedKey, entry);
+  }
+  return entry;
 }
 
-async function cachedSettings(force = false) {
-  if (!force && botCacheFresh(botReadCache.settings)) return botReadCache.settings.value;
-  const value = await db.getShopSettings();
-  botReadCache.settings = { at: Date.now(), value };
-  return value;
+async function readThroughBotCache(entry, loader, ttl = BOT_CACHE_MS, force = false) {
+  if (!force && botCacheFresh(entry, ttl)) return entry.value;
+  if (entry.promise) return entry.promise;
+
+  let activePromise;
+  activePromise = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      entry.value = value;
+      entry.at = Date.now();
+      return value;
+    })
+    .catch((error) => {
+      if (botCacheHasValue(entry)) return entry.value;
+      throw error;
+    })
+    .finally(() => {
+      if (entry.promise === activePromise) entry.promise = null;
+    });
+  entry.promise = activePromise;
+  return activePromise;
 }
 
-async function cachedBotProducts() {
-  if (botCacheFresh(botReadCache.products, 15 * 1000)) return botReadCache.products.value;
-  const value = (await db.listProducts({ activeOnly: true })).filter(isBuyableProduct);
-  botReadCache.products = { at: Date.now(), value };
-  return value;
+async function cachedStats(force = false) {
+  return readThroughBotCache(botReadCache.stats, () => db.getStats(), BOT_STATS_CACHE_MS, force);
+}
+
+async function cachedSettings(force = false, ttl = BOT_SETTINGS_CACHE_MS) {
+  return readThroughBotCache(botReadCache.settings, () => db.getShopSettings(), ttl, force);
+}
+
+async function cachedBotProducts(force = false) {
+  return readThroughBotCache(
+    botReadCache.products,
+    async () => (await db.listProducts({ activeOnly: true })).filter(isBuyableProduct),
+    BOT_PRODUCTS_CACHE_MS,
+    force
+  );
+}
+
+async function cachedWalletSummary(userId, ledgerLimit = 1, force = false) {
+  const limit = Math.max(1, Number(ledgerLimit || 1));
+  const entry = botMapCacheEntry(botReadCache.wallets, `${Number(userId)}:${limit}`);
+  return readThroughBotCache(entry, () => db.getWalletSummary(userId, limit), BOT_WALLET_CACHE_MS, force);
+}
+
+async function cachedUserHistory(userId, limit = 8, force = false) {
+  const safeLimit = Math.max(1, Number(limit || 8));
+  const entry = botMapCacheEntry(botReadCache.histories, `${Number(userId)}:${safeLimit}`);
+  return readThroughBotCache(entry, () => db.listTransactionsByUser(userId, safeLimit), BOT_HISTORY_CACHE_MS, force);
+}
+
+async function cachedSupplierBalance(force = false) {
+  return readThroughBotCache(
+    botReadCache.supplierBalance,
+    () => prodseller.getBalance(),
+    BOT_SUPPLIER_CACHE_MS,
+    force
+  );
+}
+
+async function touchBotUser(from, force = false) {
+  if (!from?.id) return null;
+  const entry = botMapCacheEntry(botReadCache.userTouches, Number(from.id));
+  return readThroughBotCache(entry, async () => {
+    await db.upsertUser(from);
+    return true;
+  }, BOT_USER_TOUCH_CACHE_MS, force);
+}
+
+function invalidateUserFastCache(userId) {
+  const prefix = `${Number(userId)}:`;
+  for (const key of botReadCache.wallets.keys()) if (key.startsWith(prefix)) botReadCache.wallets.delete(key);
+  for (const key of botReadCache.histories.keys()) if (key.startsWith(prefix)) botReadCache.histories.delete(key);
+}
+
+function shouldAnswerMenuCallbackEarly(command) {
+  const cmd = String(command || '');
+  return FAST_MENU_CALLBACKS.has(cmd) || cmd.startsWith('produkpage:');
 }
 
 function styledButton(text, action = {}, style = '') {
@@ -450,20 +546,21 @@ async function buildHomeText(from, settings = null) {
   const activeSettings = settings || await cachedSettings().catch(() => ({}));
   const [stats, wallet] = await Promise.all([
     cachedStats(),
-    db.getWalletSummary(from.id, 1).catch(() => null)
+    cachedWalletSummary(from.id, 1).catch(() => null)
   ]);
   return buildHomeTextValue(from, stats, wallet, activeSettings);
 }
 
 async function editHome(query, req) {
-  await db.upsertUser(query.from).catch((e) => console.error('upsert user gagal:', e.message));
-  const settings = await cachedSettings(true).catch(() => ({}));
-  let text;
-  try { text = await buildHomeText(query.from, settings); }
-  catch (e) {
-    console.error('build home gagal:', e.message);
-    text = `Halo, <b>${escapeHtml(query.from.first_name || 'Kak')}</b> 👋\n\nSelamat datang di <b>${escapeHtml(String(settings.store_name || config.botName || 'Link Auto Order'))}</b>\n\nSilakan pilih tombol di bawah ini!`;
-  }
+  const touchPromise = touchBotUser(query.from).catch((e) => console.error('upsert user gagal:', e.message));
+  const statsPromise = cachedStats().catch((e) => {
+    console.error('getStats gagal:', e.message);
+    return { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 };
+  });
+  const settingsPromise = cachedSettings().catch(() => ({}));
+  const walletPromise = cachedWalletSummary(query.from.id, 1).catch(() => null);
+  const [stats, settings, wallet] = await Promise.all([statsPromise, settingsPromise, walletPromise, touchPromise]);
+  const text = buildHomeTextValue(query.from, stats, wallet, settings);
   return editMessage(query, text, {
     parse_mode: 'HTML',
     reply_markup: homeKeyboard(req, query.from.id, settings)
@@ -471,12 +568,11 @@ async function editHome(query, req) {
 }
 
 async function sendHome(chatId, from, req, options = {}) {
-  const upsertPromise = options.skipUpsert ? Promise.resolve() : db.upsertUser(from).catch((e) => console.error('upsert user gagal:', e.message));
+  const upsertPromise = options.skipUpsert ? Promise.resolve() : touchBotUser(from).catch((e) => console.error('upsert user gagal:', e.message));
   const statsPromise = cachedStats().catch((e) => { console.error('getStats gagal:', e.message); return { users: 0, orders: 0, stokTersedia: 0, stokTerjual: 0 }; });
-  const settingsPromise = cachedSettings(true).catch(() => ({}));
-  await upsertPromise;
-  const walletPromise = db.getWalletSummary(from.id, 1).catch(() => null);
-  const [stats, wallet, settings] = await Promise.all([statsPromise, walletPromise, settingsPromise]);
+  const settingsPromise = cachedSettings().catch(() => ({}));
+  const walletPromise = cachedWalletSummary(from.id, 1).catch(() => null);
+  const [stats, wallet, settings] = await Promise.all([statsPromise, walletPromise, settingsPromise, upsertPromise]);
   const text = buildHomeTextValue(from, stats, wallet, settings);
 
   const reply_markup = homeKeyboard(req, from.id, settings);
@@ -525,7 +621,7 @@ function botMaintenanceMessage(settings = {}) {
 async function blockCustomerDuringMaintenance(update = {}) {
   const actor = update.message?.from || update.callback_query?.from || null;
   if (!actor?.id || isOwner(actor.id)) return false;
-  const settings = await cachedSettings(true).catch(() => ({}));
+  const settings = await cachedSettings(false, BOT_MAINTENANCE_CACHE_MS).catch(() => ({}));
   if (settingEnabled(settings.bot_enabled, true)) return false;
 
   const query = update.callback_query || null;
@@ -572,16 +668,19 @@ function memberAllowed(member = {}) {
   return false;
 }
 
-async function requiredChannelState(userId, settings = {}) {
+async function requiredChannelState(userId, settings = {}, options = {}) {
   if (isOwner(userId) || !settingEnabled(settings.join_required_enabled, false)) return { required: false, joined: true };
   const target = requiredChannelTarget(settings);
   if (!target) return { required: true, joined: false, misconfigured: true, error: 'ID/username channel wajib join belum diatur.' };
-  try {
-    const member = await tg.getChatMember(target, Number(userId));
-    return { required: true, joined: memberAllowed(member), target, member };
-  } catch (error) {
-    return { required: true, joined: false, target, error: String(error?.message || error) };
-  }
+  const entry = botMapCacheEntry(botReadCache.memberships, `${target}:${Number(userId)}`);
+  return readThroughBotCache(entry, async () => {
+    try {
+      const member = await tg.getChatMember(target, Number(userId));
+      return { required: true, joined: memberAllowed(member), target, member };
+    } catch (error) {
+      return { required: true, joined: false, target, error: String(error?.message || error) };
+    }
+  }, BOT_MEMBERSHIP_CACHE_MS, Boolean(options.force));
 }
 
 function joinCheckCallback(refCode = '') {
@@ -656,8 +755,8 @@ async function registerStartReferral(from, refCode, settings, chatId) {
 
 async function sendWalletPage(chatId, from, query = null) {
   const [wallet, settings] = await Promise.all([
-    db.getWalletSummary(from.id, 8),
-    db.getShopSettings()
+    cachedWalletSummary(from.id, 8),
+    cachedSettings()
   ]);
   if (!wallet) return tg.sendMessage(chatId, '⚠️ Data saldo belum tersedia. Jalankan SQL v65 lalu buka /start kembali.');
   const link = referralUrl(wallet.referral_code);
@@ -712,7 +811,7 @@ async function sendWalletPage(chatId, from, query = null) {
 }
 
 async function beginTopup(query) {
-  const settings = await db.getShopSettings();
+  const settings = await cachedSettings();
   if (!settingEnabled(settings.topup_enabled, true)) {
     return answerCallback(query, { text: 'Fitur top up sedang dinonaktifkan.', show_alert: true });
   }
@@ -815,6 +914,7 @@ async function checkTopup(query, ref) {
   }
   const result = await paymentService.completeTopupPayment({ topup, incoming, source: 'manual-topup-check' });
   if (result.state === 'completed' || result.state === 'already_completed') {
+    invalidateUserFastCache(query.from.id);
     await answerCallback(query, { text: 'Pembayaran ditemukan. Saldo sedang diperbarui.' });
     await tg.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => null);
     return sendWalletPage(query.from.id, query.from);
@@ -837,10 +937,7 @@ function variantKey(variant, index = 0) {
     .replace(/\s+/g, '-');
 }
 
-function stockOfVariant(variant, product = null) {
-  if (String(variant?.stock_mode || '').trim().toLowerCase() === 'shared' && product) {
-    return Array.isArray(product?.data) ? product.data : [];
-  }
+function stockOfVariant(variant) {
   return Array.isArray(variant?.stock) ? variant.stock : [];
 }
 
@@ -945,15 +1042,10 @@ function isPoOrder(product, order = {}) {
 function productStockTotal(product) {
   const allVariants = Array.isArray(product?.variants) ? product.variants : [];
   if (allVariants.length) {
-    const active = activeVariantsWithIndex(product);
-    const hasShared = active.some(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() === 'shared');
-    const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
-    const separateStock = active.reduce((sum, item) => {
+    return activeVariantsWithIndex(product).reduce((sum, item) => {
       if (isPoProduct(product, item.variant)) return sum;
-      if (String(item.variant?.stock_mode || '').trim().toLowerCase() === 'shared') return sum;
-      return sum + stockOfVariant(item.variant, product).length;
+      return sum + stockOfVariant(item.variant).length;
     }, 0);
-    return sharedStock + separateStock;
   }
   return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
 }
@@ -983,7 +1075,19 @@ function storedSupplierProduct(product, variant = null) {
   };
 }
 
-async function supplierAvailabilityForProducts(products = []) {
+async function cachedSupplierAvailability(productId, meta, balanceData, force = false) {
+  const entry = botMapCacheEntry(botReadCache.supplierProducts, String(productId), 600);
+  return readThroughBotCache(entry, async () => {
+    try {
+      const live = await prodseller.getProduct(productId);
+      return prodseller.availabilityFrom({ balanceData, product: live });
+    } catch (_) {
+      return prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) });
+    }
+  }, BOT_SUPPLIER_CACHE_MS, force);
+}
+
+async function supplierAvailabilityForProducts(products = [], options = {}) {
   const map = new Map();
   if (!prodseller.configured()) return map;
   const refs = new Map();
@@ -997,15 +1101,11 @@ async function supplierAvailabilityForProducts(products = []) {
   });
   if (!refs.size) return map;
 
-  const balanceData = await prodseller.getBalance().catch(() => null);
+  const balanceData = await cachedSupplierBalance(Boolean(options.force)).catch(() => null);
   if (!balanceData) return map;
   const rows = await Promise.allSettled([...refs.entries()].map(async ([productId, meta]) => {
-    try {
-      const live = await prodseller.getProduct(productId);
-      return [productId, prodseller.availabilityFrom({ balanceData, product: live })];
-    } catch (_) {
-      return [productId, prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) })];
-    }
+    const availability = await cachedSupplierAvailability(productId, meta, balanceData, Boolean(options.force));
+    return [productId, availability];
   }));
   rows.forEach((row) => {
     if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]);
@@ -1030,7 +1130,7 @@ function readyStockForVariant(product, variant, availabilityMap = null) {
   const supplierStock = supplierStockForSelection(product, variant, availabilityMap);
   if (supplierStock !== null) return supplierStock;
   if (isPoProduct(product, variant)) return 0;
-  return stockOfVariant(variant, product).length;
+  return stockOfVariant(variant).length;
 }
 
 function readyStockForProduct(product, availabilityMap = null) {
@@ -1042,12 +1142,7 @@ function readyStockForProduct(product, availabilityMap = null) {
     if (directSupplierStock !== null) return directSupplierStock;
     return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
   }
-  const hasShared = variants.some(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() === 'shared');
-  const sharedStock = hasShared ? (Array.isArray(product?.data) ? product.data.length : 0) : 0;
-  const separateStock = variants
-    .filter(({ variant }) => String(variant?.stock_mode || '').trim().toLowerCase() !== 'shared')
-    .reduce((sum, { variant }) => sum + readyStockForVariant(product, variant, availabilityMap), 0);
-  return sharedStock + separateStock;
+  return variants.reduce((sum, { variant }) => sum + readyStockForVariant(product, variant, availabilityMap), 0);
 }
 
 function isBuyableProduct(product) {
@@ -1101,7 +1196,7 @@ function orderUnitPrice(product, order = {}) {
 
 function availableStockForOrder(product, order = {}) {
   const variant = selectedVariant(product, order);
-  if (variant) return stockOfVariant(variant, product).length;
+  if (variant) return stockOfVariant(variant).length;
   return Array.isArray(product.data) ? product.data.length : 0;
 }
 
@@ -1173,7 +1268,7 @@ async function sendStock(chatId, query = null) {
 
 
 async function sendHistory(chatId, userId, query = null) {
-  const rows = await db.listTransactionsByUser(userId, 8);
+  const rows = await cachedUserHistory(userId, 8);
   if (!rows.length) {
     const empty='📭 Kamu belum memiliki riwayat transaksi.';
     if (query?.message?.message_id) return editMessage(query, empty, { reply_markup:{ inline_keyboard:[[styledButton('🔙 Kembali', { callback_data:'kembaliawal' }, 'primary')]] } });
@@ -1240,7 +1335,7 @@ async function sendCheckOrder(chatId, userId, query = null) {
     text += `-----------------------\n`;
   }
 
-  const rows = await db.listTransactionsByUser(userId, 5).catch(() => []);
+  const rows = await cachedUserHistory(userId, 5).catch(() => []);
   if (!rows.length) {
     text += pending ? `Belum ada transaksi selesai.\n` : `Belum ada pesanan aktif atau transaksi selesai.\n`;
   } else {
@@ -1440,7 +1535,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
 
   if (lower.startsWith('/start') || lower.startsWith('/menu')) {
     if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
-    const settings = await cachedSettings(true).catch(() => ({}));
+    const settings = await cachedSettings().catch(() => ({}));
     const refCode = lower.startsWith('/start') ? startReferralCode(text) : '';
     const joinState = await requiredChannelState(from.id, settings);
     if (joinState.required && !joinState.joined) {
@@ -1451,7 +1546,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   }
 
   if (!isOwner(from.id)) {
-    const settings = await cachedSettings(true).catch(() => ({}));
+    const settings = await cachedSettings().catch(() => ({}));
     const joinState = await requiredChannelState(from.id, settings);
     if (joinState.required && !joinState.joined) {
       return sendJoinRequired(chatId, from, settings, { state: joinState });
@@ -1677,7 +1772,7 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
 
   const pendingTopup = await db.getPendingTopupByUser(from.id).catch(() => null);
   if (pendingTopup?.status === 'waiting_amount') {
-    const settings = await db.getShopSettings();
+    const settings = await cachedSettings();
     const amount = parseNumber(text);
     if (!amount) return tg.sendMessage(chatId, '⚠️ Kirim nominal top up dalam bentuk angka. Contoh: 50000');
     try {
@@ -1797,7 +1892,7 @@ async function handleVariantSelection(query, code, indexText) {
   if (isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant)) {
     const availabilityMap = isSupplierProduct(product, variant) ? await supplierAvailabilityForProducts([product]).catch(() => new Map()) : new Map();
     if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
-  } else if (!isPoProduct(product, variant) && stockOfVariant(variant, product).length < 1) {
+  } else if (!isPoProduct(product, variant) && stockOfVariant(variant).length < 1) {
     return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, variant, index);
@@ -1883,7 +1978,7 @@ async function calculateCheckoutPricing(userId, order, product) {
         throw error;
       }
       if (availability.unitPrice > 0) {
-        const settings = await db.getShopSettings();
+        const settings = await cachedSettings();
         const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
         costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         const found = db.findVariant(product, order.variant_key || '');
@@ -1940,7 +2035,7 @@ async function showPaymentMethods(query) {
   const userId = query.from.id;
   const [order, settings, wallet] = await Promise.all([
     db.getPendingOrder(userId),
-    db.getShopSettings(),
+    cachedSettings(),
     db.getWalletSummary(userId, 1)
   ]);
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
@@ -1976,7 +2071,7 @@ async function createWalletPayment(query) {
   const userId = query.from.id;
   const [order, settings, wallet] = await Promise.all([
     db.getPendingOrder(userId),
-    db.getShopSettings(),
+    cachedSettings(),
     db.getWalletSummary(userId, 1)
   ]);
   if (!settingEnabled(settings.wallet_payment_enabled, true)) {
@@ -2009,7 +2104,9 @@ async function createWalletPayment(query) {
   });
   await editMessage(query, '⏳ <b>Memproses pembayaran saldo...</b>\nStok dan saldo sedang dikunci agar transaksi aman.', { parse_mode: 'HTML' });
   try {
-    return await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: query.from, source: 'wallet-bot' });
+    const result = await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: query.from, source: 'wallet-bot' });
+    invalidateUserFastCache(userId);
+    return result;
   } catch (error) {
     await db.deletePendingOrder(userId, invoiceRef).catch(() => null);
     return tg.sendMessage(userId, `⚠️ Pembayaran saldo gagal: ${error.message || error}`);
@@ -2146,6 +2243,7 @@ async function checkPayment(query, invoiceFromButton) {
 
   await answerCallback(query, { text: 'Pembayaran ditemukan. Pesanan sedang diproses.' });
   const result = await paymentService.fulfillPaidOrder({ order, buyer: query.from, source: 'manual-check' });
+  invalidateUserFastCache(userId);
   if (result.state === 'processing') {
     return answerCallback(query, { text: 'Pembayaran sedang diproses otomatis. Produk akan segera dikirim.', show_alert: true });
   }
@@ -2156,6 +2254,9 @@ async function checkPayment(query, invoiceFromButton) {
 
 async function handleCallbackQuery(query, req) {
   const cmd = String(query.data || '');
+  const earlyCallbackPromise = shouldAnswerMenuCallbackEarly(cmd)
+    ? answerCallback(query).catch(() => null)
+    : null;
   if (cmd === 'bcpoll_cancel') {
     if (!isOwner(query.from.id)) return answerCallback(query, { text: ownerOnlyMessage(), show_alert: true });
     return editMessage(query, '❌ Broadcast polling dibatalkan. Polling tidak dikirim ke user.');
@@ -2173,6 +2274,7 @@ async function handleCallbackQuery(query, req) {
     }
     const claimKey = await claimBroadcastOrTell(query.message.chat.id, `bcpoll:${pollId}`, 'Broadcast polling');
     if (!claimKey) return;
+    await answerCallback(query, { text: 'Broadcast polling dimulai.' });
     await db.updateBroadcastPoll(pollId, { status: 'sending' }).catch(() => null);
     const result = await broadcastPollRecordToUsers(pollRecord);
     await markBroadcastDone(claimKey, result);
@@ -2201,8 +2303,9 @@ async function handleCallbackQuery(query, req) {
   if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
 
   if (cmd === 'checkjoin' || cmd.startsWith('checkjoin:')) {
-    const settings = await cachedSettings(true).catch(() => ({}));
-    const joinState = await requiredChannelState(query.from.id, settings);
+    const settings = await cachedSettings().catch(() => ({}));
+    await answerCallback(query, { text: 'Memeriksa keanggotaan...' });
+    const joinState = await requiredChannelState(query.from.id, settings, { force: true });
     if (joinState.required && !joinState.joined) {
       return sendJoinRequired(query.message.chat.id, query.from, settings, {
         query,
@@ -2216,7 +2319,7 @@ async function handleCallbackQuery(query, req) {
   }
 
   if (!isOwner(query.from.id)) {
-    const settings = await cachedSettings(true).catch(() => ({}));
+    const settings = await cachedSettings().catch(() => ({}));
     const joinState = await requiredChannelState(query.from.id, settings);
     if (joinState.required && !joinState.joined) {
       return sendJoinRequired(query.message.chat.id, query.from, settings, { query, state: joinState });
@@ -2227,13 +2330,13 @@ async function handleCallbackQuery(query, req) {
   if (cmd === 'topup') return beginTopup(query);
   if (cmd.startsWith('cektopup:')) return checkTopup(query, cmd.slice('cektopup:'.length));
   if (cmd.startsWith('bataltopup:')) return cancelTopup(query, cmd.slice('bataltopup:'.length));
-  if (cmd === 'noop') return;
+  if (cmd === 'noop') return earlyCallbackPromise;
   if (cmd === 'daftarproduk') return sendProductList(query.message.chat.id, query, 0);
   if (cmd.startsWith('produkpage:')) return sendProductList(query.message.chat.id, query, Number(cmd.split(':')[1] || 0));
   if (cmd === 'stok') return sendStock(query.message.chat.id, query);
   if (cmd === 'riwayattransaksi') return sendHistory(query.message.chat.id, query.from.id, query);
   if (cmd === 'caraorder') {
-    const settings = await db.getShopSettings().catch(() => ({}));
+    const settings = await cachedSettings().catch(() => ({}));
     const menuModeRaw = String(settings.bot_menu_mode || 'both').trim().toLowerCase();
     const menuMode = ['marketplace', 'products', 'both'].includes(menuModeRaw) ? menuModeRaw : 'both';
 

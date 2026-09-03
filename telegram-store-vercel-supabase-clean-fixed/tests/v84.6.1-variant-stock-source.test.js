@@ -16,10 +16,11 @@ test('new variant UI provides shared stock pool input and submit mapping',()=>{
  assert.match(u,/payload\.stock_text=sharedInput/);
 });
 
-test('edit variant persists stock source without stock pool editor inside edit modal',()=>{
+test('edit variant persists stock source and shared stock pool',()=>{
  const u=read('api/reseller.js');
  assert.match(u,/data-evfield="stock_mode"/);
- assert.doesNotMatch(u,/id="editSharedStock"/);
+ assert.match(u,/id="editSharedStock"/);
+ assert.match(u,/d\.stock_text=sharedInput/);
 });
 
 test('backend keeps stock_mode in variant JSON',()=>{

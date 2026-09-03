@@ -17,6 +17,100 @@ function bodyOf(req) {
   return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
 }
 
+
+function cleanBuyerUsername(value) {
+  return String(value == null ? '' : value).trim().replace(/^@+/, '').replace(/[^A-Za-z0-9_]/g, '');
+}
+
+function cleanBuyerTelegramId(value) {
+  const raw = String(value == null ? '' : value).trim();
+  return /^\d+$/.test(raw) ? raw : '';
+}
+
+function normalizeBuyerAccount(row = {}) {
+  return {
+    telegram_id: cleanBuyerTelegramId(row.telegram_id || row.user_id || row.id),
+    username: cleanBuyerUsername(row.username),
+    first_name: String(row.first_name || row.name || '').trim()
+  };
+}
+
+function mergeBuyerAccounts(rows = []) {
+  const merged = new Map();
+  for (const row of rows || []) {
+    const buyer = normalizeBuyerAccount(row);
+    const key = buyer.telegram_id
+      ? `id:${buyer.telegram_id}`
+      : (buyer.username ? `username:${buyer.username.toLowerCase()}` : '');
+    if (!key) continue;
+    const current = merged.get(key) || { telegram_id: '', username: '', first_name: '' };
+    current.telegram_id = current.telegram_id || buyer.telegram_id;
+    current.username = current.username || buyer.username;
+    current.first_name = current.first_name || buyer.first_name;
+    merged.set(key, current);
+  }
+  return [...merged.values()];
+}
+
+function buyerAccountMatches(row = {}, query = '') {
+  const buyer = normalizeBuyerAccount(row);
+  const raw = String(query || '').trim();
+  const needle = raw.replace(/^@+/, '').toLowerCase();
+  const exact = buyer.telegram_id === raw
+    || buyer.username.toLowerCase() === needle
+    || buyer.first_name.toLowerCase() === needle;
+  const partial = [buyer.telegram_id, buyer.username, buyer.first_name]
+    .map((value) => String(value || '').toLowerCase())
+    .join(' ')
+    .includes(needle);
+  return { buyer, exact, partial };
+}
+
+async function lookupBuyerAccounts(query = '') {
+  const raw = String(query || '').trim().slice(0, 100);
+  if (!raw) return [];
+  const numericId = cleanBuyerTelegramId(raw);
+  const reads = numericId
+    ? [
+        db.getUserByTelegramId(Number(numericId)).then((row) => row ? [row] : []).catch(() => []),
+        db.listTransactionsByUser(Number(numericId), 30).catch(() => []),
+        db.listPoOrders(300).then((rows) => (rows || []).filter((row) => cleanBuyerTelegramId(row.telegram_id) === numericId)).catch(() => [])
+      ]
+    : [
+        db.listUsers(1000).catch(() => []),
+        db.listTransactions(500).catch(() => []),
+        db.listPoOrders(300).catch(() => [])
+      ];
+  const groups = await Promise.all(reads);
+  let accounts = mergeBuyerAccounts(groups.flat());
+
+  if (numericId) {
+    const currentChat = await tg.callTelegram('getChat', { chat_id: Number(numericId) }).catch(() => null);
+    if (currentChat) {
+      const live = normalizeBuyerAccount(currentChat);
+      const stored = accounts.find((row) => cleanBuyerTelegramId(row.telegram_id) === numericId) || {};
+      accounts = [
+        {
+          telegram_id: numericId,
+          // Username live harus menjadi sumber utama. Nilai kosong juga penting karena
+          // mencegah dashboard membuka username lama yang sudah diganti/dilepas user.
+          username: live.username,
+          first_name: live.first_name || String(stored.first_name || '').trim()
+        },
+        ...accounts.filter((row) => cleanBuyerTelegramId(row.telegram_id) !== numericId)
+      ];
+    }
+    if (!accounts.length) accounts = [{ telegram_id: numericId, username: '', first_name: '' }];
+  }
+
+  const matched = accounts
+    .map((row) => buyerAccountMatches(row, raw))
+    .filter((entry) => entry.exact || entry.partial)
+    .sort((a, b) => Number(b.exact) - Number(a.exact))
+    .map((entry) => entry.buyer);
+  return matched.slice(0, 30);
+}
+
 function numberOf(value) {
   const cleaned = String(value || '').replace(/[^0-9]/g, '');
   return Number(cleaned || 0);
@@ -617,6 +711,7 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data: visibleOrders });
     }
     if (req.method === 'GET' && action === 'users') return json(res, 200, { ok: true, data: await db.listUsers(200) });
+    if (req.method === 'GET' && action === 'buyer-lookup') return json(res, 200, { ok: true, data: await lookupBuyerAccounts(req.query?.q || '') });
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });

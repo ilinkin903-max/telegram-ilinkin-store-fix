@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "84.6.1",
+  "version": "84.7.0",
   "private": true,
-  "description": "Link Auto Order v84.6.1: variant stock-source selection persists and shared stock is editable.",
+  "description": "Link Auto Order v84.7.0: direct buyer chat tools and faster Telegram bot menus.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",
