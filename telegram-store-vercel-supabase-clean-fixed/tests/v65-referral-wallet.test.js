@@ -68,7 +68,7 @@ test('top up divalidasi dan dikreditkan tepat satu kali', () => {
 });
 
 test('bot menyediakan halaman saldo, top up, referral, dan pilihan pembayaran', () => {
-  assert.match(bot, /Saldo, Top Up & Referral/);
+  assert.match(bot, /Saldo & Referral/);
   assert.match(bot, /\/saldo/);
   assert.match(bot, /\/topup/);
   assert.match(bot, /\/referral/);

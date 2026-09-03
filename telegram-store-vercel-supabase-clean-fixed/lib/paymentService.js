@@ -510,13 +510,29 @@ async function claimTransactionNotice(kind, order, transaction) {
   return { ok, key, invoice };
 }
 
+function maskChannelUsername(value) {
+  const username = String(value || '').trim().replace(/^@+/, '');
+  if (!username) return '';
+  if (username.length === 1) return `@${username}*`;
+  if (username.length <= 4) return `@${username.slice(0, 1)}${'*'.repeat(Math.max(1, username.length - 2))}${username.slice(-1)}`;
+  const visibleStart = username.length <= 7 ? 2 : 3;
+  const visibleEnd = 2;
+  return `@${username.slice(0, visibleStart)}***${username.slice(-visibleEnd)}`;
+}
+
+function channelBuyerLabel(buyer = {}, fallbackId = '') {
+  const maskedUsername = maskChannelUsername(buyer.username);
+  if (maskedUsername) return maskedUsername;
+  return String(buyer.first_name || fallbackId || '-');
+}
+
 async function sendOwnerPoWaitingLog(order, product, transaction, buyer = {}) {
   const target = await transactionChannelTarget();
   if (!target) return false;
   const claim = await claimTransactionNotice('paid_waiting', order, transaction);
   if (!claim.ok) return false;
   try {
-    const username = buyer?.username ? '@' + buyer.username : (buyer?.first_name || String(order?.telegram_id || '-'));
+    const username = channelBuyerLabel(buyer, order?.telegram_id);
     const productName = transaction?.product_name || product?.nama || order?.product_code || '-';
     const variantName = transaction?.variant_name || order?.variant_name || '';
     await sendChannelWithRetry(target,
@@ -548,9 +564,7 @@ async function sendOwnerLog(order, product, transaction, buyer = {}) {
     const fee = Number(order?.fee || 0);
     const total = Number(transaction?.total_price || order?.amount || 0);
     const subtotal = Math.max(0, total - fee);
-    const username = buyer?.username
-      ? '@' + buyer.username
-      : (buyer?.first_name || String(order?.telegram_id || '-'));
+    const username = channelBuyerLabel(buyer, order?.telegram_id);
     const productName = transaction?.product_name || product?.nama || order?.product_code || '-';
     const variantName = transaction?.variant_name || order?.variant_name || '';
     await sendChannelWithRetry(target,
@@ -1545,6 +1559,8 @@ module.exports = {
   sendPoDeliveryReceipt,
   sendOwnerPoWaitingLog,
   sendOwnerLog,
+  maskChannelUsername,
+  channelBuyerLabel,
   recoverTransactionNotifications,
   watchPendingPayment,
   schedulePaymentWatcher

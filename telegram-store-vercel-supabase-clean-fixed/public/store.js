@@ -605,7 +605,7 @@
     var mixedDelivery = Boolean(product.variants && product.variants.length && product.has_po_variants && product.has_auto_variants);
     var allPoVariants = Boolean(product.variants && product.variants.length && product.has_po_variants && !product.has_auto_variants);
     var cardPo = product.variants && product.variants.length ? allPoVariants : isPo;
-    var availability = isWorkflow ? 'Otomatis' : (isSupplier ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : ((hasSupplierVariants || hasWorkflowVariants) ? 'Otomatis' : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)))));
+    var availability = (isWorkflow || isSupplier || hasSupplierVariants || hasWorkflowVariants) ? ('Stok ' + Math.max(0, Number(product.stock || 0))) : (mixedDelivery ? 'AUTO + PO' : (cardPo ? 'PRE-ORDER' : ('Stok ' + product.stock)));
     return '<article class="product-card" data-code="' + escapeHtml(product.code) + '">' +
       '<div class="product-image-wrap" data-open-product="' + escapeHtml(product.code) + '">' + image + badge + '<span class="stock-label">' + escapeHtml(availability) + '</span></div>' +
       '<div class="product-card-body">' +
@@ -705,8 +705,8 @@
         els.detailPromo.classList.remove('hidden');
       } else els.detailPromo.classList.add('hidden');
     }
-    els.stockHint.textContent = isWorkflow ? 'Diproses otomatis setelah pembayaran' : (isSupplier ? ('Stok tersedia: ' + selectedStock() + ' · dikirim otomatis setelah pembayaran') : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock())));
-    els.detailStockBadge.textContent = isWorkflow ? 'OTOMATIS' : (isSupplier ? ('Stok ' + selectedStock()) : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock())));
+    els.stockHint.textContent = isWorkflow ? ('Stok tersedia: ' + selectedStock() + ' · diproses otomatis setelah pembayaran') : (isSupplier ? ('Stok tersedia: ' + selectedStock() + ' · dikirim otomatis setelah pembayaran') : (isPo ? 'Pre-Order · dikirim seller setelah disiapkan' : ('Stok tersedia: ' + selectedStock())));
+    els.detailStockBadge.textContent = isWorkflow ? ('Stok ' + selectedStock()) : (isSupplier ? ('Stok ' + selectedStock()) : (isPo ? 'PRE-ORDER' : ('Stok ' + selectedStock())));
     els.buyNowButton.disabled = state.catalog.store_active === false || (!isPo && !isWorkflow && selectedStock() < 1) || (product.variants.length && !variant);
     els.buyNowButton.textContent = isWorkflow ? 'Beli Sekarang' : (isSupplier ? 'Beli Sekarang' : (isPo ? 'Pre-Order Sekarang' : 'Beli Sekarang'));
     var checkoutHelp = $('checkoutHelp');
@@ -738,7 +738,7 @@
       var mode = variantMode(variant);
       var workflowVariant = String(variant.supplier_source||'').toLowerCase()==='telegram_workflow';
       var unavailable = !workflowVariant && mode !== 'po' && variant.stock < 1;
-      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (workflowVariant ? 'Otomatis' : (mode === 'po' ? 'Pre-Order' : ('Stok ' + variant.stock))) + '</small></button>';
+      return '<button type="button" class="variant-button' + (variant.key === state.selectedVariantKey ? ' active' : '') + '" data-variant="' + escapeHtml(variant.key) + '"' + (unavailable ? ' disabled' : '') + '><b>' + escapeHtml(variant.name) + '</b>' + priceLine + '<small>' + (workflowVariant ? ('Stok ' + variant.stock) : (mode === 'po' ? 'Pre-Order' : ('Stok ' + variant.stock))) + '</small></button>';
     }).join('');
     els.variantOptions.querySelectorAll('[data-variant]').forEach(function (button) {
       button.addEventListener('click', function () {

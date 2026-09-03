@@ -37,10 +37,11 @@ test('stok supplier dihitung dari saldo dan stok aktual supplier', () => {
   assert.match(store, /availability\.availableStock < qty/);
 });
 
-test('marketplace menampilkan Stok untuk produk supplier, bukan AUTO SUPPLIER', () => {
+test('marketplace menampilkan jumlah stok untuk produk supplier dan workflow', () => {
   const storeJs = read('public/store.js');
-  assert.match(storeJs, /isWorkflow \? 'Otomatis' : \(isSupplier \? \('Stok ' \+ Math\.max/);
-  assert.match(storeJs, /els\.detailStockBadge\.textContent = isWorkflow \? 'OTOMATIS' : \(isSupplier \? \('Stok ' \+ selectedStock\(\)\)/);
+  assert.match(storeJs, /isWorkflow \|\| isSupplier \|\| hasSupplierVariants \|\| hasWorkflowVariants/);
+  assert.match(storeJs, /els\.detailStockBadge\.textContent = isWorkflow \? \('Stok ' \+ selectedStock\(\)\)/);
+  assert.match(storeJs, /workflowVariant \? \('Stok ' \+ variant\.stock\)/);
   assert.doesNotMatch(storeJs, /AUTO SUPPLIER/);
 });
 

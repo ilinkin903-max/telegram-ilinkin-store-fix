@@ -214,7 +214,8 @@ test('notifikasi owner memakai channel transaksi dan format TRANSAKSI BERHASIL',
     );
     assert.equal(captured.chatId, '@log_test');
     assert.match(captured.text, /^✅ TRANSAKSI BERHASIL\n=======================/);
-    assert.match(captured.text, /User: @triyafwemfa/);
+    assert.match(captured.text, /User: @tri\*\*\*fa/);
+    assert.doesNotMatch(captured.text, /@triyafwemfa/);
     assert.match(captured.text, /Trx ID: 68C83CE131A3/);
     assert.match(captured.text, /Produk: ChatGPT - Plus/);
     assert.match(captured.text, /Harga: Rp\s*35\.000/);

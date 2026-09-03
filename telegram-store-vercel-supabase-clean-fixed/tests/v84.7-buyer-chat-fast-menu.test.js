@@ -112,11 +112,11 @@ test('checkout tetap membaca saldo dan stok supplier secara live', () => {
   assert.match(bot, /invalidateUserFastCache\(userId\)/);
 });
 
-test('versi paket dinaikkan untuk fitur dashboard chat dan fast menu', () => {
+test('versi paket tetap mengikuti rilis terbaru setelah fitur dashboard chat dan fast menu', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '84.7.0');
-  assert.equal(read('VERSION').trim(), 'v84.7.0');
-  assert.equal(read('VERSION.txt').trim(), 'v84.7.0');
+  assert.equal(pkg.version, '84.8.0');
+  assert.equal(read('VERSION').trim(), 'v84.8.0');
+  assert.equal(read('VERSION.txt').trim(), 'v84.8.0');
 });
 
 test('buyer lookup runtime mengutamakan username Telegram terbaru dan membuang username lama', async () => {

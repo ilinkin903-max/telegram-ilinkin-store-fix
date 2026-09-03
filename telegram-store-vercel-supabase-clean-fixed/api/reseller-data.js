@@ -1420,6 +1420,7 @@ module.exports = async function handler(req, res) {
         start_media_caption: body.start_media_caption,
         customer_service_link: body.customer_service_link,
         group_link: body.group_link,
+        nokos_link: body.nokos_link,
         bot_menu_mode: body.bot_menu_mode,
         bot_enabled: body.bot_enabled,
         bot_maintenance_message: body.bot_maintenance_message,

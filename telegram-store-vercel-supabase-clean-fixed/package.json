@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "84.7.0",
+  "version": "84.8.0",
   "private": true,
-  "description": "Link Auto Order v84.7.0: direct buyer chat tools and faster Telegram bot menus.",
+  "description": "Link Auto Order v84.8.0: private channel usernames, live stock labels, and configurable Nokos menu.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

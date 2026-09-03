@@ -475,6 +475,17 @@ function normalizeUrl(url) {
   return `https://${value}`;
 }
 
+function normalizeTelegramTargetUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw) || /^tg:\/\//i.test(raw)) return raw;
+  if (/^(?:www\.)?t\.me\//i.test(raw)) return `https://${raw.replace(/^www\./i, '')}`;
+  if (/^(?:www\.)?telegram\.me\//i.test(raw)) return `https://${raw.replace(/^www\./i, '')}`;
+  const username = raw.replace(/^@+/, '');
+  if (/^[A-Za-z0-9_]{5,32}$/.test(username)) return `https://t.me/${username}`;
+  return '';
+}
+
 function homeKeyboard(req, userId, settings = {}) {
   const menuModeRaw = String(settings.bot_menu_mode || 'both').trim().toLowerCase();
   const menuMode = ['marketplace', 'products', 'both'].includes(menuModeRaw) ? menuModeRaw : 'both';
@@ -484,13 +495,18 @@ function homeKeyboard(req, userId, settings = {}) {
   if (menuMode !== 'products' && storeUrl) {
     rows.push([styledButton('‹🛍️› Buka Marketplace', { web_app: { url: storeUrl } }, 'primary')]);
   }
+  const nokosUrl = normalizeTelegramTargetUrl(settings.nokos_link);
   if (menuMode !== 'marketplace') {
-    rows.push([styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'success')]);
+    const productRow = [styledButton('‹📦› Daftar Produk', { callback_data: 'daftarproduk' }, 'success')];
+    if (nokosUrl) productRow.push(styledButton('‹📱› Nokos', { url: nokosUrl }, 'primary'));
+    rows.push(productRow);
+  } else if (nokosUrl) {
+    rows.push([styledButton('‹📱› Nokos', { url: nokosUrl }, 'primary')]);
   }
-  rows.push([styledButton('‹💰› Saldo, Top Up & Referral', { callback_data: 'wallet' }, 'success')]);
+  rows.push([styledButton('‹💰› Saldo & Referral', { callback_data: 'wallet' }, 'success')]);
   rows.push([
     styledButton('‹📋› Riwayat Transaksi', { callback_data: 'riwayattransaksi' }, 'primary'),
-    styledButton('‹❓› Cara Order', { callback_data: 'caraorder' }, 'success')
+    styledButton('‹❓› Cara Order', { callback_data: 'caraorder' }, 'primary')
   ]);
   rows.push([styledButton('‹📊› Stok', { callback_data: 'stok' }, 'success')]);
   const miniAppUrl = getMiniAppUrl(req);
@@ -2447,4 +2463,7 @@ Tekan kembali ke menu utama lalu coba lagi.`,
   }
 }
 
-module.exports = { handleUpdate };
+module.exports = {
+  handleUpdate,
+  _test: { homeKeyboard, normalizeTelegramTargetUrl }
+};

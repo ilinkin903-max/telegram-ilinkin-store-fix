@@ -1,0 +1,44 @@
+LINK AUTO ORDER v84.8.0 - TEST REPORT
+======================================
+Tanggal pengujian : 3 September 2026 (WIB)
+Status            : LULUS
+
+HASIL TEST OTOMATIS
+- Total test      : 302
+- Lulus           : 302
+- Gagal           : 0
+- Dibatalkan      : 0
+- Dilewati        : 0
+- Durasi suite    : 9.14 detik
+
+TEST KHUSUS v84.8.0
+- Username notifikasi transaksi channel disamarkan sebagian.
+- Notifikasi transaksi selesai dan PRE-ORDER menggunakan label pembeli yang aman.
+- Pengaturan nokos_link tersedia, dapat disimpan, dan tidak memerlukan tabel baru.
+- Username @BotNokos, BotNokos, t.me/..., telegram.me/..., tg://..., dan URL HTTP(S) dinormalisasi dengan aman.
+- Input dengan skema tidak aman, seperti javascript:, ditolak dan tombol tidak ditampilkan.
+- Tombol Nokos berada satu baris dengan Daftar Produk saat menu produk aktif.
+- Tombol Nokos disembunyikan bila pengaturan kosong.
+- Label menu berubah menjadi Saldo & Referral tanpa menghapus fitur Top Up.
+- Tombol Cara Order memakai style primary (biru).
+- Marketplace menampilkan Stok [jumlah] pada kartu, detail, dan varian workflow/supplier.
+- Metadata VERSION, package.json, package-lock.json, dan endpoint versi konsisten pada v84.8.0.
+
+REGRESI YANG DIVERIFIKASI
+- Checkout QRIS dan pembayaran saldo.
+- Stok lokal, supplier ProdSeller, workflow Telegram, dan PRE-ORDER.
+- Referral, Top Up, voucher, promo, flash sale, serta riwayat transaksi.
+- Dashboard Manager, pencarian/chat pembeli, dan JavaScript inline dashboard.
+- Notifikasi channel, receipt pembeli, cron pembayaran, dan webhook.
+- Cache serta percepatan respons menu dari v84.7.0 tetap aktif.
+
+DATABASE DAN DEPLOYMENT
+- Tidak ada migration SQL wajib untuk deployment lama.
+- nokos_link memakai tabel key-value shop_settings yang sudah ada.
+- supabase/schema.sql diperbarui agar instalasi baru memiliki nilai default nokos_link.
+- Tidak ada Environment Variable baru yang diwajibkan.
+
+CATATAN LINGKUNGAN TEST
+- Test dijalankan dengan Node.js dan runner bawaan node:test.
+- Registry paket tidak tersedia dari lingkungan build, sehingga shim dependensi sementara digunakan hanya untuk menjalankan suite yang memang memakai mock.
+- Folder node_modules/shim sementara dihapus dan tidak dimasukkan ke ZIP rilis.

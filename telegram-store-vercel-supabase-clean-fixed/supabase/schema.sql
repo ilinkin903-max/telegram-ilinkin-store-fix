@@ -704,6 +704,7 @@ alter table public.transactions add column if not exists wallet_main_used bigint
 alter table public.transactions add column if not exists wallet_referral_used bigint not null default 0;
 
 insert into public.shop_settings(key, value, updated_at) values
+  ('nokos_link', '""'::jsonb, now()),
   ('referral_enabled', 'true'::jsonb, now()),
   ('referral_reward_amount', '500'::jsonb, now()),
   ('referral_reward_mode', '"signup"'::jsonb, now()),
