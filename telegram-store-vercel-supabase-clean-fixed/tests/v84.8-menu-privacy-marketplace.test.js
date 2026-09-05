@@ -79,10 +79,10 @@ test('marketplace mengganti indikator workflow Otomatis menjadi jumlah stok', ()
   assert.match(variants, /workflowVariant \? \('Stok ' \+ variant\.stock\)/);
 });
 
-test('metadata rilis v84.8.0 konsisten', () => {
+test('metadata rilis v84.8.1 konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '84.8.0');
-  assert.equal(read('VERSION').trim(), 'v84.8.0');
-  assert.equal(read('VERSION.txt').trim(), 'v84.8.0');
-  assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.0/);
+  assert.equal(pkg.version, '84.8.1');
+  assert.equal(read('VERSION').trim(), 'v84.8.1');
+  assert.equal(read('VERSION.txt').trim(), 'v84.8.1');
+  assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.1/);
 });

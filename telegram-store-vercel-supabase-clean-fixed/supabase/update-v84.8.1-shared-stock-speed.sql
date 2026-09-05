@@ -1,0 +1,539 @@
+-- v84.8.1 - perbaikan stok bersama dan konsistensi fulfillment
+-- Aman dijalankan berulang kali pada database yang sudah memakai schema v65 atau lebih baru.
+-- Jalankan file ini di Supabase SQL Editor setelah deployment kode v84.8.1.
+
+begin;
+
+-- Normalisasi metadata stok varian tanpa menghapus stok lokal yang sudah ada.
+-- Stok lokal tetap disimpan sebagai cadangan ketika mode varian sedang memakai pool bersama.
+update public.products
+set variants = (
+  select coalesce(
+    jsonb_agg(
+      case
+        when jsonb_typeof(v) = 'object' then
+          jsonb_set(
+            v,
+            '{stock_mode}',
+            to_jsonb(
+              case
+                when lower(trim(coalesce(v->>'stock_mode', ''))) = 'shared' then 'shared'::text
+                else 'separate'::text
+              end
+            ),
+            true
+          )
+        else v
+      end
+      order by ord
+    ),
+    '[]'::jsonb
+  )
+  from jsonb_array_elements(
+    case
+      when jsonb_typeof(public.products.variants) = 'array' then public.products.variants
+      else '[]'::jsonb
+    end
+  ) with ordinality as t(v, ord)
+)
+where case
+  when jsonb_typeof(public.products.variants) = 'array'
+    then jsonb_array_length(public.products.variants) > 0
+  else false
+end;
+
+-- Pembayaran gateway: varian Shared mengambil dan mengurangi products.stock secara atomik.
+-- Stok lokal varian tidak ditimpa, sehingga aman ketika mode dikembalikan ke Separate.
+create or replace function public.fulfill_paid_order_v62(
+  p_order jsonb,
+  p_product_code text,
+  p_total_price integer,
+  p_buyer jsonb default '{}'::jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice text := trim(coalesce(p_order->>'invoice_ref', ''));
+  v_product_code text := trim(coalesce(p_product_code, p_order->>'product_code', ''));
+  v_variant_key text := trim(coalesce(p_order->>'variant_key', ''));
+  v_variant_name text := trim(coalesce(p_order->>'variant_name', ''));
+  v_quantity integer := greatest(1, coalesce(nullif(p_order->>'quantity', '')::integer, 1));
+  v_telegram_id bigint := coalesce(nullif(p_order->>'telegram_id', '')::bigint, 0);
+  v_unit_price integer := greatest(0, coalesce(nullif(p_order->>'unit_price', '')::integer, 0));
+  v_payment_fee integer := greatest(0, coalesce(nullif(p_order->>'fee', '')::integer, 0));
+  v_cost_unit integer := greatest(0, coalesce(nullif(p_order->>'cost_unit', '')::integer, 0));
+  v_cost_total integer := greatest(0, coalesce(nullif(p_order->>'cost_total', '')::integer, 0));
+  v_cost_source text := trim(coalesce(p_order->>'cost_source', 'unset'));
+  v_voucher_code text := trim(coalesce(p_order->>'voucher_code', ''));
+  v_now timestamptz := now();
+  v_product public.products%rowtype;
+  v_transaction public.transactions%rowtype;
+  v_variant jsonb;
+  v_variant_idx integer;
+  v_stock jsonb := '[]'::jsonb;
+  v_taken jsonb := '[]'::jsonb;
+  v_rest jsonb := '[]'::jsonb;
+  v_variants jsonb;
+  v_profit integer;
+  v_inserted_id uuid;
+  v_delivered_text text := '';
+begin
+  if v_invoice = '' then raise exception 'INVOICE_REQUIRED'; end if;
+  if v_product_code = '' then raise exception 'PRODUCT_CODE_REQUIRED'; end if;
+  if v_telegram_id <= 0 then raise exception 'TELEGRAM_ID_INVALID'; end if;
+  if p_total_price is null or p_total_price < 0 then raise exception 'TOTAL_PRICE_INVALID'; end if;
+
+  -- Satu invoice hanya boleh diproses oleh satu transaksi database pada satu waktu.
+  perform pg_advisory_xact_lock(hashtextextended('invoice:' || v_invoice, 0));
+
+  select * into v_transaction
+    from public.transactions
+   where order_ref = v_invoice
+   limit 1;
+  if found then
+    return jsonb_build_object(
+      'already_completed', true,
+      'delivered', coalesce(v_transaction.delivered_items, '[]'::jsonb),
+      'transaction', to_jsonb(v_transaction)
+    );
+  end if;
+
+  -- Lock baris produk membuat dua invoice berbeda untuk produk yang sama mengantre.
+  select * into v_product
+    from public.products
+   where upper(code) = upper(v_product_code)
+   limit 1
+   for update;
+  if not found then raise exception 'PRODUCT_NOT_FOUND'; end if;
+
+  if v_cost_total = 0 and v_cost_unit > 0 then
+    v_cost_total := v_cost_unit * v_quantity;
+  end if;
+  if v_cost_source = '' then
+    v_cost_source := case when v_cost_total > 0 then 'snapshot' else 'unset' end;
+  end if;
+  v_profit := case
+    when v_cost_source = 'unset' then 0
+    else p_total_price - v_payment_fee - v_cost_total
+  end;
+
+  -- Klaim invoice dengan unique order_ref sebelum mengubah stok. Jika proses lain sudah
+  -- lebih dulu memasukkan invoice, fungsi berhenti tanpa mengurangi stok.
+  insert into public.transactions (
+    telegram_id, username, product_name, product_code,
+    variant_key, variant_name, unit_price, quantity, total_price,
+    payment_fee, cost_unit, cost_total, cost_source, cost_updated_at,
+    profit_amount, order_ref, delivered_items, delivered_text, created_at
+  ) values (
+    v_telegram_id,
+    nullif(trim(coalesce(p_buyer->>'username', '')), ''),
+    v_product.name,
+    v_product.code,
+    v_variant_key,
+    v_variant_name,
+    v_unit_price,
+    v_quantity,
+    p_total_price,
+    v_payment_fee,
+    v_cost_unit,
+    v_cost_total,
+    v_cost_source,
+    case when v_cost_source = 'unset' then null else v_now end,
+    v_profit,
+    v_invoice,
+    '[]'::jsonb,
+    '',
+    v_now
+  )
+  on conflict (order_ref) do nothing
+  returning id into v_inserted_id;
+
+  if v_inserted_id is null then
+    select * into v_transaction from public.transactions where order_ref = v_invoice limit 1;
+    return jsonb_build_object(
+      'already_completed', true,
+      'delivered', coalesce(v_transaction.delivered_items, '[]'::jsonb),
+      'transaction', to_jsonb(v_transaction)
+    );
+  end if;
+
+  if v_variant_key <> '' then
+    select (ord - 1)::integer, elem
+      into v_variant_idx, v_variant
+      from jsonb_array_elements(coalesce(v_product.variants, '[]'::jsonb)) with ordinality as t(elem, ord)
+     where upper(regexp_replace(
+       coalesce(elem->>'sku', elem->>'kode', elem->>'key', elem->>'name', elem->>'nama', 'VAR' || ord::text),
+       '\s+', '-', 'g'
+     )) = upper(v_variant_key)
+     limit 1;
+
+    if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
+    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
+      v_stock := coalesce(v_product.stock, '[]'::jsonb);
+    else
+      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    end if;
+  else
+    v_stock := coalesce(v_product.stock, '[]'::jsonb);
+  end if;
+
+  if jsonb_typeof(v_stock) <> 'array' then raise exception 'STOCK_FORMAT_INVALID'; end if;
+  if jsonb_array_length(v_stock) < v_quantity then raise exception 'INSUFFICIENT_STOCK'; end if;
+
+  select coalesce(jsonb_agg(elem order by ord), '[]'::jsonb)
+    into v_taken
+    from jsonb_array_elements(v_stock) with ordinality as t(elem, ord)
+   where ord <= v_quantity;
+
+  select coalesce(jsonb_agg(elem order by ord), '[]'::jsonb)
+    into v_rest
+    from jsonb_array_elements(v_stock) with ordinality as t(elem, ord)
+   where ord > v_quantity;
+
+  if v_variant_key <> '' then
+    v_variants := coalesce(v_product.variants, '[]'::jsonb);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) <> 'shared' then
+      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    end if;
+    v_variants := jsonb_set(
+      v_variants,
+      array[v_variant_idx::text, 'sold'],
+      to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity),
+      true
+    );
+    update public.products
+       set variants = v_variants,
+           stock = case when lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then v_rest else stock end,
+           sold = coalesce(sold, 0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
+  else
+    update public.products
+       set stock = v_rest,
+           sold = coalesce(sold, 0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
+  end if;
+
+  select coalesce(string_agg(value, E'\n' order by ord), '')
+    into v_delivered_text
+    from jsonb_array_elements_text(v_taken) with ordinality as t(value, ord);
+
+  update public.transactions
+     set delivered_items = v_taken,
+         delivered_text = v_delivered_text
+   where id = v_inserted_id
+   returning * into v_transaction;
+
+  insert into public.bot_users (
+    telegram_id, first_name, username, transaction_count, spending, created_at, updated_at
+  ) values (
+    v_telegram_id,
+    nullif(trim(coalesce(p_buyer->>'first_name', '')), ''),
+    nullif(trim(coalesce(p_buyer->>'username', '')), ''),
+    1,
+    p_total_price,
+    v_now,
+    v_now
+  )
+  on conflict (telegram_id) do update set
+    first_name = coalesce(excluded.first_name, public.bot_users.first_name),
+    username = coalesce(excluded.username, public.bot_users.username),
+    transaction_count = coalesce(public.bot_users.transaction_count, 0) + 1,
+    spending = coalesce(public.bot_users.spending, 0) + p_total_price,
+    updated_at = v_now;
+
+  if v_voucher_code <> '' then
+    if upper(v_voucher_code) like 'AUTO_PROMO:%' then
+      update public.auto_promos
+         set used_count = coalesce(used_count, 0) + 1,
+             updated_at = v_now
+       where upper(code) = upper(substring(v_voucher_code from 12));
+    else
+      update public.vouchers
+         set used_by = case
+           when coalesce(used_by, '[]'::jsonb) @> jsonb_build_array(v_telegram_id)
+             then coalesce(used_by, '[]'::jsonb)
+           else coalesce(used_by, '[]'::jsonb) || jsonb_build_array(v_telegram_id)
+         end,
+         updated_at = v_now
+       where upper(code) = upper(v_voucher_code);
+    end if;
+  end if;
+
+  -- Counter historis transaksi dipertahankan walau owner membersihkan tabel lama.
+  insert into public.shop_settings(key, value, updated_at)
+  values (
+    'historical_stats',
+    jsonb_build_object(
+      'orders_total', 1,
+      'revenue_total', p_total_price,
+      'quantity_sold', v_quantity,
+      'cost_total', v_cost_total,
+      'profit_total', v_profit,
+      'updated_at', v_now
+    ),
+    v_now
+  )
+  on conflict (key) do update set
+    value = jsonb_build_object(
+      'orders_total', coalesce((public.shop_settings.value->>'orders_total')::numeric, 0) + 1,
+      'revenue_total', coalesce((public.shop_settings.value->>'revenue_total')::numeric, 0) + p_total_price,
+      'quantity_sold', coalesce((public.shop_settings.value->>'quantity_sold')::numeric, 0) + v_quantity,
+      'cost_total', coalesce((public.shop_settings.value->>'cost_total')::numeric, 0) + v_cost_total,
+      'profit_total', coalesce((public.shop_settings.value->>'profit_total')::numeric, 0) + v_profit,
+      'updated_at', v_now
+    ),
+    updated_at = v_now;
+
+  return jsonb_build_object(
+    'already_completed', false,
+    'delivered', v_taken,
+    'transaction', to_jsonb(v_transaction)
+  );
+end;
+$$;
+
+revoke all on function public.fulfill_paid_order_v62(jsonb, text, integer, jsonb) from public, anon, authenticated;
+grant execute on function public.fulfill_paid_order_v62(jsonb, text, integer, jsonb) to service_role;
+
+-- Pembayaran saldo: memakai aturan pool bersama yang sama dengan pembayaran gateway.
+create or replace function public.fulfill_wallet_order_v65(
+  p_order jsonb,
+  p_product_code text,
+  p_total_price integer,
+  p_buyer jsonb default '{}'::jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice text := trim(coalesce(p_order->>'invoice_ref', ''));
+  v_product_code text := trim(coalesce(p_product_code, p_order->>'product_code', ''));
+  v_variant_key text := trim(coalesce(p_order->>'variant_key', ''));
+  v_variant_name text := trim(coalesce(p_order->>'variant_name', ''));
+  v_quantity integer := greatest(1, coalesce(nullif(p_order->>'quantity', '')::integer, 1));
+  v_telegram_id bigint := coalesce(nullif(p_order->>'telegram_id', '')::bigint, 0);
+  v_unit_price integer := greatest(0, coalesce(nullif(p_order->>'unit_price', '')::integer, 0));
+  v_cost_unit integer := greatest(0, coalesce(nullif(p_order->>'cost_unit', '')::integer, 0));
+  v_cost_total integer := greatest(0, coalesce(nullif(p_order->>'cost_total', '')::integer, 0));
+  v_cost_source text := trim(coalesce(p_order->>'cost_source', 'unset'));
+  v_voucher_code text := trim(coalesce(p_order->>'voucher_code', ''));
+  v_now timestamptz := now();
+  v_product public.products%rowtype;
+  v_user public.bot_users%rowtype;
+  v_transaction public.transactions%rowtype;
+  v_variant jsonb;
+  v_variant_idx integer;
+  v_stock jsonb := '[]'::jsonb;
+  v_taken jsonb := '[]'::jsonb;
+  v_rest jsonb := '[]'::jsonb;
+  v_variants jsonb;
+  v_profit integer;
+  v_inserted_id uuid;
+  v_delivered_text text := '';
+  v_main_used bigint := 0;
+  v_ref_used bigint := 0;
+  v_remaining bigint;
+begin
+  if v_invoice = '' then raise exception 'INVOICE_REQUIRED'; end if;
+  if v_product_code = '' then raise exception 'PRODUCT_CODE_REQUIRED'; end if;
+  if v_telegram_id <= 0 then raise exception 'TELEGRAM_ID_INVALID'; end if;
+  if p_total_price is null or p_total_price < 0 then raise exception 'TOTAL_PRICE_INVALID'; end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('invoice:' || v_invoice, 0));
+
+  select * into v_transaction from public.transactions where order_ref = v_invoice limit 1;
+  if found then
+    return jsonb_build_object(
+      'already_completed', true,
+      'delivered', coalesce(v_transaction.delivered_items, '[]'::jsonb),
+      'transaction', to_jsonb(v_transaction)
+    );
+  end if;
+
+  select * into v_user from public.bot_users where telegram_id = v_telegram_id for update;
+  if not found then raise exception 'USER_NOT_FOUND'; end if;
+  if coalesce(v_user.balance_main, 0) + coalesce(v_user.balance_referral, 0) < p_total_price then
+    raise exception 'INSUFFICIENT_WALLET_BALANCE';
+  end if;
+
+  select * into v_product
+    from public.products
+   where upper(code) = upper(v_product_code)
+   limit 1
+   for update;
+  if not found then raise exception 'PRODUCT_NOT_FOUND'; end if;
+
+  if v_cost_total = 0 and v_cost_unit > 0 then v_cost_total := v_cost_unit * v_quantity; end if;
+  if v_cost_source = '' then v_cost_source := case when v_cost_total > 0 then 'snapshot' else 'unset' end; end if;
+  v_profit := case when v_cost_source = 'unset' then 0 else p_total_price - v_cost_total end;
+
+  insert into public.transactions (
+    telegram_id, username, product_name, product_code,
+    variant_key, variant_name, unit_price, quantity, total_price,
+    payment_fee, cost_unit, cost_total, cost_source, cost_updated_at,
+    profit_amount, payment_method, wallet_main_used, wallet_referral_used,
+    order_ref, delivered_items, delivered_text, created_at
+  ) values (
+    v_telegram_id,
+    nullif(trim(coalesce(p_buyer->>'username', '')), ''),
+    v_product.name, v_product.code, v_variant_key, v_variant_name,
+    v_unit_price, v_quantity, p_total_price,
+    0, v_cost_unit, v_cost_total, v_cost_source,
+    case when v_cost_source = 'unset' then null else v_now end,
+    v_profit, 'wallet', 0, 0,
+    v_invoice, '[]'::jsonb, '', v_now
+  ) on conflict (order_ref) do nothing returning id into v_inserted_id;
+
+  if v_inserted_id is null then
+    select * into v_transaction from public.transactions where order_ref = v_invoice limit 1;
+    return jsonb_build_object(
+      'already_completed', true,
+      'delivered', coalesce(v_transaction.delivered_items, '[]'::jsonb),
+      'transaction', to_jsonb(v_transaction)
+    );
+  end if;
+
+  if v_variant_key <> '' then
+    select (ord - 1)::integer, elem into v_variant_idx, v_variant
+      from jsonb_array_elements(coalesce(v_product.variants, '[]'::jsonb)) with ordinality as t(elem, ord)
+     where upper(regexp_replace(
+       coalesce(elem->>'sku', elem->>'kode', elem->>'key', elem->>'name', elem->>'nama', 'VAR' || ord::text),
+       '\s+', '-', 'g'
+     )) = upper(v_variant_key)
+     limit 1;
+    if v_variant_idx is null then raise exception 'VARIANT_NOT_FOUND'; end if;
+    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
+      v_stock := coalesce(v_product.stock, '[]'::jsonb);
+    else
+      v_stock := coalesce(v_variant->'stock', v_variant->'stok', v_variant->'data', '[]'::jsonb);
+    end if;
+  else
+    v_stock := coalesce(v_product.stock, '[]'::jsonb);
+  end if;
+
+  if jsonb_typeof(v_stock) <> 'array' then raise exception 'STOCK_FORMAT_INVALID'; end if;
+  if jsonb_array_length(v_stock) < v_quantity then raise exception 'INSUFFICIENT_STOCK'; end if;
+
+  select coalesce(jsonb_agg(elem order by ord), '[]'::jsonb) into v_taken
+    from jsonb_array_elements(v_stock) with ordinality as t(elem, ord) where ord <= v_quantity;
+  select coalesce(jsonb_agg(elem order by ord), '[]'::jsonb) into v_rest
+    from jsonb_array_elements(v_stock) with ordinality as t(elem, ord) where ord > v_quantity;
+
+  if v_variant_key <> '' then
+    v_variants := coalesce(v_product.variants, '[]'::jsonb);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) <> 'shared' then
+      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    end if;
+    v_variants := jsonb_set(
+      v_variants, array[v_variant_idx::text, 'sold'],
+      to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity), true
+    );
+    update public.products
+       set variants = v_variants,
+           stock = case when lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then v_rest else stock end,
+           sold = coalesce(sold, 0) + v_quantity,
+           updated_at = v_now
+     where id = v_product.id;
+  else
+    update public.products set stock = v_rest, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
+     where id = v_product.id;
+  end if;
+
+  v_main_used := least(coalesce(v_user.balance_main, 0), p_total_price);
+  v_remaining := p_total_price - v_main_used;
+  v_ref_used := greatest(0, v_remaining);
+
+  update public.bot_users
+     set balance_main = balance_main - v_main_used,
+         balance_referral = balance_referral - v_ref_used,
+         first_name = coalesce(nullif(trim(coalesce(p_buyer->>'first_name', '')), ''), first_name),
+         username = coalesce(nullif(trim(coalesce(p_buyer->>'username', '')), ''), username),
+         transaction_count = transaction_count + 1,
+         spending = spending + p_total_price,
+         updated_at = v_now
+   where telegram_id = v_telegram_id
+   returning * into v_user;
+
+  if v_main_used > 0 then
+    insert into public.wallet_ledger(entry_key, telegram_id, wallet_type, direction, amount, balance_after, reason, reference, created_at)
+    values ('order:' || v_invoice || ':main', v_telegram_id, 'main', 'debit', v_main_used,
+      v_user.balance_main, 'Pembayaran produk dengan saldo utama', v_invoice, v_now)
+    on conflict (entry_key) do nothing;
+  end if;
+  if v_ref_used > 0 then
+    insert into public.wallet_ledger(entry_key, telegram_id, wallet_type, direction, amount, balance_after, reason, reference, created_at)
+    values ('order:' || v_invoice || ':referral', v_telegram_id, 'referral', 'debit', v_ref_used,
+      v_user.balance_referral, 'Pembayaran produk dengan saldo referral', v_invoice, v_now)
+    on conflict (entry_key) do nothing;
+  end if;
+
+  select coalesce(string_agg(value, E'\n' order by ord), '') into v_delivered_text
+    from jsonb_array_elements_text(v_taken) with ordinality as t(value, ord);
+
+  update public.transactions
+     set delivered_items = v_taken,
+         delivered_text = v_delivered_text,
+         wallet_main_used = v_main_used,
+         wallet_referral_used = v_ref_used
+   where id = v_inserted_id
+   returning * into v_transaction;
+
+  if v_voucher_code <> '' then
+    if upper(v_voucher_code) like 'AUTO_PROMO:%' then
+      update public.auto_promos set used_count = coalesce(used_count, 0) + 1, updated_at = v_now
+       where upper(code) = upper(substring(v_voucher_code from 12));
+    else
+      update public.vouchers
+         set used_by = case
+           when coalesce(used_by, '[]'::jsonb) @> jsonb_build_array(v_telegram_id)
+             then coalesce(used_by, '[]'::jsonb)
+           else coalesce(used_by, '[]'::jsonb) || jsonb_build_array(v_telegram_id)
+         end,
+         updated_at = v_now
+       where upper(code) = upper(v_voucher_code);
+    end if;
+  end if;
+
+  insert into public.shop_settings(key, value, updated_at)
+  values (
+    'historical_stats',
+    jsonb_build_object(
+      'orders_total', 1, 'revenue_total', p_total_price,
+      'quantity_sold', v_quantity, 'cost_total', v_cost_total,
+      'profit_total', v_profit, 'updated_at', v_now
+    ), v_now
+  ) on conflict (key) do update set
+    value = jsonb_build_object(
+      'orders_total', coalesce((public.shop_settings.value->>'orders_total')::numeric, 0) + 1,
+      'revenue_total', coalesce((public.shop_settings.value->>'revenue_total')::numeric, 0) + p_total_price,
+      'quantity_sold', coalesce((public.shop_settings.value->>'quantity_sold')::numeric, 0) + v_quantity,
+      'cost_total', coalesce((public.shop_settings.value->>'cost_total')::numeric, 0) + v_cost_total,
+      'profit_total', coalesce((public.shop_settings.value->>'profit_total')::numeric, 0) + v_profit,
+      'updated_at', v_now
+    ), updated_at = v_now;
+
+  return jsonb_build_object(
+    'already_completed', false,
+    'delivered', v_taken,
+    'transaction', to_jsonb(v_transaction),
+    'wallet', jsonb_build_object(
+      'main_used', v_main_used,
+      'referral_used', v_ref_used,
+      'balance_main', v_user.balance_main,
+      'balance_referral', v_user.balance_referral
+    )
+  );
+end;
+$$;
+
+revoke all on function public.fulfill_wallet_order_v65(jsonb, text, integer, jsonb) from public, anon, authenticated;
+grant execute on function public.fulfill_wallet_order_v65(jsonb, text, integer, jsonb) to service_role;
+
+notify pgrst, 'reload schema';
+
+commit;

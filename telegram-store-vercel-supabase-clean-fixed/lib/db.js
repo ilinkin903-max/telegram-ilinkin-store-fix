@@ -144,6 +144,28 @@ function normalizeDeliveryMode(value, fallback = '') {
   return fallback;
 }
 
+function normalizeStockMode(value, fallback = 'separate') {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'shared') return 'shared';
+  if (mode === 'separate') return 'separate';
+  return String(fallback || '').trim().toLowerCase() === 'shared' ? 'shared' : 'separate';
+}
+
+function variantUsesSharedStock(variant) {
+  return normalizeStockMode(variant?.stock_mode ?? variant?.stockMode ?? variant?.stock_source, 'separate') === 'shared';
+}
+
+function productStockItems(product) {
+  const value = product?.data ?? product?.stock ?? [];
+  return Array.isArray(value) ? value : [];
+}
+
+function variantStockItems(product, variant) {
+  if (variantUsesSharedStock(variant)) return productStockItems(product);
+  const value = variant?.stock ?? variant?.stok ?? variant?.data ?? [];
+  return Array.isArray(value) ? value : [];
+}
+
 function normalizeVariant(item, index = 0) {
   const name = String(item?.name || item?.nama || `Varian ${index + 1}`).trim();
   const stockValue = item?.stock ?? item?.stok ?? item?.data ?? [];
@@ -156,6 +178,7 @@ function normalizeVariant(item, index = 0) {
     description: String(item?.description || item?.deskripsi || '').trim(),
     snk: String(item?.snk || item?.terms || item?.syarat || '').trim(),
     delivery_mode: normalizeDeliveryMode(item?.delivery_mode ?? item?.deliveryMode ?? item?.pengiriman, ''),
+    stock_mode: normalizeStockMode(item?.stock_mode ?? item?.stockMode ?? item?.stock_source, 'separate'),
     active: item?.active === false || String(item?.active || '').toLowerCase() === 'false' || String(item?.status || '').toLowerCase() === 'off' ? false : true,
     stock: Array.isArray(stockValue) ? stockValue.map((x) => String(x).trim()).filter(Boolean) : splitStock(String(stockValue || '')),
     bulk_prices: normalizeBulkPrices(item?.bulk_prices || item?.bulkPrices || item?.grosir || []),
@@ -225,7 +248,15 @@ function findVariant(product, key) {
 
 function variantStockCount(product) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  return variants.reduce((sum, item) => sum + (Array.isArray(item.stock) ? item.stock.length : 0), 0);
+  let sharedCounted = false;
+  return variants.reduce((sum, variant) => {
+    if (variantUsesSharedStock(variant)) {
+      if (sharedCounted) return sum;
+      sharedCounted = true;
+      return sum + productStockItems(product).length;
+    }
+    return sum + variantStockItems(product, variant).length;
+  }, 0);
 }
 
 function variantDeliveryMode(product, variantOrKey = null) {
@@ -241,16 +272,22 @@ function productAvailableStock(product, variantKeyValue = '') {
     const found = findVariant(product, variantKeyValue);
     if (!found.variant) return 0;
     if (variantDeliveryMode(product, found.variant) === 'po') return 0;
-    return Array.isArray(found.variant.stock) ? found.variant.stock.length : 0;
+    return variantStockItems(product, found.variant).length;
   }
   if (variants.length) {
+    let sharedCounted = false;
     return variants.reduce((sum, variant) => {
       if (variantDeliveryMode(product, variant) === 'po') return sum;
-      return sum + (Array.isArray(variant.stock) ? variant.stock.length : 0);
+      if (variantUsesSharedStock(variant)) {
+        if (sharedCounted) return sum;
+        sharedCounted = true;
+        return sum + productStockItems(product).length;
+      }
+      return sum + variantStockItems(product, variant).length;
     }, 0);
   }
   if (normalizeDeliveryMode(product?.delivery_mode, 'auto') === 'po') return 0;
-  return Array.isArray(product?.data) ? product.data.length : 0;
+  return productStockItems(product).length;
 }
 
 function orderUnitPrice(product, order = {}) {
@@ -2843,6 +2880,9 @@ module.exports = {
   normalizeBulkPrices,
   normalizeVariants,
   normalizeDeliveryMode,
+  normalizeStockMode,
+  variantUsesSharedStock,
+  variantStockItems,
   variantKey,
   findVariant,
   variantDeliveryMode,

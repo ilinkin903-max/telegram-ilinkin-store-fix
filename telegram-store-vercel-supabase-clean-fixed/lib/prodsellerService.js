@@ -5,7 +5,17 @@ const cache = {
   balance: { at: 0, value: null },
   products: new Map()
 };
+const inFlight = {
+  balance: null,
+  products: new Map()
+};
 const CACHE_MS = 30000;
+
+function requestTimeout(options = {}, fallback = 20000) {
+  const value = Number(options?.timeout);
+  if (!Number.isFinite(value) || value < 250) return fallback;
+  return Math.min(30000, Math.floor(value));
+}
 
 function cacheFresh(at) {
   return Number(at || 0) > 0 && (Date.now() - Number(at || 0)) < CACHE_MS;
@@ -66,13 +76,27 @@ async function request(method, path, { data, params, idempotencyKey, timeout = 2
 async function getBalance(options = {}) {
   const force = options && options.force === true;
   if (!force && cacheFresh(cache.balance.at) && cache.balance.value) return cache.balance.value;
-  const value = await request('GET', '/balance');
-  cache.balance = { at: Date.now(), value };
-  return value;
+  if (!force && inFlight.balance) return inFlight.balance;
+
+  let activePromise;
+  activePromise = request('GET', '/balance', { timeout: requestTimeout(options) })
+    .then((value) => {
+      cache.balance = { at: Date.now(), value };
+      return value;
+    })
+    .catch((error) => {
+      if (!force && cache.balance.value) return cache.balance.value;
+      throw error;
+    })
+    .finally(() => {
+      if (inFlight.balance === activePromise) inFlight.balance = null;
+    });
+  if (!force) inFlight.balance = activePromise;
+  return activePromise;
 }
 
-async function listProducts() {
-  const data = await request('GET', '/products');
+async function listProducts(options = {}) {
+  const data = await request('GET', '/products', { timeout: requestTimeout(options) });
   return Array.isArray(data.products) ? data.products : [];
 }
 
@@ -82,9 +106,24 @@ async function getProduct(productId, options = {}) {
   const force = options && options.force === true;
   const cached = cache.products.get(id);
   if (!force && cached && cacheFresh(cached.at)) return cached.value;
-  const value = await request('GET', `/products/${encodeURIComponent(id)}`);
-  cache.products.set(id, { at: Date.now(), value });
-  return value;
+  if (!force && inFlight.products.has(id)) return inFlight.products.get(id);
+
+  let activePromise;
+  activePromise = request('GET', `/products/${encodeURIComponent(id)}`, { timeout: requestTimeout(options) })
+    .then((value) => {
+      cache.products.set(id, { at: Date.now(), value });
+      return value;
+    })
+    .catch((error) => {
+      const stale = cache.products.get(id);
+      if (!force && stale?.value) return stale.value;
+      throw error;
+    })
+    .finally(() => {
+      if (inFlight.products.get(id) === activePromise) inFlight.products.delete(id);
+    });
+  if (!force) inFlight.products.set(id, activePromise);
+  return activePromise;
 }
 
 function availabilityFrom({ balanceData = {}, product = {} } = {}) {
@@ -111,9 +150,10 @@ function availabilityFrom({ balanceData = {}, product = {} } = {}) {
 
 async function getAvailability(productId, options = {}) {
   const force = options && options.force === true;
+  const timeout = requestTimeout(options);
   const [balanceData, product] = await Promise.all([
-    getBalance({ force }),
-    getProduct(productId, { force })
+    getBalance({ force, timeout }),
+    getProduct(productId, { force, timeout })
   ]);
   return availabilityFrom({ balanceData, product });
 }

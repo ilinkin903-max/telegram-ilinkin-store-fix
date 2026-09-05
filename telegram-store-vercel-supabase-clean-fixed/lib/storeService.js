@@ -8,6 +8,79 @@ const prodseller = require('./prodsellerService');
 const { config } = require('./config');
 const { randomFee, randomRef } = require('./utils');
 
+const STORE_PUBLIC_CATALOG_CACHE_MS = 5 * 1000;
+const STORE_WALLET_CACHE_MS = 2500;
+const STORE_USER_TOUCH_CACHE_MS = 30 * 1000;
+const STORE_SUPPLIER_CATALOG_TIMEOUT_MS = 1500;
+const storeReadCache = {
+  catalog: { at: 0, value: null, promise: null },
+  wallets: new Map(),
+  userTouches: new Map()
+};
+
+function storeCacheHasValue(entry) {
+  return Boolean(entry) && entry.value !== undefined && entry.value !== null;
+}
+
+function storeCacheFresh(entry, ttl) {
+  return storeCacheHasValue(entry) && (Date.now() - Number(entry.at || 0)) < ttl;
+}
+
+function storeMapCacheEntry(map, key, maxEntries = 1000) {
+  const normalizedKey = String(key || '');
+  let entry = map.get(normalizedKey);
+  if (!entry) {
+    if (map.size >= maxEntries) {
+      const oldest = map.keys().next();
+      if (!oldest.done) map.delete(oldest.value);
+    }
+    entry = { at: 0, value: null, promise: null };
+    map.set(normalizedKey, entry);
+  }
+  return entry;
+}
+
+async function readThroughStoreCache(entry, loader, ttl, force = false) {
+  if (!force && storeCacheFresh(entry, ttl)) return entry.value;
+  if (!force && entry.promise) return entry.promise;
+
+  let activePromise;
+  activePromise = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      entry.value = value;
+      entry.at = Date.now();
+      return value;
+    })
+    .catch((error) => {
+      if (storeCacheHasValue(entry)) return entry.value;
+      throw error;
+    })
+    .finally(() => {
+      if (entry.promise === activePromise) entry.promise = null;
+    });
+  if (!force) entry.promise = activePromise;
+  return activePromise;
+}
+
+async function cachedMarketplaceTouch(viewer, force = false) {
+  const entry = storeMapCacheEntry(storeReadCache.userTouches, Number(viewer?.id || 0));
+  return readThroughStoreCache(entry, async () => {
+    await db.upsertUser(viewer);
+    return true;
+  }, STORE_USER_TOUCH_CACHE_MS, force);
+}
+
+async function cachedMarketplaceWallet(userId, force = false) {
+  const entry = storeMapCacheEntry(storeReadCache.wallets, Number(userId));
+  return readThroughStoreCache(entry, () => db.getWalletSummary(Number(userId), 1), STORE_WALLET_CACHE_MS, force);
+}
+
+function invalidateStoreReadCache(userId = null) {
+  storeReadCache.catalog = { at: 0, value: null, promise: null };
+  if (userId !== null && userId !== undefined) storeReadCache.wallets.delete(String(Number(userId)));
+}
+
 function httpError(message, statusCode = 400, code = 'BAD_REQUEST', details = {}) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -200,7 +273,8 @@ function parseFlashSalePromoCodes(value) {
     }).slice(0, 100);
 }
 
-function variantStock(variant) {
+function variantStock(variant, product = null) {
+  if (product && db.variantUsesSharedStock(variant)) return db.variantStockItems(product, variant).length;
   return Array.isArray(variant?.stock) ? variant.stock.length : 0;
 }
 
@@ -256,7 +330,8 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
     key,
     name: String(variant?.name || `Varian ${index + 1}`),
     price,
-    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : variantStock(variant)),
+    stock: supplier ? Math.max(0, Math.floor(Number(availability?.availableStock || 0))) : (workflow ? workflowAvailabilityFromProduct(product, variant).availableStock : variantStock(variant, product)),
+    stock_mode: db.normalizeStockMode(variant?.stock_mode, 'separate'),
     sold: Number(variant?.sold || 0),
     active: variant?.active !== false,
     description: String(variant?.description || ''),
@@ -308,8 +383,18 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock).availableStock || 0)))
     : null;
   const workflowAvailableStock = isWorkflow ? workflowAvailabilityFromProduct(product, null).availableStock : null;
+  let sharedStockCounted = false;
   const stock = variants.length
-    ? variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0)
+    ? variants.reduce((sum, variant) => {
+      const isLocalShared = !variant.supplier_source && variant.stock_mode === 'shared' && variant.effective_delivery_mode !== 'po';
+      if (isLocalShared) {
+        if (sharedStockCounted) return sum;
+        sharedStockCounted = true;
+        return sum + baseStock;
+      }
+      if (!variant.supplier_source && variant.effective_delivery_mode === 'po') return sum;
+      return sum + Math.max(0, Number(variant.stock || 0));
+    }, 0)
     : (isSupplier ? supplierAvailableStock : (isWorkflow ? workflowAvailableStock : (isPo ? 0 : baseStock)));
   const prices = (variants.length ? variants : [{ price: Number(product?.harga || 0) }])
     .map((variant) => Number(variant.price || 0))
@@ -371,22 +456,12 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
   };
 }
 
-async function getCatalog(viewer = null) {
+async function buildPublicCatalog() {
   const [products, settings, promos] = await Promise.all([
     db.listProducts({ activeOnly: true }),
     db.getShopSettings(),
     db.listAutoPromos(200).catch(() => [])
   ]);
-  let wallet = null;
-  if (viewer?.id) {
-    await db.upsertUser(viewer).catch((error) => {
-      console.warn('Gagal memperbarui user marketplace:', error.message || error);
-    });
-    wallet = await db.getWalletSummary(Number(viewer.id), 1).catch((error) => {
-      console.warn('Saldo marketplace belum tersedia:', error.message || error);
-      return null;
-    });
-  }
   const flashPromoCodes = parseFlashSalePromoCodes(settings.flash_sale_promo_codes);
   const flashPromoCodeSet = new Set(flashPromoCodes);
   const flashWindow = db.flashSaleWindowState(settings);
@@ -408,9 +483,9 @@ async function getCatalog(viewer = null) {
     });
   });
   if (supplierRefs.size && prodseller.configured()) {
-    const balanceData = await prodseller.getBalance().catch(() => null);
+    const balanceData = await prodseller.getBalance({ timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS }).catch(() => null);
     const rows = balanceData ? await Promise.allSettled([...supplierRefs].map(async (supplierId) => {
-      const liveProduct = await prodseller.getProduct(supplierId);
+      const liveProduct = await prodseller.getProduct(supplierId, { timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS });
       return [supplierId, prodseller.availabilityFrom({ balanceData, product: liveProduct })];
     })) : [];
     rows.forEach((row) => {
@@ -456,10 +531,10 @@ async function getCatalog(viewer = null) {
     .map((product) => {
       const map = {};
       const direct = supplierSelection(product, null);
-      if (direct) map[direct.productId] = supplierAvailability.get(direct.productId) || { availableStock: 0 };
+      if (direct && supplierAvailability.has(direct.productId)) map[direct.productId] = supplierAvailability.get(direct.productId);
       (Array.isArray(product?.variants) ? product.variants : []).forEach((variant) => {
         const ref = supplierSelection(product, variant);
-        if (ref) map[ref.productId] = supplierAvailability.get(ref.productId) || { availableStock: 0 };
+        if (ref && supplierAvailability.has(ref.productId)) map[ref.productId] = supplierAvailability.get(ref.productId);
       });
       const enriched = { ...product, _supplier_availability_by_id: map };
       return sanitizeProduct(enriched, activePromos, flashPromos);
@@ -524,13 +599,56 @@ async function getCatalog(viewer = null) {
     },
     bot_username: String(config.botUsername || '').replace(/^@/, ''),
     products: publicProducts,
-    categories,
-    viewer: viewer ? {
+    categories
+  };
+}
+
+async function getCatalog(viewer = null) {
+  const catalogPromise = readThroughStoreCache(
+    storeReadCache.catalog,
+    buildPublicCatalog,
+    STORE_PUBLIC_CATALOG_CACHE_MS
+  );
+
+  if (!viewer?.id) {
+    const catalog = await catalogPromise;
+    return {
+      ...catalog,
+      viewer: {
+        telegram_ready: false,
+        is_owner: false,
+        wallet_ready: false,
+        wallet: { balance_main: 0, balance_referral: 0, balance_total: 0 }
+      }
+    };
+  }
+
+  const userId = Number(viewer.id);
+  const touchPromise = cachedMarketplaceTouch(viewer).catch((error) => {
+    console.warn('Gagal memperbarui user marketplace:', error.message || error);
+    return false;
+  });
+  const walletPromise = cachedMarketplaceWallet(userId).catch((error) => {
+    console.warn('Saldo marketplace belum tersedia:', error.message || error);
+    return null;
+  });
+  const [catalog, touched, initialWallet] = await Promise.all([catalogPromise, touchPromise, walletPromise]);
+  let wallet = initialWallet;
+  if (!wallet && touched) {
+    wallet = await cachedMarketplaceWallet(userId, true).catch((error) => {
+      console.warn('Saldo marketplace belum tersedia setelah sinkronisasi user:', error.message || error);
+      return null;
+    });
+  }
+
+  return {
+    ...catalog,
+    viewer: {
       telegram_ready: true,
-      id: Number(viewer.id),
+      id: userId,
       first_name: viewer.first_name || '',
       username: viewer.username || '',
-      is_owner: (Array.isArray(config.ownerIds) && config.ownerIds.length ? config.ownerIds : [config.ownerId]).includes(Number(viewer.id)),
+      is_owner: (Array.isArray(config.ownerIds) && config.ownerIds.length ? config.ownerIds : [config.ownerId]).includes(userId),
       wallet_ready: Boolean(wallet),
       wallet: wallet ? {
         balance_main: Number(wallet.balance_main || 0),
@@ -541,11 +659,6 @@ async function getCatalog(viewer = null) {
         balance_referral: 0,
         balance_total: 0
       }
-    } : {
-      telegram_ready: false,
-      is_owner: false,
-      wallet_ready: false,
-      wallet: { balance_main: 0, balance_referral: 0, balance_total: 0 }
     }
   };
 }
@@ -654,7 +767,7 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
     liveSupplierCostUnit = workflowAvailability.unitCostIdr;
   }
   const availableStock = selected.variant
-    ? variantStock(selected.variant)
+    ? variantStock(selected.variant, product)
     : (Array.isArray(product.data) ? product.data.length : 0);
   if (!isPo && availableStock < qty) {
     throw httpError(`Stok tidak mencukupi. Stok tersedia: ${availableStock}.`, 409, 'INSUFFICIENT_STOCK', { available_stock: availableStock });
@@ -878,6 +991,7 @@ async function createWalletPayment({ user, productCode, variantKey, quantity, vo
     });
     const result = await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: user, source: 'wallet-marketplace' });
     const walletAfter = await db.getWalletSummary(Number(user.id), 1).catch(() => null);
+    invalidateStoreReadCache(user.id);
     const transaction = result.transaction || {};
     return {
       payment_method: 'wallet',
@@ -957,6 +1071,7 @@ async function getOrderStatus(user, invoice) {
   const transaction = await db.getTransactionByOrderRef(ref);
   if (transaction) {
     if (Number(transaction.telegram_id) !== Number(user.id)) throw httpError('Invoice bukan milik akun ini.', 403, 'FORBIDDEN');
+    invalidateStoreReadCache(user.id);
     const statusProduct = await db.getProductByCode(transaction.product_code).catch(() => null);
     const waitingDelivery = String(transaction.delivery_mode || 'auto') === 'po' && String(transaction.delivery_status || '') !== 'delivered';
     return {
@@ -984,6 +1099,7 @@ async function getOrderStatus(user, invoice) {
       const verified = await paymentService.verifyPaymentTransaction(order);
       if (verified.status === 'completed') {
         const result = await paymentService.fulfillPaidOrder({ order, buyer: user, source: 'marketplace-status-check' });
+        invalidateStoreReadCache(user.id);
         const completed = result.transaction || await db.getTransactionByOrderRef(ref).catch(() => null);
         const statusProduct = await db.getProductByCode(completed?.product_code || order.product_code).catch(() => null);
         const waitingDelivery = String(completed?.delivery_mode || '') === 'po' && String(completed?.delivery_status || '') !== 'delivered';

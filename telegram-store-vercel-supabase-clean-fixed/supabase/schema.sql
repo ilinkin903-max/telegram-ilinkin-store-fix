@@ -496,7 +496,9 @@ begin
 
   if v_variant_key <> '' then
     v_variants := coalesce(v_product.variants, '[]'::jsonb);
-    v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) <> 'shared' then
+      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    end if;
     v_variants := jsonb_set(
       v_variants,
       array[v_variant_idx::text, 'sold'],
@@ -505,12 +507,10 @@ begin
     );
     update public.products
        set variants = v_variants,
+           stock = case when lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then v_rest else stock end,
            sold = coalesce(sold, 0) + v_quantity,
            updated_at = v_now
      where id = v_product.id;
-    if lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then
-      update public.products set stock = v_rest, updated_at = v_now where id = v_product.id;
-    end if;
   else
     update public.products
        set stock = v_rest,
@@ -1133,12 +1133,18 @@ begin
 
   if v_variant_key <> '' then
     v_variants := coalesce(v_product.variants, '[]'::jsonb);
-    v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    if lower(coalesce(v_variant->>'stock_mode','separate')) <> 'shared' then
+      v_variants := jsonb_set(v_variants, array[v_variant_idx::text, 'stock'], v_rest, true);
+    end if;
     v_variants := jsonb_set(
       v_variants, array[v_variant_idx::text, 'sold'],
       to_jsonb(greatest(0, coalesce(nullif(v_variant->>'sold', '')::integer, 0)) + v_quantity), true
     );
-    update public.products set variants = v_variants, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now
+    update public.products
+       set variants = v_variants,
+           stock = case when lower(coalesce(v_variant->>'stock_mode','separate')) = 'shared' then v_rest else stock end,
+           sold = coalesce(sold, 0) + v_quantity,
+           updated_at = v_now
      where id = v_product.id;
   else
     update public.products set stock = v_rest, sold = coalesce(sold, 0) + v_quantity, updated_at = v_now

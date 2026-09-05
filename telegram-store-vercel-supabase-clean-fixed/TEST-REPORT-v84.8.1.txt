@@ -1,0 +1,47 @@
+LINK AUTO ORDER v84.8.1 - TEST REPORT
+======================================
+Tanggal pengujian : 4 September 2026 (WIB)
+Status            : LULUS
+
+HASIL TEST OTOMATIS
+- Total test      : 314
+- Lulus           : 314
+- Gagal           : 0
+- Dibatalkan      : 0
+- Dilewati        : 0
+- Durasi suite    : 9,06 detik
+
+TEST KHUSUS v84.8.1
+- 11 dari 11 test khusus v84.8.1 lulus.
+- stock_mode Shared dipertahankan oleh normalisasi database.
+- Pool Shared dipakai oleh setiap varian terkait dan hanya dihitung satu kali pada total produk.
+- Marketplace menampilkan angka stok Shared tanpa membocorkan isi item stok.
+- Dashboard menjelaskan sumber stok dan mempertahankan cadangan stok Separate.
+- Fulfillment gateway dan saldo membaca serta mengurangi products.stock untuk varian Shared.
+- Stok lokal varian Shared tidak ditimpa saat transaksi.
+- Migrasi tidak memuat DROP TABLE, TRUNCATE, atau DELETE produk.
+- Cache, request paralel, batas waktu supplier, dan penggabungan request diverifikasi.
+- Request ProdSeller identik menghasilkan satu panggilan upstream pada simulasi paralel.
+- Dua pengecekan lisensi paralel menghasilkan satu getMe dan satu license-check.
+- Metadata rilis konsisten pada VERSION, VERSION.txt, package.json, package-lock.json, dan endpoint utama.
+
+REGRESI YANG DIVERIFIKASI
+- Seluruh file JavaScript utama lolos pemeriksaan sintaks node --check.
+- Checkout QRIS/gateway dan pembayaran saldo.
+- Stok lokal, Stok Bersama, ProdSeller, workflow Telegram, dan PRE-ORDER.
+- Referral, Top Up, voucher, promo, flash sale, serta riwayat transaksi.
+- Dashboard Manager dan JavaScript inline dashboard.
+- Webhook, cron pembayaran, notifikasi, receipt, dan fulfillment atomik.
+- Seluruh 314 test proyek lulus tanpa regresi terdeteksi.
+
+VALIDASI MIGRASI SQL
+- Kedua fungsi fulfillment pada file migrasi sama dengan versi terbaru di supabase/schema.sql.
+- Delimiter fungsi, wrapper transaksi BEGIN/COMMIT, grant service_role, dan reload schema diverifikasi secara statik.
+- Migrasi menormalisasi stock_mode tanpa menghapus array stok lokal varian.
+
+CATATAN LINGKUNGAN TEST
+- Registry npm tidak dapat dijangkau dari lingkungan pengujian karena kegagalan DNS EAI_AGAIN.
+- Suite dijalankan dengan shim lokal sementara untuk dependensi eksternal yang dimock oleh test.
+- Shim berada di luar folder proyek dan tidak disertakan di paket rilis.
+- Integrasi jaringan nyata Telegram, Supabase, ProdSeller, dan payment gateway tidak dijalankan dari lingkungan ini.
+- package-lock.json tetap tersedia agar Vercel dapat memasang dependensi resmi pada lingkungan dengan akses registry.

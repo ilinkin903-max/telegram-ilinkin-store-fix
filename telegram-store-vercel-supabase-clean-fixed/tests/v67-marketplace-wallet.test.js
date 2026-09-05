@@ -20,7 +20,8 @@ const api = fs.readFileSync(path.join(root, 'api', 'store-data.js'), 'utf8');
 });
 
 test('katalog mengirim saldo aman tanpa ledger ke browser', () => {
-  assert.match(service, /db\.getWalletSummary\(Number\(viewer\.id\), 1\)/);
+  assert.match(service, /db\.getWalletSummary\(Number\(userId\), 1\)/);
+  assert.match(service, /Promise\.all\(\[catalogPromise, touchPromise, walletPromise\]\)/);
   assert.match(service, /wallet_ready: Boolean\(wallet\)/);
   assert.match(service, /balance_main: Number\(wallet\.balance_main/);
   assert.match(service, /wallet_payment_enabled/);

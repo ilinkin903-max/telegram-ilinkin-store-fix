@@ -100,6 +100,14 @@ async function cachedBotProducts(force = false) {
   );
 }
 
+async function cachedBotProductByCode(code, force = false) {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!normalized) return null;
+  const products = await cachedBotProducts(force).catch(() => []);
+  const cached = products.find((product) => String(product?.kode || '').trim().toUpperCase() === normalized);
+  return cached || db.getProductByCode(normalized);
+}
+
 async function cachedWalletSummary(userId, ledgerLimit = 1, force = false) {
   const limit = Math.max(1, Number(ledgerLimit || 1));
   const entry = botMapCacheEntry(botReadCache.wallets, `${Number(userId)}:${limit}`);
@@ -953,8 +961,8 @@ function variantKey(variant, index = 0) {
     .replace(/\s+/g, '-');
 }
 
-function stockOfVariant(variant) {
-  return Array.isArray(variant?.stock) ? variant.stock : [];
+function stockOfVariant(product, variant) {
+  return db.variantStockItems(product, variant);
 }
 
 function isVariantActive(variant) {
@@ -1056,14 +1064,7 @@ function isPoOrder(product, order = {}) {
 }
 
 function productStockTotal(product) {
-  const allVariants = Array.isArray(product?.variants) ? product.variants : [];
-  if (allVariants.length) {
-    return activeVariantsWithIndex(product).reduce((sum, item) => {
-      if (isPoProduct(product, item.variant)) return sum;
-      return sum + stockOfVariant(item.variant).length;
-    }, 0);
-  }
-  return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
+  return db.productAvailableStock(product);
 }
 
 function productDeliverySummary(product) {
@@ -1146,7 +1147,7 @@ function readyStockForVariant(product, variant, availabilityMap = null) {
   const supplierStock = supplierStockForSelection(product, variant, availabilityMap);
   if (supplierStock !== null) return supplierStock;
   if (isPoProduct(product, variant)) return 0;
-  return stockOfVariant(variant).length;
+  return stockOfVariant(product, variant).length;
 }
 
 function readyStockForProduct(product, availabilityMap = null) {
@@ -1158,7 +1159,16 @@ function readyStockForProduct(product, availabilityMap = null) {
     if (directSupplierStock !== null) return directSupplierStock;
     return isPoProduct(product) ? 0 : (Array.isArray(product?.data) ? product.data.length : 0);
   }
-  return variants.reduce((sum, { variant }) => sum + readyStockForVariant(product, variant, availabilityMap), 0);
+  let sharedCounted = false;
+  return variants.reduce((sum, { variant }) => {
+    const external = isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant);
+    if (!external && !isPoProduct(product, variant) && db.variantUsesSharedStock(variant)) {
+      if (sharedCounted) return sum;
+      sharedCounted = true;
+      return sum + stockOfVariant(product, variant).length;
+    }
+    return sum + readyStockForVariant(product, variant, availabilityMap);
+  }, 0);
 }
 
 function isBuyableProduct(product) {
@@ -1212,7 +1222,7 @@ function orderUnitPrice(product, order = {}) {
 
 function availableStockForOrder(product, order = {}) {
   const variant = selectedVariant(product, order);
-  if (variant) return stockOfVariant(variant).length;
+  if (variant) return stockOfVariant(product, variant).length;
   return Array.isArray(product.data) ? product.data.length : 0;
 }
 
@@ -1822,7 +1832,7 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
 
 async function handleProductSelection(query, code, listPage = 0) {
   const userId = query.from.id;
-  let product = await db.getProductByCode(code);
+  let product = await cachedBotProductByCode(code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, mungkin sudah dihapus!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(userId, '🛒 Produk ini hanya tersedia melalui Marketplace.');
@@ -1872,7 +1882,7 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
   const variantName = variant ? variant.name : 'Default';
   const unitPrice = variantPrice(product, variant);
   const vKey = variant ? variantKey(variant, index) : '';
-  await db.upsertPendingOrder({
+  const savedOrder = await db.upsertPendingOrder({
     telegram_id: userId,
     product_code: product.kode,
     variant_key: vKey,
@@ -1882,11 +1892,11 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
     delivery_mode: isPoProduct(product, variant) ? 'po' : 'auto',
     status: 'draft'
   });
-  return showConfirmation(query, true);
+  return showConfirmation(query, true, { order: savedOrder, product });
 }
 
 async function handleVariantSelection(query, code, indexText) {
-  let product = await db.getProductByCode(code);
+  let product = await cachedBotProductByCode(code);
   if (!product) return tg.sendMessage(query.from.id, '⚠️ Produk tidak ditemukan.');
   if (product.active === false) return tg.sendMessage(query.from.id, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(query.from.id, '🛒 Produk ini hanya tersedia melalui Marketplace.');
@@ -1908,17 +1918,17 @@ async function handleVariantSelection(query, code, indexText) {
   if (isSupplierProduct(product, variant) || isWorkflowSupplierProduct(product, variant)) {
     const availabilityMap = isSupplierProduct(product, variant) ? await supplierAvailabilityForProducts([product]).catch(() => new Map()) : new Map();
     if (readyStockForVariant(product, variant, availabilityMap) < 1) return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
-  } else if (!isPoProduct(product, variant) && stockOfVariant(variant).length < 1) {
+  } else if (!isPoProduct(product, variant) && stockOfVariant(product, variant).length < 1) {
     return answerCallback(query, { text: 'Stok varian kosong.', show_alert: true });
   }
   return startOrderWithSelection(query, product, variant, index);
 }
 
-async function showConfirmation(query, edit = false) {
+async function showConfirmation(query, edit = false, context = {}) {
   const userId = query.from.id;
-  const order = await db.getPendingOrder(userId);
+  const order = context.order || await db.getPendingOrder(userId);
   if (!order) return tg.sendMessage(userId, '⚠️ Harap ulangi pilih produk!');
-  const product = await db.getProductByCode(order.product_code);
+  const product = context.product || await cachedBotProductByCode(order.product_code);
   if (!product) return tg.sendMessage(userId, '⚠️ Produk tidak ditemukan, harap ulangi pilih produk!');
   if (product.active === false) return tg.sendMessage(userId, '⚠️ Produk sedang nonaktif. Silakan pilih produk lain.');
   if (String(product.display_scope || 'both').toLowerCase() === 'marketplace') return tg.sendMessage(userId, '🛒 Produk ini hanya tersedia melalui Marketplace.');
@@ -1958,8 +1968,8 @@ async function changeQuantity(query, delta, reset = false) {
   } else if (quantity > availableStockForOrder(product, order)) {
     return answerCallback(query, { text: '⚠️ Stok produk/varian tidak mencukupi', show_alert: true });
   }
-  await db.upsertPendingOrder({ ...order, quantity, status: order.status || 'draft' });
-  return showConfirmation(query, true);
+  const savedOrder = await db.upsertPendingOrder({ ...order, quantity, status: order.status || 'draft' });
+  return showConfirmation(query, true, { order: savedOrder, product });
 }
 
 

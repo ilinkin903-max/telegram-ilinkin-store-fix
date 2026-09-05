@@ -3,6 +3,8 @@ const { config } = require('./config');
 
 let cache = { at: 0, data: null };
 let detectedBotUsername = '';
+let detectedBotInFlight = null;
+let inFlight = null;
 const CACHE_MS = 60 * 1000;
 
 function cleanUsername(value) {
@@ -24,14 +26,21 @@ function endpoint() {
 async function detectTelegramBotUsername() {
   if (detectedBotUsername) return detectedBotUsername;
   if (!config.botToken) return '';
-  try {
-    const response = await axios.get(`https://api.telegram.org/bot${config.botToken}/getMe`, { timeout: 7000 });
-    const username = cleanUsername(response.data?.result?.username || '');
-    if (username) detectedBotUsername = username;
-  } catch (e) {
-    // Fallback ke ENV kalau Telegram getMe gagal.
-  }
-  return detectedBotUsername;
+  if (detectedBotInFlight) return detectedBotInFlight;
+
+  let activePromise;
+  activePromise = axios.get(`https://api.telegram.org/bot${config.botToken}/getMe`, { timeout: 7000 })
+    .then((response) => {
+      const username = cleanUsername(response.data?.result?.username || '');
+      if (username) detectedBotUsername = username;
+      return detectedBotUsername;
+    })
+    .catch(() => detectedBotUsername)
+    .finally(() => {
+      if (detectedBotInFlight === activePromise) detectedBotInFlight = null;
+    });
+  detectedBotInFlight = activePromise;
+  return activePromise;
 }
 
 async function resolveBotUsername() {
@@ -92,31 +101,39 @@ async function checkLicense(options = {}) {
   const force = Boolean(options.force);
   const now = Date.now();
   if (!force && cache.data && now - cache.at < CACHE_MS) return cache.data;
+  if (!force && inFlight) return inFlight;
 
-  const botUsername = await resolveBotUsername();
-  try {
-    const url = endpoint();
-    const params = { bot_username: botUsername, secret: config.licenseApiSecret };
-    if (config.licenseCode) params.license_code = config.licenseCode;
-    const response = await axios.get(url, {
-      timeout: 7000,
-      params,
-      headers: { 'x-license-secret': config.licenseApiSecret }
-    });
-    const payload = response.data && response.data.data ? response.data.data : response.data;
-    const data = normalize(payload || {}, botUsername);
-    cache = { at: now, data };
-    return data;
-  } catch (error) {
-    const failClosed = String(config.licenseFailClosed || '').toLowerCase() === 'true';
-    const data = normalize({
-      active: !failClosed,
-      status: failClosed ? 'check_error' : 'check_error_open',
-      reason: error.response?.data?.error || error.message || 'Gagal cek lisensi.'
-    }, botUsername);
-    cache = { at: now, data };
-    return data;
-  }
+  let activePromise;
+  activePromise = (async () => {
+    const botUsername = await resolveBotUsername();
+    try {
+      const url = endpoint();
+      const params = { bot_username: botUsername, secret: config.licenseApiSecret };
+      if (config.licenseCode) params.license_code = config.licenseCode;
+      const response = await axios.get(url, {
+        timeout: 7000,
+        params,
+        headers: { 'x-license-secret': config.licenseApiSecret }
+      });
+      const payload = response.data && response.data.data ? response.data.data : response.data;
+      const data = normalize(payload || {}, botUsername);
+      cache = { at: Date.now(), data };
+      return data;
+    } catch (error) {
+      const failClosed = String(config.licenseFailClosed || '').toLowerCase() === 'true';
+      const data = normalize({
+        active: !failClosed,
+        status: failClosed ? 'check_error' : 'check_error_open',
+        reason: error.response?.data?.error || error.message || 'Gagal cek lisensi.'
+      }, botUsername);
+      cache = { at: Date.now(), data };
+      return data;
+    }
+  })().finally(() => {
+    if (inFlight === activePromise) inFlight = null;
+  });
+  if (!force) inFlight = activePromise;
+  return activePromise;
 }
 
 function statusEmoji(status, active) {
@@ -160,6 +177,8 @@ function blockedText(license = {}) {
 function clearCache() {
   cache = { at: 0, data: null };
   detectedBotUsername = '';
+  detectedBotInFlight = null;
+  inFlight = null;
 }
 
 module.exports = { isEnabled, checkLicense, licenseText, blockedText, daysLeftText, formatDateID, clearCache, resolveBotUsername };
