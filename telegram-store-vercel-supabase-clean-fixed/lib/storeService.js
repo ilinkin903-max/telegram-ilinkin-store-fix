@@ -2,6 +2,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const db = require('./db');
+const runtimeCache = require('./runtimeCache');
 const paymentService = require('./paymentService');
 const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
@@ -22,8 +23,15 @@ function storeCacheHasValue(entry) {
   return Boolean(entry) && entry.value !== undefined && entry.value !== null;
 }
 
-function storeCacheFresh(entry, ttl) {
-  return storeCacheHasValue(entry) && (Date.now() - Number(entry.at || 0)) < ttl;
+function storeCacheRevisionMatches(entry, revisionKey = '') {
+  if (!revisionKey) return true;
+  return Number(entry?.revision || 0) === runtimeCache.getRevision(revisionKey);
+}
+
+function storeCacheFresh(entry, ttl, revisionKey = '') {
+  return storeCacheHasValue(entry)
+    && storeCacheRevisionMatches(entry, revisionKey)
+    && (Date.now() - Number(entry.at || 0)) < ttl;
 }
 
 function storeMapCacheEntry(map, key, maxEntries = 1000) {
@@ -40,26 +48,35 @@ function storeMapCacheEntry(map, key, maxEntries = 1000) {
   return entry;
 }
 
-async function readThroughStoreCache(entry, loader, ttl, force = false) {
-  if (!force && storeCacheFresh(entry, ttl)) return entry.value;
-  if (!force && entry.promise) return entry.promise;
+async function readThroughStoreCache(entry, loader, ttl, force = false, revisionKey = '') {
+  const revisionAtStart = revisionKey ? runtimeCache.getRevision(revisionKey) : 0;
+  if (!force && storeCacheFresh(entry, ttl, revisionKey)) return entry.value;
+  if (entry.promise && (!revisionKey || Number(entry.promiseRevision || 0) === revisionAtStart)) return entry.promise;
 
   let activePromise;
   activePromise = Promise.resolve()
     .then(loader)
     .then((value) => {
-      entry.value = value;
-      entry.at = Date.now();
+      // Hasil request lama tidak boleh menghidupkan kembali cache setelah transaksi/write baru.
+      if (!revisionKey || runtimeCache.getRevision(revisionKey) === revisionAtStart) {
+        entry.value = value;
+        entry.at = Date.now();
+        entry.revision = revisionAtStart;
+      }
       return value;
     })
     .catch((error) => {
-      if (storeCacheHasValue(entry)) return entry.value;
+      if (storeCacheHasValue(entry) && storeCacheRevisionMatches(entry, revisionKey)) return entry.value;
       throw error;
     })
     .finally(() => {
-      if (entry.promise === activePromise) entry.promise = null;
+      if (entry.promise === activePromise) {
+        entry.promise = null;
+        entry.promiseRevision = 0;
+      }
     });
-  if (!force) entry.promise = activePromise;
+  entry.promise = activePromise;
+  entry.promiseRevision = revisionAtStart;
   return activePromise;
 }
 
@@ -73,7 +90,7 @@ async function cachedMarketplaceTouch(viewer, force = false) {
 
 async function cachedMarketplaceWallet(userId, force = false) {
   const entry = storeMapCacheEntry(storeReadCache.wallets, Number(userId));
-  return readThroughStoreCache(entry, () => db.getWalletSummary(Number(userId), 1), STORE_WALLET_CACHE_MS, force);
+  return readThroughStoreCache(entry, () => db.getWalletSummary(Number(userId), 1), STORE_WALLET_CACHE_MS, force, `wallet:${Number(userId)}`);
 }
 
 function invalidateStoreReadCache(userId = null) {
@@ -607,7 +624,9 @@ async function getCatalog(viewer = null) {
   const catalogPromise = readThroughStoreCache(
     storeReadCache.catalog,
     buildPublicCatalog,
-    STORE_PUBLIC_CATALOG_CACHE_MS
+    STORE_PUBLIC_CATALOG_CACHE_MS,
+    false,
+    'catalog'
   );
 
   if (!viewer?.id) {

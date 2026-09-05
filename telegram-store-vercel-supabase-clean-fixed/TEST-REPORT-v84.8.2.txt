@@ -1,0 +1,54 @@
+LINK AUTO ORDER v84.8.2 - TEST REPORT
+Tanggal pengujian : 5 September 2026 (WIB)
+Sumber            : link-auto-order-v84.8.1-shared-stock-fast.zip
+Target rilis      : v84.8.2-order-counter-live-refresh
+
+RINGKASAN
+- Hasil keseluruhan Node test : 329 lulus / 329 total
+- Gagal                         : 0
+- Dilewati                      : 0
+- Test khusus v84.8.2           : 15 lulus / 15 total
+- Pemeriksaan sintaks JavaScript: 81 file lulus
+
+CAKUPAN PERBAIKAN YANG DIPERIKSA
+1. Counter Total Order kanonik diperbarui oleh trigger INSERT/UPDATE/DELETE transaksi.
+2. Transaksi canceled tidak masuk Total Order, omzet, profit, rekap, grafik, top produk, atau jam ramai.
+3. Ledger invoice/ID mencegah restore order yang sama dihitung dua kali.
+4. Penghapusan detail transaksi lama tidak menurunkan total historis.
+5. Perubahan status completed/canceled menyelaraskan counter toko dan statistik user.
+6. RPC statistik v84.8.2 membaca total semua-waktu dari satu baris counter dan periode hari/bulan WIB.
+7. Endpoint dashboard-live memakai no-store dan hanya memuat ulang daftar order saat count/revision berubah.
+8. Dashboard melakukan refresh setiap 5 detik, saat tab kembali aktif, dan saat window fokus.
+9. Cache bot/marketplace memakai revision dan menolak stale in-flight result setelah write.
+10. Pembelian sukses membatalkan cache statistik, produk, katalog, saldo, dan riwayat user.
+11. Restore backup memakai order_ref lintas database; UUID backup tidak dipaksakan jika invoice tersedia.
+12. Baris transaksi lama tanpa order_ref tetap dapat di-upsert melalui primary key ID.
+13. Duplikasi definisi/export releaseClaim telah dihapus.
+14. Metadata versi package, lockfile, VERSION, VERSION.txt, dan API konsisten di v84.8.2.
+15. Migrasi v84.8.2 identik dengan blok v84.8.2 yang dibundel pada supabase/schema.sql.
+
+PEMERIKSAAN SQL STATIS
+- 1 BEGIN dan 1 COMMIT.
+- 5 function body dengan delimiter dollar yang seimbang.
+- Tanda kurung dan single quote seimbang.
+- Trigger counter dan trigger sinkronisasi user tersedia.
+- Tidak ada TRUNCATE.
+- Tidak ada DROP TABLE untuk transactions, products, atau bot_users.
+- Tidak ada DELETE massal transactions/products/bot_users di file migrasi.
+- Migrasi dapat dijalankan ulang karena menggunakan IF NOT EXISTS, CREATE OR REPLACE, dan DROP TRIGGER IF EXISTS.
+
+PEMERIKSAAN PAKET
+- ZIP diuji dengan unzip -t.
+- Tidak ada node_modules, log sementara, atau shim pengujian di paket produksi.
+- Struktur ZIP dimulai langsung dari root proyek, siap diekstrak/deploy.
+- Kode hasil ekstraksi ZIP menjalani ulang test suite dengan shim resolusi modul eksternal terpisah.
+
+CATATAN LINGKUNGAN
+- Registry npm tidak dapat dijangkau stabil dari lingkungan pengujian, sehingga npm ci tidak dapat digunakan untuk mengambil dependency nyata.
+- Shim lokal sementara hanya dipakai untuk resolusi modul axios, dotenv, qrcode, @supabase/supabase-js, dan teleproto saat test. Shim tidak disertakan di ZIP.
+- Integrasi jaringan langsung ke Telegram, Supabase produksi, AutoGoPay/payment gateway, ProdSeller, dan Vercel tidak dijalankan dari lingkungan ini.
+- SQL diperiksa secara statis dan melalui test kontrak proyek; tidak tersedia instance PostgreSQL/Supabase lokal untuk eksekusi migrasi end-to-end.
+
+HASIL
+PASS - paket layak dideploy dengan syarat migrasi
+supabase/update-v84.8.2-order-counter-live-refresh.sql dijalankan penuh di Supabase SQL Editor.

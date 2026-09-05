@@ -10,7 +10,14 @@ const { splitStock } = require('../lib/utils');
 const { config, getStorefrontUrl } = require('../lib/config');
 
 function json(res, status, payload) {
-  res.status(status).json(payload);
+  // Dashboard harus selalu membaca hasil terbaru setelah sebuah order selesai.
+  // Header ini mencegah browser, CDN, dan proxy menyajikan statistik/order lama.
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  return res.status(status).json(payload);
 }
 
 function bodyOf(req) {
@@ -697,6 +704,22 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'GET' && action === 'license-status') return json(res, 200, { ok: true, data: await license.checkLicense({ force: true }) });
     if (req.method === 'GET' && action === 'stats') return json(res, 200, { ok: true, data: await db.getStats() });
+    if (req.method === 'GET' && action === 'dashboard-live') {
+      const stats = await db.getLiveSalesStats();
+      const knownOrdersRaw = req.query?.known_orders;
+      const knownRevisionRaw = req.query?.known_revision;
+      const knownOrders = knownOrdersRaw === undefined || knownOrdersRaw === '' ? null : Number(knownOrdersRaw);
+      const knownRevision = knownRevisionRaw === undefined || knownRevisionRaw === '' ? null : Number(knownRevisionRaw);
+      const orderCountChanged = !Number.isFinite(knownOrders) || Number(stats.orders || 0) !== knownOrders;
+      const revisionChanged = Number(stats.statsRevision || 0) > 0
+        && (!Number.isFinite(knownRevision) || Number(stats.statsRevision || 0) !== knownRevision);
+      const includeOrders = String(req.query?.include_orders || '') === '1' || orderCountChanged || revisionChanged;
+      const orders = includeOrders ? await db.listTransactions(100) : null;
+      return json(res, 200, {
+        ok: true,
+        data: { stats, orders, server_time: new Date().toISOString() }
+      });
+    }
     if (req.method === 'GET' && action === 'products') return json(res, 200, { ok: true, data: await db.listProducts() });
     if (req.method === 'GET' && action === 'orders') return json(res, 200, { ok: true, data: await db.listTransactions(100) });
     if (req.method === 'GET' && action === 'po-orders') {

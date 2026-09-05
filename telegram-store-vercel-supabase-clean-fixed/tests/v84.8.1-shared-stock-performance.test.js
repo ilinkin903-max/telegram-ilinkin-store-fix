@@ -94,7 +94,8 @@ test('marketplace memakai cache singkat, request paralel, dan timeout supplier c
   assert.match(service, /STORE_SUPPLIER_CATALOG_TIMEOUT_MS = 1500/);
   assert.match(service, /Promise\.all\(\[catalogPromise, touchPromise, walletPromise\]\)/);
   assert.match(service, /readThroughStoreCache/);
-  assert.match(service, /if \(!force && entry\.promise\) return entry\.promise/);
+  assert.match(service, /entry\.promiseRevision/);
+  assert.match(service, /runtimeCache\.getRevision\(revisionKey\)/);
 });
 
 test('bot menggunakan cache produk dan hasil write pending order tanpa round-trip ulang', () => {
@@ -205,10 +206,10 @@ test('pengecekan lisensi paralel digabung menjadi satu rangkaian request', async
   }
 });
 
-test('metadata rilis v84.8.1 konsisten', () => {
+test('metadata rilis v84.8.2 konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '84.8.1');
-  assert.equal(read('VERSION').trim(), 'v84.8.1');
-  assert.equal(read('VERSION.txt').trim(), 'v84.8.1');
-  assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.1/);
+  assert.equal(pkg.version, '84.8.2');
+  assert.equal(read('VERSION').trim(), 'v84.8.2');
+  assert.equal(read('VERSION.txt').trim(), 'v84.8.2');
+  assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.2/);
 });

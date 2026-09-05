@@ -10,6 +10,7 @@ const prodseller = require('./prodsellerService');
 const walletNotifications = require('./walletNotifications');
 const workflowUserbot = require('./userbotWorkflowService');
 const license = require('./license');
+const runtimeCache = require('./runtimeCache');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
 const PRODUCT_PAGE_SIZE = 10;
@@ -42,8 +43,14 @@ function botCacheHasValue(entry) {
   return Boolean(entry) && entry.value !== undefined && entry.value !== null;
 }
 
-function botCacheFresh(entry, ttl = BOT_CACHE_MS) {
-  return botCacheHasValue(entry) && (Date.now() - Number(entry.at || 0)) < ttl;
+function botCacheRevisionMatches(entry, revisionKey = '') {
+  return !revisionKey || Number(entry?.revision || 0) === runtimeCache.getRevision(revisionKey);
+}
+
+function botCacheFresh(entry, ttl = BOT_CACHE_MS, revisionKey = '') {
+  return botCacheHasValue(entry)
+    && botCacheRevisionMatches(entry, revisionKey)
+    && (Date.now() - Number(entry.at || 0)) < ttl;
 }
 
 function botMapCacheEntry(map, key, maxEntries = 1200) {
@@ -60,35 +67,44 @@ function botMapCacheEntry(map, key, maxEntries = 1200) {
   return entry;
 }
 
-async function readThroughBotCache(entry, loader, ttl = BOT_CACHE_MS, force = false) {
-  if (!force && botCacheFresh(entry, ttl)) return entry.value;
-  if (entry.promise) return entry.promise;
+async function readThroughBotCache(entry, loader, ttl = BOT_CACHE_MS, force = false, revisionKey = '') {
+  const revisionAtStart = revisionKey ? runtimeCache.getRevision(revisionKey) : 0;
+  if (!force && botCacheFresh(entry, ttl, revisionKey)) return entry.value;
+  if (entry.promise && (!revisionKey || Number(entry.promiseRevision || 0) === revisionAtStart)) return entry.promise;
 
   let activePromise;
   activePromise = Promise.resolve()
     .then(loader)
     .then((value) => {
-      entry.value = value;
-      entry.at = Date.now();
+      // Jangan menandai hasil lama sebagai fresh bila sebuah write terjadi saat loader berjalan.
+      if (!revisionKey || runtimeCache.getRevision(revisionKey) === revisionAtStart) {
+        entry.value = value;
+        entry.at = Date.now();
+        entry.revision = revisionAtStart;
+      }
       return value;
     })
     .catch((error) => {
-      if (botCacheHasValue(entry)) return entry.value;
+      if (botCacheHasValue(entry) && botCacheRevisionMatches(entry, revisionKey)) return entry.value;
       throw error;
     })
     .finally(() => {
-      if (entry.promise === activePromise) entry.promise = null;
+      if (entry.promise === activePromise) {
+        entry.promise = null;
+        entry.promiseRevision = 0;
+      }
     });
   entry.promise = activePromise;
+  entry.promiseRevision = revisionAtStart;
   return activePromise;
 }
 
 async function cachedStats(force = false) {
-  return readThroughBotCache(botReadCache.stats, () => db.getStats(), BOT_STATS_CACHE_MS, force);
+  return readThroughBotCache(botReadCache.stats, () => db.getStats(), BOT_STATS_CACHE_MS, force, 'stats');
 }
 
 async function cachedSettings(force = false, ttl = BOT_SETTINGS_CACHE_MS) {
-  return readThroughBotCache(botReadCache.settings, () => db.getShopSettings(), ttl, force);
+  return readThroughBotCache(botReadCache.settings, () => db.getShopSettings(), ttl, force, 'settings');
 }
 
 async function cachedBotProducts(force = false) {
@@ -96,7 +112,8 @@ async function cachedBotProducts(force = false) {
     botReadCache.products,
     async () => (await db.listProducts({ activeOnly: true })).filter(isBuyableProduct),
     BOT_PRODUCTS_CACHE_MS,
-    force
+    force,
+    'products'
   );
 }
 
@@ -111,13 +128,13 @@ async function cachedBotProductByCode(code, force = false) {
 async function cachedWalletSummary(userId, ledgerLimit = 1, force = false) {
   const limit = Math.max(1, Number(ledgerLimit || 1));
   const entry = botMapCacheEntry(botReadCache.wallets, `${Number(userId)}:${limit}`);
-  return readThroughBotCache(entry, () => db.getWalletSummary(userId, limit), BOT_WALLET_CACHE_MS, force);
+  return readThroughBotCache(entry, () => db.getWalletSummary(userId, limit), BOT_WALLET_CACHE_MS, force, `wallet:${Number(userId)}`);
 }
 
 async function cachedUserHistory(userId, limit = 8, force = false) {
   const safeLimit = Math.max(1, Number(limit || 8));
   const entry = botMapCacheEntry(botReadCache.histories, `${Number(userId)}:${safeLimit}`);
-  return readThroughBotCache(entry, () => db.listTransactionsByUser(userId, safeLimit), BOT_HISTORY_CACHE_MS, force);
+  return readThroughBotCache(entry, () => db.listTransactionsByUser(userId, safeLimit), BOT_HISTORY_CACHE_MS, force, `history:${Number(userId)}`);
 }
 
 async function cachedSupplierBalance(force = false) {

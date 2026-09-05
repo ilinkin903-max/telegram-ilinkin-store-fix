@@ -83,7 +83,8 @@ test('menu bot memakai cache singkat dengan penggabungan request yang sama', () 
   assert.match(bot, /BOT_MEMBERSHIP_CACHE_MS = 15 \* 1000/);
   assert.match(bot, /BOT_SUPPLIER_CACHE_MS = 10 \* 1000/);
   assert.match(bot, /async function readThroughBotCache/);
-  assert.match(bot, /if \(entry\.promise\) return entry\.promise/);
+  assert.match(bot, /entry\.promiseRevision/);
+  assert.match(bot, /entry\.promise && \(!revisionKey \|\| Number\(entry\.promiseRevision/);
   assert.match(bot, /cachedWalletSummary/);
   assert.match(bot, /cachedUserHistory/);
   assert.match(bot, /cachedSupplierAvailability/);
@@ -114,9 +115,9 @@ test('checkout tetap membaca saldo dan stok supplier secara live', () => {
 
 test('versi paket tetap mengikuti rilis terbaru setelah fitur dashboard chat dan fast menu', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '84.8.1');
-  assert.equal(read('VERSION').trim(), 'v84.8.1');
-  assert.equal(read('VERSION.txt').trim(), 'v84.8.1');
+  assert.equal(pkg.version, '84.8.2');
+  assert.equal(read('VERSION').trim(), 'v84.8.2');
+  assert.equal(read('VERSION.txt').trim(), 'v84.8.2');
 });
 
 test('buyer lookup runtime mengutamakan username Telegram terbaru dan membuang username lama', async () => {

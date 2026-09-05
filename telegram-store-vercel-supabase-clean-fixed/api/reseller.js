@@ -588,6 +588,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   var initData = tg && tg.initData ? tg.initData : '';
   var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[], supplierStatus:{}, supplierProducts:[], supplierOrders:[], resellerSuppliers:[], supplierLoaded:false, workflowStatus:{}, workflows:[], workflowRuns:[], workflowDetail:null, workflowLoaded:false };
   var workflowRecorderBusy=false, workflowRecorderActionLock=false, workflowRecorderLoopStarted=false, workflowRecorderLoopGeneration=0;
+  var dashboardLiveBusy=false, dashboardLiveTimer=null, dashboardLiveStarted=false;
   function rupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0)); }
   function displayRef(v){ var original=String(v==null?'':v).trim(); var cleaned=original.replace(/^AUTOGOPAY(?:[-_: ]+)?/i,''); return cleaned||original||'-'; }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
@@ -596,7 +597,8 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   async function api(action, body, query){
     var url='/api/reseller-data?action='+encodeURIComponent(action);
     if(query){ Object.keys(query).forEach(function(k){ if(query[k]!==undefined && query[k]!==null && query[k] !== '') url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(query[k]); }); }
-    var r=await fetch(url,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined});
+    if(!body) url+='&_ts='+Date.now();
+    var r=await fetch(url,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined,cache:'no-store'});
     var text=await r.text();
     var j=null;
     try{ j=text?JSON.parse(text):{}; }
@@ -1343,7 +1345,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     })();
   }
 
-  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=(state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Order',s.orders||0],['Stok',s.stokTersedia||0]]; var box=document.getElementById('stats'); if(box) box.innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
+  function renderStats(){ var s=state.stats||{}; var daily=(state.analytics&&state.analytics.daily)||[]; var today=s.omzetToday!==undefined?s.omzetToday:((state.analytics&&state.analytics.today_revenue!==undefined)?state.analytics.today_revenue:(daily.length?daily[daily.length-1].revenue:0)); var items=[['Omset Hari Ini',rupiah(today)],['Profit Hari Ini',rupiah(s.profitToday||0)],['Total Order',s.orders||0],['Stok',s.stokTersedia||0]]; var box=document.getElementById('stats'); if(box) box.innerHTML=items.map(function(x){return '<div class="stat"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>';}).join(''); }
   function renderCharts(){ var a=state.analytics||{}; var list=a.daily||[]; var max=Math.max.apply(null,list.map(function(d){return Number(d.revenue||0);}).concat([1])); var chart=document.getElementById('revenueChart'); if(chart){ chart.innerHTML=list.map(function(d){var chartHeight=Math.max(118,(chart.clientHeight||300)-96); var h=Math.max(8,Math.round((Number(d.revenue||0)/max)*chartHeight)); return '<div class="barBox"><div class="barValue" title="Omzet '+esc(d.label)+'">'+esc(rupiahShort(d.revenue))+'</div><div class="bar" title="'+esc(d.label)+' - '+rupiah(d.revenue)+'" style="height:'+h+'px"></div><div class="barDate">'+esc(d.label)+'</div></div>';}).join('')||'<div class="empty">Belum ada data.</div>'; } var top=document.getElementById('topProductList'); if(top) top.innerHTML=(a.top_products||[]).map(function(p,i){return '<div class="voucher"><b>'+(i+1)+'. '+esc(p.name)+(p.variant?' - '+esc(p.variant):'')+'</b><br>Qty '+esc(p.quantity)+' | Omzet '+rupiah(p.revenue)+'</div>';}).join('')||'<div class="empty">Belum ada data penjualan.</div>'; }
   function productMatches(p,q){ var vars=productVariants(p).map(function(v){return [v.name||v.nama,v.sku||v.kode,v.description||v.deskripsi,v.snk||v.terms].join(' ');}).join(' '); return textMatch([p.nama,p.kode,p.category,p.deskripsi,p.snk,vars],q); }
   function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
@@ -1870,6 +1872,33 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     var hr=document.getElementById('hourlyStats'); if(hr){ hr.innerHTML=(d.hourly||[]).filter(function(x){return x.orders>0;}).map(function(x){return '<span class="chip yellow">'+String(x.hour).padStart(2,'0')+'.00: '+x.orders+' order / '+rupiah(x.revenue)+'</span>';}).join(' ')||'<div class="empty">Belum ada data jam ramai.</div>'; }
   }
 
+  async function refreshDashboardLive(showError){
+    if(dashboardLiveBusy || document.visibilityState === 'hidden') return;
+    dashboardLiveBusy=true;
+    try{
+      var liveQuery={};
+      if(state.stats&&state.stats.orders!==undefined) liveQuery.known_orders=Number(state.stats.orders||0);
+      if(state.stats&&Number(state.stats.statsRevision||0)>0) liveQuery.known_revision=Number(state.stats.statsRevision||0);
+      var result=await api('dashboard-live',null,liveQuery);
+      var data=result.data||{};
+      if(data.stats) state.stats=Object.assign({},state.stats||{},data.stats);
+      var ordersChanged=Array.isArray(data.orders);
+      if(ordersChanged) state.orders=data.orders;
+      renderStats();
+      if(ordersChanged){ renderOrders(); updateSearchCounter(); }
+    }catch(e){
+      console.warn('Dashboard live refresh gagal:',e.message||e);
+      if(showError) toast(e.message||'Gagal memperbarui statistik.',true);
+    }finally{dashboardLiveBusy=false;}
+  }
+  function startDashboardLiveRefresh(){
+    if(dashboardLiveStarted) return;
+    dashboardLiveStarted=true;
+    dashboardLiveTimer=setInterval(function(){ refreshDashboardLive(false); },5000);
+    document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') refreshDashboardLive(false); });
+    window.addEventListener('focus',function(){ refreshDashboardLive(false); });
+  }
+
   async function load(){
     try{
       var all=await Promise.all([
@@ -1986,7 +2015,10 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
 
   var maintenanceForm=document.getElementById('maintenanceForm'); if(maintenanceForm) maintenanceForm.onsubmit=async function(e){ e.preventDefault(); var d=formDataRaw(e.target); var label=e.target.target.options[e.target.target.selectedIndex].text; var days=d.days||30; var warn='Jalankan maintenance: '+label+'?\n\nUmur data minimal: '+days+' hari.\nData yang dihapus tidak bisa dikembalikan.'; if(d.target==='transactions-old') warn='PERINGATAN: ini akan menghapus detail transaksi lama permanen. Total Transaksi dashboard tetap tersimpan, tapi detail order lama hilang. Pastikan sudah backup/export.\n\n'+warn; if(confirm(warn)){ var r=await post('maintenance-cleanup',d); if(r.data) toast((r.data.message||'Maintenance selesai')+' Terproses: '+(r.data.affected||0)); } };
   startWorkflowLiveRecorder();
-  load();
+  load().finally(function(){
+    startDashboardLiveRefresh();
+    refreshDashboardLive(false);
+  });
   setInterval(function(){ if(document.getElementById('promos')&&document.getElementById('promos').classList.contains('active')) renderUnifiedPromos(); },30000);
 })();
 </script>

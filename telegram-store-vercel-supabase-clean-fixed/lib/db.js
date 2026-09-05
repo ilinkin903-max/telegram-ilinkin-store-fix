@@ -2,6 +2,7 @@ const { getSupabase } = require('./supabase');
 const { splitStock } = require('./utils');
 const { boolValue, normalizeDateTime, normalizeDiscountType, discountAmount, targetProducts, promoState, promoEligible } = require('./promoUtils');
 const { getAppVersion } = require('./version');
+const runtimeCache = require('./runtimeCache');
 
 function sb() {
   return getSupabase();
@@ -84,13 +85,6 @@ async function releaseClaim(rawKey) {
     console.error('releaseClaim gagal:', error.message || error);
     return false;
   }
-}
-
-async function releaseClaim(rawKey) {
-  const key = String(rawKey || '').trim().slice(0, 220);
-  if (!key) return;
-  const { error } = await sb().from('job_locks').delete().eq('key', key);
-  if (error && !isMissingTableError(error)) console.error('releaseClaim gagal:', error.message || error);
 }
 
 
@@ -400,6 +394,7 @@ async function setUserBalances(telegramId, mainBalance, referralBalance, options
     if (/USER_NOT_FOUND/i.test(message)) throw new Error('User tidak ditemukan.');
     throw error;
   }
+  runtimeCache.walletChanged(telegramId);
   return data;
 }
 
@@ -475,52 +470,83 @@ async function saveHistoricalStats(stats = {}) {
   return payload;
 }
 
+function normalizeStatsSummary(row = {}, options = {}) {
+  const canonical = options.canonical === true || String(row.counter_version || '').toLowerCase() === 'v84.8.2';
+  const ordersTotal = Number(row.orders_total || 0);
+  return {
+    orders_total: ordersTotal,
+    live_orders_total: Number(row.live_orders_total ?? ordersTotal),
+    orders_today: Number(row.orders_today || 0),
+    orders_month: Number(row.orders_month || 0),
+    revenue_total: Number(row.revenue_total || 0),
+    live_revenue_total: Number(row.live_revenue_total ?? row.revenue_total ?? 0),
+    quantity_sold: Number(row.quantity_sold || 0),
+    live_quantity_sold: Number(row.live_quantity_sold ?? row.quantity_sold ?? 0),
+    cost_total: Number(row.cost_total || 0),
+    live_cost_total: Number(row.live_cost_total ?? row.cost_total ?? 0),
+    profit_total: Number(row.profit_total || 0),
+    live_profit_total: Number(row.live_profit_total ?? row.profit_total ?? 0),
+    revenue_today: Number(row.revenue_today || 0),
+    profit_today: Number(row.profit_today || 0),
+    revenue_month: Number(row.revenue_month || 0),
+    profit_month: Number(row.profit_month || 0),
+    canonical,
+    counter_version: String(row.counter_version || (canonical ? 'v84.8.2' : 'legacy')),
+    revision: Number(row.revision || 0),
+    updated_at: row.updated_at || new Date().toISOString()
+  };
+}
+
 async function summarizeAllTransactions() {
+  // v84.8.2 memakai counter database yang diperbarui oleh trigger setiap transaksi.
+  // Counter ini tidak turun saat detail transaksi lama dibersihkan dan tidak bergantung
+  // pada jalur pembayaran tertentu.
   try {
-    const { data, error } = await sb().rpc('stats_summary_v62');
+    const { data, error } = await sb().rpc('stats_summary_v84_8_2');
     if (error) throw error;
-    const row = data || {};
-    return {
-      orders_total: Number(row.orders_total || 0),
-      revenue_total: Number(row.revenue_total || 0),
-      quantity_sold: Number(row.quantity_sold || 0),
-      cost_total: Number(row.cost_total || 0),
-      profit_total: Number(row.profit_total || 0),
-      revenue_today: Number(row.revenue_today || 0),
-      profit_today: Number(row.profit_today || 0),
-      revenue_month: Number(row.revenue_month || 0),
-      profit_month: Number(row.profit_month || 0),
-      updated_at: new Date().toISOString()
-    };
-  } catch (error) {
-    // Fallback dipaginasi agar tetap benar walau RPC belum termuat di schema cache.
-    const pageSize = 1000;
-    const rows = [];
-    for (let from = 0; ; from += pageSize) {
-      const { data, error: pageError } = await sb().from('transactions')
-        .select('total_price,quantity,cost_total,profit_amount,created_at,status')
-        .eq('status', 'completed')
-        .order('created_at', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (pageError) throw pageError;
-      const page = data || [];
-      rows.push(...page);
-      if (page.length < pageSize) break;
+    return normalizeStatsSummary(data || {}, { canonical: true });
+  } catch (modernError) {
+    // Database yang belum menjalankan migrasi v84.8.2 tetap memakai RPC lama.
+    try {
+      const { data, error } = await sb().rpc('stats_summary_v62');
+      if (error) throw error;
+      return normalizeStatsSummary(data || {}, { canonical: false });
+    } catch (legacyError) {
+      // Fallback dipaginasi agar tetap benar walau RPC belum termuat di schema cache.
+      const pageSize = 1000;
+      const rows = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error: pageError } = await sb().from('transactions')
+          .select('total_price,quantity,cost_total,profit_amount,created_at,status')
+          .eq('status', 'completed')
+          .order('created_at', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (pageError) throw pageError;
+        const page = data || [];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      const todayKey = wibDateKey(new Date());
+      const monthKey = todayKey.slice(0, 7);
+      const todayRows = rows.filter((item) => wibDateKey(item.created_at) === todayKey);
+      const monthRows = rows.filter((item) => wibDateKey(item.created_at).slice(0, 7) === monthKey);
+      return normalizeStatsSummary({
+        orders_total: rows.length,
+        live_orders_total: rows.length,
+        orders_today: todayRows.length,
+        orders_month: monthRows.length,
+        revenue_total: rows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+        quantity_sold: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+        cost_total: rows.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
+        profit_total: rows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+        revenue_today: todayRows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+        profit_today: todayRows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+        revenue_month: monthRows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
+        profit_month: monthRows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
+        counter_version: 'table-fallback',
+        updated_at: new Date().toISOString()
+      }, { canonical: false });
     }
-    const todayKey = wibDateKey(new Date());
-    const monthKey = todayKey.slice(0, 7);
-    return {
-      orders_total: rows.length,
-      revenue_total: rows.reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-      quantity_sold: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-      cost_total: rows.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
-      profit_total: rows.reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
-      revenue_today: rows.filter((item) => wibDateKey(item.created_at) === todayKey).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-      profit_today: rows.filter((item) => wibDateKey(item.created_at) === todayKey).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
-      revenue_month: rows.filter((item) => wibDateKey(item.created_at).slice(0, 7) === monthKey).reduce((sum, item) => sum + Number(item.total_price || 0), 0),
-      profit_month: rows.filter((item) => wibDateKey(item.created_at).slice(0, 7) === monthKey).reduce((sum, item) => sum + Number(item.profit_amount || 0), 0),
-      updated_at: new Date().toISOString()
-    };
   }
 }
 
@@ -547,6 +573,45 @@ async function incrementHistoricalStats(delta = {}) {
   return saveHistoricalStats(next);
 }
 
+async function salesStatsFromSummary(summary) {
+  const historical = summary.canonical
+    ? null
+    : await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
+  const ordersTotal = summary.canonical
+    ? Number(summary.orders_total || 0)
+    : Math.max(Number(summary.orders_total || 0), Number(historical?.orders_total || 0));
+  const quantitySold = summary.canonical
+    ? Number(summary.quantity_sold || 0)
+    : Math.max(Number(summary.quantity_sold || 0), Number(historical?.quantity_sold || 0));
+  const revenueTotal = summary.canonical
+    ? Number(summary.revenue_total || 0)
+    : Math.max(Number(summary.revenue_total || 0), Number(historical?.revenue_total || 0));
+
+  return {
+    orders: ordersTotal,
+    ordersToday: Number(summary.orders_today || 0),
+    ordersMonth: Number(summary.orders_month || 0),
+    liveOrders: Number(summary.live_orders_total ?? summary.orders_total ?? 0),
+    quantitySold,
+    omzet: revenueTotal,
+    omzetToday: Number(summary.revenue_today || 0),
+    omzetMonth: Number(summary.revenue_month || 0),
+    liveOmzet: Number(summary.live_revenue_total ?? summary.revenue_total ?? 0),
+    modal: Number(summary.cost_total || 0),
+    profit: Number(summary.profit_total || 0),
+    profitToday: Number(summary.profit_today || 0),
+    profitMonth: Number(summary.profit_month || 0),
+    statsVersion: String(summary.counter_version || 'legacy'),
+    statsCanonical: summary.canonical === true,
+    statsRevision: Number(summary.revision || 0),
+    statsUpdatedAt: summary.updated_at || new Date().toISOString()
+  };
+}
+
+async function getLiveSalesStats() {
+  return salesStatsFromSummary(await summarizeAllTransactions());
+}
+
 async function getStats() {
   const [{ count: usersCount }, { data: products }, summary] = await Promise.all([
     sb().from('bot_users').select('telegram_id', { count: 'exact', head: true }),
@@ -556,21 +621,14 @@ async function getStats() {
 
   const stokTersedia = (products || []).reduce((sum, row) => sum + productAvailableStock(normalizeProduct(row)), 0);
   const stokTerjual = (products || []).reduce((sum, item) => sum + Number(item.sold || 0), 0);
-  const historical = await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
+  const sales = await salesStatsFromSummary(summary);
 
   return {
     users: usersCount || 0,
     products: (products || []).length,
-    orders: Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0)),
-    liveOrders: Number(summary.orders_total || 0),
+    ...sales,
     stokTersedia,
-    stokTerjual: Math.max(stokTerjual, Number(historical.quantity_sold || 0)),
-    omzet: Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0)),
-    liveOmzet: Number(summary.revenue_total || 0),
-    modal: Number(summary.cost_total || 0),
-    profit: Number(summary.profit_total || 0),
-    profitToday: Number(summary.profit_today || 0),
-    profitMonth: Number(summary.profit_month || 0)
+    stokTerjual: Math.max(stokTerjual, Number(sales.quantitySold || 0))
   };
 }
 
@@ -615,12 +673,14 @@ async function addProduct(input) {
   };
   const { data, error } = await sb().from('products').insert(payload).select('*').single();
   if (error) throw error;
+  runtimeCache.productChanged();
   return normalizeProduct(data);
 }
 
 async function deleteProduct(code) {
   const { error } = await sb().from('products').delete().ilike('code', String(code));
   if (error) throw error;
+  runtimeCache.productChanged();
 }
 
 async function appendStock(code, text) {
@@ -635,6 +695,7 @@ async function appendStock(code, text) {
     .select('*')
     .single();
   if (error) throw error;
+  runtimeCache.productChanged();
   return { product: normalizeProduct(data), added: lines.length };
 }
 
@@ -675,6 +736,7 @@ async function updateProductByCode(code, updates = {}) {
     .select('*')
     .maybeSingle();
   if (error) throw error;
+  if (data) runtimeCache.productChanged();
   return normalizeProduct(data);
 }
 
@@ -813,6 +875,7 @@ async function getMonthlyRekap(month, year) {
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
+    .eq('status', 'completed')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: false });
@@ -859,6 +922,7 @@ async function getAnalytics() {
   const { data, error } = await sb()
     .from('transactions')
     .select('*')
+    .eq('status', 'completed')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
     .order('created_at', { ascending: true });
@@ -1060,6 +1124,7 @@ async function completeTopup(topup, incoming = {}) {
     if (/TOPUP_AMOUNT_MISMATCH/i.test(message)) throw new Error('Nominal top up tidak cocok.');
     throw error;
   }
+  runtimeCache.walletChanged(topup?.telegram_id || data?.telegram_id || incoming?.telegram_id);
   return data || {};
 }
 
@@ -1169,6 +1234,7 @@ async function saveShopSettings(input = {}) {
   if (!rows.length) return getShopSettings();
   const { error } = await sb().from('shop_settings').upsert(rows, { onConflict: 'key' });
   if (error) throw error;
+  runtimeCache.settingsChanged();
   return getShopSettings();
 }
 
@@ -1218,7 +1284,8 @@ async function listTransactionsInRange(startAt, endAt = null, maxRows = 10000) {
   for (let from = 0; from < cap; from += pageSize) {
     const to = Math.min(cap - 1, from + pageSize - 1);
     let query = sb().from('transactions')
-      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,created_at')
+      .select('product_code,product_name,variant_key,variant_name,quantity,total_price,cost_total,profit_amount,status,created_at')
+      .eq('status', 'completed')
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: true })
@@ -1312,10 +1379,14 @@ async function completeOrder(order, product, totalPrice, buyer = {}) {
   const delivered = Array.isArray(result.delivered)
     ? result.delivered.map((item) => String(item))
     : [];
+  const alreadyCompleted = result.already_completed === true;
+  if (!alreadyCompleted) {
+    runtimeCache.transactionCommitted(result.transaction?.telegram_id || payloadOrder.telegram_id);
+  }
   return {
     delivered,
     transaction: result.transaction || null,
-    already_completed: result.already_completed === true,
+    already_completed: alreadyCompleted,
     po_waiting: result.po_waiting === true,
     po_order: result.po_order || null,
     wallet: result.wallet || null
@@ -1423,6 +1494,7 @@ async function updateTransactionCost(orderRef, costTotalInput) {
       cost_total: costTotal - previousCost,
       profit_total: profitAmount - previousProfit
     }).catch(() => null);
+    runtimeCache.transactionCommitted(data.telegram_id);
   }
   return data;
 }
@@ -1473,6 +1545,7 @@ async function updateTransactionStatus(orderRef, statusInput) {
       if (poError && String(poError.code || '') !== '42P01') throw poError;
     });
   }
+  if (data) runtimeCache.transactionCommitted(data.telegram_id);
   return data;
 }
 
@@ -1932,8 +2005,56 @@ async function upsertRows(table, rows = [], conflict = '') {
   return count;
 }
 
+async function reconcileStoreMetricsAfterImport(baseline = {}) {
+  const params = {
+    p_orders_floor: Math.max(0, Number(baseline.orders_total || 0)),
+    p_revenue_floor: Math.max(0, Number(baseline.revenue_total || 0)),
+    p_quantity_floor: Math.max(0, Number(baseline.quantity_sold || 0)),
+    p_cost_floor: Math.max(0, Number(baseline.cost_total || 0)),
+    p_profit_floor: Number(baseline.profit_total || 0)
+  };
+  const { data, error } = await sb().rpc('reconcile_store_metrics_v84_8_2', params);
+  if (error) {
+    const message = String(error.message || error);
+    // Database lama tetap bisa import; migrasi v84.8.2 yang wajib akan
+    // menyediakan rekonsiliasi ini setelah deployment.
+    if (/reconcile_store_metrics_v84_8_2|schema cache|could not find the function|PGRST202/i.test(message)) return null;
+    throw error;
+  }
+  return data || null;
+}
+
+async function upsertTransactionBackupRows(rows = []) {
+  const clean = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.id || row.order_ref));
+  if (!clean.length) return 0;
+
+  // Invoice/order_ref adalah identitas bisnis yang stabil lintas database. Untuk
+  // baris yang memilikinya, jangan paksa UUID dari backup: UUID tersebut dapat
+  // berbeda dengan UUID tujuan dan memicu bentrok unique(order_ref). Baris lama
+  // tanpa order_ref tetap di-upsert memakai primary key ID.
+  const byOrderRef = clean
+    .filter((row) => String(row.order_ref || '').trim())
+    .map((row) => {
+      const copy = { ...row, order_ref: String(row.order_ref).trim() };
+      delete copy.id;
+      return copy;
+    });
+  const byId = clean.filter((row) => !String(row.order_ref || '').trim() && String(row.id || '').trim());
+
+  let count = 0;
+  if (byOrderRef.length) count += await upsertRows('transactions', byOrderRef, 'order_ref');
+  if (byId.length) count += await upsertRows('transactions', byId, 'id');
+  return count;
+}
+
 async function importBackupData(backup = {}, options = {}) {
   const tables = backup.tables || backup || {};
+  const includeTransactions = options.include_transactions === true;
+  // Snapshot sebelum data backup ditulis diperlukan untuk membedakan restore
+  // order lama dari order baru yang sudah ada di database tujuan.
+  const metricsBaseline = includeTransactions
+    ? await summarizeAllTransactions().catch(() => normalizeStatsSummary())
+    : null;
   const result = {};
   if (tables.bot_users) result.bot_users = await upsertRows('bot_users', tables.bot_users, 'telegram_id');
   if (tables.products) result.products = await upsertRows('products', tables.products, 'code');
@@ -1944,12 +2065,19 @@ async function importBackupData(backup = {}, options = {}) {
   if (tables.wallet_ledger) result.wallet_ledger = await upsertRows('wallet_ledger', tables.wallet_ledger, 'entry_key');
   if (tables.auto_promos) result.auto_promos = await upsertRows('auto_promos', tables.auto_promos, 'code');
 
-  // Transactions are imported only when explicitly requested, to prevent double totals.
-  if (options.include_transactions && tables.transactions) {
-    const rows = (tables.transactions || []).filter((x) => x.order_ref || x.id);
-    result.transactions = await upsertRows('transactions', rows, rows.some((x) => x.order_ref) ? 'order_ref' : 'id');
+  // Transactions are imported only when explicitly requested. Setelah upsert,
+  // counter kanonik direkonsiliasi agar restore order yang pernah dihitung tidak
+  // menjadi order baru untuk kedua kalinya.
+  if (includeTransactions && tables.transactions) {
+    result.transactions = await upsertTransactionBackupRows(tables.transactions);
+    const reconciled = await reconcileStoreMetricsAfterImport(metricsBaseline || {}).catch((error) => {
+      console.error('Rekonsiliasi statistik setelah import gagal:', error.message || error);
+      throw error;
+    });
+    if (reconciled) result.metrics_reconciled = true;
     await ensureHistoricalStatsFromCurrentTransactions().catch(() => null);
   }
+  runtimeCache.bumpMany(['stats', 'products', 'catalog', 'settings', 'dashboard']);
   await addBackupLog({ type: 'import', status: 'success', note: `Import selesai: ${Object.keys(result).map(k => `${k}=${result[k]}`).join(', ')}` });
   return result;
 }
@@ -2106,10 +2234,18 @@ async function getDeepStats() {
     summarizeAllTransactions()
   ]);
 
-  const historical = await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
-  const revenue = Math.max(Number(summary.revenue_total || 0), Number(historical.revenue_total || 0));
-  const qtySold = Math.max(Number(summary.quantity_sold || 0), Number(historical.quantity_sold || 0));
-  const ordersTotal = Math.max(Number(summary.orders_total || 0), Number(historical.orders_total || 0));
+  const historical = summary.canonical
+    ? null
+    : await ensureHistoricalStatsFromCurrentTransactions(summary).catch(() => summary);
+  const revenue = summary.canonical
+    ? Number(summary.revenue_total || 0)
+    : Math.max(Number(summary.revenue_total || 0), Number(historical?.revenue_total || 0));
+  const qtySold = summary.canonical
+    ? Number(summary.quantity_sold || 0)
+    : Math.max(Number(summary.quantity_sold || 0), Number(historical?.quantity_sold || 0));
+  const ordersTotal = summary.canonical
+    ? Number(summary.orders_total || 0)
+    : Math.max(Number(summary.orders_total || 0), Number(historical?.orders_total || 0));
   const lowStock = products.map((p) => ({ name: p.nama, code: p.kode, stock: productAvailableStock(p), active: p.active, delivery_mode: String(p.delivery_mode || 'auto') }))
     .filter((p) => p.active !== false && p.delivery_mode !== 'po' && p.stock <= 5)
     .sort((a, b) => a.stock - b.stock)
@@ -2131,7 +2267,10 @@ async function getDeepStats() {
     profit_today: Number(summary.profit_today || 0),
     profit_month: Number(summary.profit_month || 0),
     orders_total: ordersTotal,
-    live_orders_total: Number(summary.orders_total || 0),
+    live_orders_total: Number(summary.live_orders_total ?? summary.orders_total ?? 0),
+    orders_today: Number(summary.orders_today || 0),
+    orders_month: Number(summary.orders_month || 0),
+    stats_version: String(summary.counter_version || 'legacy'),
     quantity_sold: qtySold,
     average_order_value: ordersTotal ? Math.round(revenue / ordersTotal) : 0,
     users_total: users.length,
@@ -2823,13 +2962,13 @@ module.exports = {
   claimOnce,
   markClaimDone,
   releaseClaim,
-  releaseClaim,
   upsertUser,
   registerUserWithReferral,
   getWalletSummary,
   setUserBalances,
   listWalletLedger,
   getStats,
+  getLiveSalesStats,
   ensureHistoricalStatsFromCurrentTransactions,
   listProducts,
   getProductByCode,
