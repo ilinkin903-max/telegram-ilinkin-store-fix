@@ -115,9 +115,9 @@ test('checkout tetap membaca saldo dan stok supplier secara live', () => {
 
 test('versi paket tetap mengikuti rilis terbaru setelah fitur dashboard chat dan fast menu', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '85.1.0');
-  assert.equal(read('VERSION').trim(), 'v85.1.0');
-  assert.equal(read('VERSION.txt').trim(), 'v85.1.0');
+  assert.equal(pkg.version, '85.2.0');
+  assert.equal(read('VERSION').trim(), 'v85.2.0');
+  assert.equal(read('VERSION.txt').trim(), 'v85.2.0');
 });
 
 test('buyer lookup runtime mengutamakan username Telegram terbaru dan membuang username lama', async () => {

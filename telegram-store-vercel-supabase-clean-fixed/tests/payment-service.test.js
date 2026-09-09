@@ -176,7 +176,7 @@ test('invoice produk memakai format pembayaran berhasil tanpa tombol salin', asy
     assert.match(captured[0].text, /Invoice: <b>1786544825-181<\/b>/);
     assert.match(captured[0].text, /Produk: <b>Canva - 1 Bulan Pro<\/b>/);
     assert.match(captured[0].text, /Harga: <b>Rp\s*3\.000<\/b>/);
-    assert.match(captured[0].text, /Metode: <b>AutoGoPay<\/b>/);
+    assert.match(captured[0].text, /Metode: <b>QRIS GoPay<\/b>/);
     assert.match(captured[0].text, /Fee: <b>Rp\s*26<\/b>/);
     assert.match(captured[0].text, /• 1 Bulan Pro/);
     assert.match(captured[0].text, /<b>PRODUK YANG DIDAPAT<\/b>/);

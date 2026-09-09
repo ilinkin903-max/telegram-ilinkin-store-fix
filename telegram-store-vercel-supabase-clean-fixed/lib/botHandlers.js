@@ -933,6 +933,8 @@ async function processRedeemCode(chatId, from, rawCode) {
   let claimed = null;
   let invoice = '';
   let savedOrder = null;
+  let fulfillmentResult = null;
+  let fulfillmentSucceeded = false;
   try {
     claimed = await db.claimRedeemCode(code, from.id);
     const product = await db.getProductByCode(claimed.product_code);
@@ -992,9 +994,14 @@ async function processRedeemCode(chatId, from, rawCode) {
 
     await tg.sendMessage(chatId, `⏳ Kode <b>${escapeHtml(code)}</b> valid. Produk sedang diproses...`, { parse_mode: 'HTML' }).catch(() => null);
     const result = await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: from, source: 'redeem-code' });
+    fulfillmentResult = result;
+    fulfillmentSucceeded = true;
     await db.completeRedeemCode(code, from.id, invoice);
-    botReadCache.histories.delete(String(from.id));
-    cachedProducts(true).catch(() => null);
+    // Fulfillment sudah sukses pada titik ini. Invalidate cache user saja; cache produk
+    // otomatis ikut invalid lewat runtimeCache.transactionCommitted() di completeOrder.
+    // Jangan menjalankan helper yang tidak ada setelah produk terkirim, karena itu bisa
+    // menampilkan pesan "Redeem gagal" walaupun transaksi sebenarnya sudah selesai.
+    invalidateUserFastCache(from.id);
     if (result?.po_waiting) {
       return tg.sendMessage(chatId, `✅ <b>REDEEM BERHASIL</b>\nKode sudah ditukar dengan <b>${escapeHtml(product.nama)}</b>${selectionOrder.variant_name ? ` · ${escapeHtml(selectionOrder.variant_name)}` : ''}. Pesanan sedang menunggu pengiriman otomatis/seller.`, { parse_mode: 'HTML' });
     }
@@ -1003,8 +1010,22 @@ async function processRedeemCode(chatId, from, rawCode) {
     let transaction = null;
     if (invoice) transaction = await db.getTransactionByOrderRef(invoice).catch(() => null);
     if (transaction && claimed) {
-      await db.completeRedeemCode(code, from.id, invoice).catch(() => null);
-    } else if (claimed) {
+      // Transaksi sudah tercatat berarti stok/produk sudah diproses oleh completeOrder.
+      // Jangan pernah memberi pesan "Redeem gagal" setelah titik ini, walaupun
+      // finalisasi kode atau notifikasi sesudah fulfillment sempat error.
+      await db.completeRedeemCode(code, from.id, invoice).catch((finalizeError) => {
+        console.error('Finalisasi kode redeem setelah transaksi sukses gagal:', finalizeError?.message || finalizeError);
+      });
+      invalidateUserFastCache(from.id);
+      if (fulfillmentSucceeded) {
+        if (fulfillmentResult?.po_waiting) {
+          return tg.sendMessage(chatId, '✅ <b>REDEEM BERHASIL</b>\nKode sudah ditukar dan pesanan sedang menunggu pengiriman otomatis/seller.', { parse_mode: 'HTML' }).catch(() => null);
+        }
+        return null;
+      }
+      return tg.sendMessage(chatId, `✅ <b>REDEEM BERHASIL</b>\nTransaksi <b>${escapeHtml(invoice)}</b> sudah tercatat. Jika detail produk belum tampil, periksa pesan transaksi sebelumnya atau hubungi owner.`, { parse_mode: 'HTML' }).catch(() => null);
+    }
+    if (claimed) {
       await db.releaseRedeemCode(code, from.id).catch(() => null);
       if (savedOrder) await db.deletePendingOrder(from.id, invoice).catch(() => null);
     }
@@ -1083,7 +1104,7 @@ async function createTopupPayment(chatId, from, topup, amount, settings) {
 ` +
     `Total Bayar: <b>${escapeHtml(formatRupiah(total))}</b>
 ` +
-    `Metode: <b>QRIS</b>
+    `Metode: <b>${escapeHtml(gateway.method_label || 'QRIS')}</b>
 ` +
     `=======================
 ` +
@@ -2408,7 +2429,7 @@ async function createPayment(query) {
 ` +
     `Total Bayar: *${formatRupiah(totalAmount)}*
 ` +
-    `Metode: *QRIS*
+    `Metode: *${escapeMarkdownText(gatewayPayment.method_label || 'QRIS')}*
 ` +
     `Expired: *${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))} menit*
 ` +

@@ -1,0 +1,61 @@
+Link Auto Order v85.2.0 - Test Report
+=====================================
+
+Release target:
+- Fix false redeem failure after successful fulfillment
+- Switchable AutoGoPay GoPay/ShopeePay from owner settings
+- Channel-aware create/status/cancel/webhook behavior
+
+1) JavaScript syntax validation
+-------------------------------
+PASS
+- All .js files under api/, lib/, public/, scripts/, and tests/ passed `node --check`.
+- Extracted browser JavaScript from api/reseller.js passed `node --check`.
+- Payment settings element IDs were checked for duplicates.
+
+2) Focused v85 regression
+-------------------------
+PASS: 19/19
+
+Included:
+- v85 redeem-code tests
+- v85.1 plain-code + Image2URL/media tests
+- v85.2 redeem finalization + GoPay/ShopeePay tests
+
+v85.2 specific checks include:
+- No production reference to cachedProducts remains.
+- Successful redeem is not converted into a failure message by post-fulfillment errors.
+- Owner dashboard has GoPay/ShopeePay selector under Pengaturan.
+- Setting is persisted in shop_settings with GoPay default.
+- ShopeePay create uses POST /shopeepay/qris/create.
+- ShopeePay stores order_sn as provider transaction reference.
+- ShopeePay verification uses GET /shopeepay/qris/status with order_sn.
+- ShopeePay connection check uses GET /shopeepay/status.
+- GoPay create remains POST /qris/generate.
+- GoPay status remains POST /qris/status.
+- Webhook distinguishes QRIS vs QRIS_SHOPEEPAY.
+- Marketplace receives the selected payment-method label.
+
+3) Full repository regression attempt
+-------------------------------------
+Total discovered: 305 tests
+Passed: 292
+Could not execute successfully: 13
+Assertion regressions observed: 0
+
+All 13 unsuccessful tests stopped because the supplied source archive does not include node_modules. The missing runtime modules were only:
+- axios
+- dotenv
+
+Examples include payment-service/runtime integration tests, store-service integration tests, and tests that directly require config/db modules. The failures were MODULE_NOT_FOUND, not application assertion failures.
+
+4) Final production-source checks
+---------------------------------
+PASS
+- grep found no cachedProducts reference in api/, lib/, public/, or scripts/.
+- ShopeePay endpoint references are present only in the intended payment integration/UI locations.
+- Release metadata is v85.2.0 consistently in VERSION, VERSION.txt, package.json, package-lock.json, and version assertions.
+
+Database migration for v85.2.0:
+- NONE REQUIRED.
+- Existing shop_settings table is reused for autogopay_payment_method.

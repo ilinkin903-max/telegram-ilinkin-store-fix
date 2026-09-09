@@ -1169,6 +1169,7 @@ async function getShopSettings() {
     wallet_payment_enabled: 'true',
     topup_min_amount: '10000',
     topup_max_amount: '1000000',
+    autogopay_payment_method: 'gopay',
     prodseller_usdt_to_idr: '16500',
     prodseller_markup_percent: '25',
     prodseller_default_category: 'Produk Digital'
@@ -1227,6 +1228,7 @@ async function saveShopSettings(input = {}) {
     'wallet_payment_enabled',
     'topup_min_amount',
     'topup_max_amount',
+    'autogopay_payment_method',
     'prodseller_usdt_to_idr',
     'prodseller_markup_percent',
     'prodseller_default_category'

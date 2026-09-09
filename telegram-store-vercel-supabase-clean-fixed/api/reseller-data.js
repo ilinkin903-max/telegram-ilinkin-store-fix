@@ -774,6 +774,11 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'redeem-codes') return json(res, 200, { ok: true, data: await db.listRedeemCodes(500) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
+    if (req.method === 'GET' && action === 'payment-method-status') {
+      const method = String(req.query?.method || '').trim().toLowerCase();
+      const data = await paymentService.getAutoGopayMethodStatus(method);
+      return json(res, 200, { ok: true, data });
+    }
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
@@ -1501,6 +1506,7 @@ module.exports = async function handler(req, res) {
         wallet_payment_enabled: body.wallet_payment_enabled,
         topup_min_amount: body.topup_min_amount,
         topup_max_amount: body.topup_max_amount,
+        autogopay_payment_method: body.autogopay_payment_method === undefined ? undefined : (String(body.autogopay_payment_method || '').trim().toLowerCase() === 'shopeepay' ? 'shopeepay' : 'gopay'),
         prodseller_usdt_to_idr: body.prodseller_usdt_to_idr,
         prodseller_markup_percent: body.prodseller_markup_percent,
         prodseller_default_category: body.prodseller_default_category

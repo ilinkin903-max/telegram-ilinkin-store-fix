@@ -44,19 +44,51 @@ function normalizePaymentStatus(value) {
   return status || 'pending';
 }
 
+function isAutoGopayProviderValue(value) {
+  const selected = normalizedText(value).toLowerCase();
+  return selected === 'autogopay' || selected === 'autogopay_gopay' || selected === 'autogopay_shopeepay';
+}
+
+function normalizeAutoGopayChannel(value = '') {
+  const selected = normalizedText(value).toLowerCase();
+  return selected.includes('shopee') ? 'shopeepay' : 'gopay';
+}
+
+function autoGopayChannelFromPaymentMethod(value = '') {
+  const selected = normalizedText(value).toUpperCase();
+  return selected === 'QRIS_SHOPEEPAY' || selected.includes('SHOPEE') ? 'shopeepay' : 'gopay';
+}
+
+function autoGopayChannelForOrder(order = {}) {
+  const provider = normalizedText(order.payment_provider || config.paymentProvider || '').toLowerCase();
+  if (provider === 'autogopay_shopeepay') return 'shopeepay';
+  if (provider === 'autogopay' || provider === 'autogopay_gopay') return 'gopay';
+  return normalizeAutoGopayChannel(order.autogopay_payment_method || order.payment_channel || 'gopay');
+}
+
+function autoGopayProviderKey(channel = 'gopay') {
+  return normalizeAutoGopayChannel(channel) === 'shopeepay' ? 'autogopay_shopeepay' : 'autogopay';
+}
+
+async function selectedAutoGopayChannel(explicit = '') {
+  const requested = normalizedText(explicit).toLowerCase();
+  if (requested) return normalizeAutoGopayChannel(requested);
+  const settings = await db.getShopSettings();
+  return normalizeAutoGopayChannel(settings.autogopay_payment_method || 'gopay');
+}
+
 function paymentProviderForOrder(order = {}) {
   const value = normalizedText(order.payment_provider || config.paymentProvider || 'pakasir').toLowerCase();
-  return value === 'autogopay' ? 'autogopay' : 'pakasir';
+  return isAutoGopayProviderValue(value) ? 'autogopay' : 'pakasir';
 }
 
 function paymentProviderLabel() {
   return 'QRIS';
 }
 
-
 function paymentConfigured(provider = config.paymentProvider) {
   const selected = normalizedText(provider).toLowerCase();
-  if (selected === 'autogopay') return Boolean(config.autogopayApiKey);
+  if (isAutoGopayProviderValue(selected)) return Boolean(config.autogopayApiKey);
   return Boolean(config.pakasirSlug && config.pakasirApiKey);
 }
 
@@ -97,20 +129,55 @@ function normalizeAutoGopayTransaction(payload = {}) {
   const data = root?.data && typeof root.data === 'object' ? root.data : null;
   const trx = root?.transaction || data?.transaction || data || root || {};
   const rawStatus = trx.transaction_status || trx.status || trx.payment_status || trx.state || root.status;
+  const paymentMethod = normalizedText(trx.payment_method || trx.payment_type || trx.method || 'qris');
+  const orderSn = normalizedText(trx.order_sn || trx.orderSn || root.order_sn || root.orderSn);
   return {
     provider: 'autogopay',
-    transaction_id: normalizedText(trx.transaction_id || trx.transactionId || trx.id || root.transaction_id),
+    channel: autoGopayChannelFromPaymentMethod(paymentMethod),
+    transaction_id: normalizedText(trx.transaction_id || trx.transactionId || trx.id || root.transaction_id || orderSn),
+    provider_reference: orderSn,
+    order_sn: orderSn,
     order_id: normalizedText(trx.order_id || trx.orderId || trx.invoice || trx.reference || root.order_id),
     amount: Number(trx.amount || trx.total || trx.nominal || root.amount || 0),
     status: normalizePaymentStatus(rawStatus),
     raw_status: normalizedText(rawStatus).toLowerCase(),
-    payment_method: normalizedText(trx.payment_type || trx.payment_method || trx.method || 'qris'),
+    payment_method: paymentMethod,
     issuer: normalizedText(trx.issuer || ''),
     completed_at: trx.completed_at || trx.paid_at || trx.time || null,
     qr_string: normalizedText(trx.qr_string || ''),
     qr_url: normalizedText(trx.qr_url || ''),
     checkout_url: normalizedText(trx.checkout_url || ''),
     expiry_time: trx.expiry_time || trx.expires_at || null
+  };
+}
+
+function normalizeShopeePayTransaction(payload = {}) {
+  const root = payload && typeof payload === 'object' ? payload : {};
+  const data = root?.data && typeof root.data === 'object' ? root.data : root;
+  const trx = data?.transaction && typeof data.transaction === 'object' ? data.transaction : (data || {});
+  const orderSn = normalizedText(trx.order_sn || trx.orderSn || root.order_sn || root.orderSn);
+  const orderStatus = Number(trx.order_status ?? trx.orderStatus ?? NaN);
+  const paid = trx.paid === true || String(trx.paid).toLowerCase() === 'true' || orderStatus === 1;
+  const rawStatus = paid ? 'success' : (trx.status || (orderStatus === 2 ? 'pending' : root.status));
+  return {
+    provider: 'autogopay',
+    channel: 'shopeepay',
+    transaction_id: orderSn,
+    provider_reference: orderSn,
+    order_sn: orderSn,
+    order_id: '',
+    amount: Number(trx.amount || root.amount || 0),
+    status: paid ? 'completed' : normalizePaymentStatus(rawStatus),
+    raw_status: normalizedText(rawStatus).toLowerCase(),
+    payment_method: 'QRIS_SHOPEEPAY',
+    issuer: 'shopeepay',
+    completed_at: trx.paid_at || trx.completed_at || null,
+    qr_string: normalizedText(trx.qr_string || ''),
+    qr_url: normalizedText(trx.qr_url || ''),
+    checkout_url: '',
+    expiry_time: trx.expiry_time || trx.expires_at || null,
+    paid,
+    order_status: Number.isFinite(orderStatus) ? orderStatus : null
   };
 }
 
@@ -164,14 +231,96 @@ function autogopayHeaders() {
   };
 }
 
-async function createPaymentTransaction({ amount, invoiceRef } = {}) {
+async function getAutoGopayMethodStatus(explicit = '') {
+  const selectedProvider = normalizedText(config.paymentProvider || '').toLowerCase();
+  if (!isAutoGopayProviderValue(selectedProvider)) {
+    return {
+      ok: false,
+      configured: false,
+      provider: selectedProvider || 'pakasir',
+      channel: normalizeAutoGopayChannel(explicit || 'gopay'),
+      message: 'PAYMENT_PROVIDER belum menggunakan autogopay.'
+    };
+  }
+  if (!config.autogopayApiKey) {
+    return { ok: false, configured: false, provider: 'autogopay', channel: normalizeAutoGopayChannel(explicit || 'gopay'), message: 'AUTOGOPAY_API_KEY belum diatur.' };
+  }
+
+  const channel = await selectedAutoGopayChannel(explicit);
+  if (channel === 'shopeepay') {
+    const response = await axios.get(
+      `${config.autogopayBaseUrl}/shopeepay/status`,
+      { headers: autogopayHeaders(), timeout: 15000 }
+    );
+    if (response.data?.success === false) throw new Error(response.data?.message || 'Gagal memeriksa koneksi ShopeePay.');
+    const data = response.data?.data && typeof response.data.data === 'object' ? response.data.data : {};
+    const connected = data.connected === true || String(data.connected).toLowerCase() === 'true';
+    const tokenValid = data.token_valid === true || String(data.token_valid).toLowerCase() === 'true';
+    return {
+      ok: connected && tokenValid,
+      configured: true,
+      provider: 'autogopay_shopeepay',
+      channel,
+      method_label: 'QRIS ShopeePay',
+      connected,
+      token_valid: tokenValid,
+      store_id: normalizedText(data.store_id || ''),
+      message: connected && tokenValid ? 'ShopeePay terhubung dan token valid.' : 'ShopeePay belum siap. Periksa koneksi/token di AutoGoPay.'
+    };
+  }
+
+  const response = await axios.post(
+    `${config.autogopayBaseUrl}/transactions`,
+    null,
+    { headers: autogopayHeaders(), timeout: 15000 }
+  );
+  if (response.data?.success === false) throw new Error(response.data?.message || 'Gagal memeriksa koneksi GoPay.');
+  return {
+    ok: true,
+    configured: true,
+    provider: 'autogopay',
+    channel: 'gopay',
+    method_label: 'QRIS GoPay',
+    message: 'API AutoGoPay untuk GoPay dapat diakses.'
+  };
+}
+
+async function createPaymentTransaction({ amount, invoiceRef, paymentMethod = '' } = {}) {
   const total = Number(amount || 0);
   if (!Number.isFinite(total) || total < 1 || total > 10000000) {
     throw new Error('Nominal pembayaran harus antara Rp1 sampai Rp10.000.000.');
   }
 
-  if (normalizedText(config.paymentProvider).toLowerCase() === 'autogopay') {
+  if (isAutoGopayProviderValue(config.paymentProvider)) {
     if (!config.autogopayApiKey) throw new Error('AUTOGOPAY_API_KEY belum diatur.');
+    const channel = await selectedAutoGopayChannel(paymentMethod);
+
+    if (channel === 'shopeepay') {
+      const response = await axios.post(
+        `${config.autogopayBaseUrl}/shopeepay/qris/create`,
+        { amount: total },
+        { headers: autogopayHeaders(), timeout: 20000 }
+      );
+      if (response.data?.success === false) throw new Error(response.data?.message || 'AutoGoPay ShopeePay gagal membuat QRIS.');
+      const transaction = normalizeShopeePayTransaction(response.data || {});
+      if (!transaction.order_sn || !transaction.qr_string) {
+        throw new Error('Response ShopeePay tidak lengkap: order_sn atau qr_string tidak tersedia.');
+      }
+      return {
+        provider: autoGopayProviderKey(channel),
+        channel,
+        method_label: 'QRIS ShopeePay',
+        transaction_id: transaction.order_sn,
+        order_id: transaction.order_sn,
+        amount: transaction.amount || total,
+        status: transaction.status || 'pending',
+        qr_string: transaction.qr_string,
+        qr_url: transaction.qr_url,
+        checkout_url: '',
+        expires_at: parseWibDate(transaction.expiry_time, 15)
+      };
+    }
+
     const response = await axios.post(
       `${config.autogopayBaseUrl}/qris/generate`,
       { amount: total },
@@ -183,7 +332,9 @@ async function createPaymentTransaction({ amount, invoiceRef } = {}) {
       throw new Error('Response AutoGoPay tidak lengkap: transaction_id, order_id, atau qr_string tidak tersedia.');
     }
     return {
-      provider: 'autogopay',
+      provider: autoGopayProviderKey(channel),
+      channel,
+      method_label: 'QRIS GoPay',
       transaction_id: transaction.transaction_id,
       order_id: transaction.order_id,
       amount: transaction.amount || total,
@@ -208,6 +359,8 @@ async function createPaymentTransaction({ amount, invoiceRef } = {}) {
   if (!qrText) throw new Error('Pakasir tidak mengirim QR pembayaran.');
   return {
     provider: 'pakasir',
+    channel: 'qris',
+    method_label: 'QRIS',
     transaction_id: '',
     order_id: orderId,
     amount: total,
@@ -239,7 +392,34 @@ async function verifyPakasirTransaction(order) {
   return transaction;
 }
 
+async function verifyShopeePayTransaction(order) {
+  const orderSn = normalizedText(order?.provider_transaction_id);
+  if (!orderSn) throw new Error('Order SN ShopeePay tidak ditemukan pada pesanan. Buat invoice baru.');
+  if (!config.autogopayApiKey) throw new Error('AUTOGOPAY_API_KEY belum diatur.');
+
+  const response = await axios.get(
+    `${config.autogopayBaseUrl}/shopeepay/qris/status`,
+    { headers: autogopayHeaders(), params: { order_sn: orderSn }, timeout: 15000 }
+  );
+  if (response.data?.success === false) throw new Error(response.data?.message || 'Gagal memeriksa transaksi ShopeePay.');
+  const transaction = normalizeShopeePayTransaction(response.data || {});
+  if (transaction.order_sn && transaction.order_sn !== orderSn) {
+    throw new Error('Order SN ShopeePay tidak cocok dengan invoice lokal.');
+  }
+  if (transaction.amount > 0 && Number(transaction.amount) !== Number(order.amount || 0)) {
+    throw new Error('Nominal transaksi ShopeePay tidak cocok dengan invoice lokal.');
+  }
+  return {
+    ...transaction,
+    transaction_id: transaction.order_sn || orderSn,
+    order_id: order.invoice_ref || '',
+    amount: transaction.amount || Number(order.amount || 0)
+  };
+}
+
 async function verifyAutoGopayTransaction(order) {
+  if (autoGopayChannelForOrder(order) === 'shopeepay') return verifyShopeePayTransaction(order);
+
   const transactionId = normalizedText(order?.provider_transaction_id);
   if (!transactionId) throw new Error('ID transaksi AutoGoPay tidak ditemukan pada pesanan. Jalankan SQL update v55 dan buat invoice baru.');
   if (!config.autogopayApiKey) throw new Error('AUTOGOPAY_API_KEY belum diatur.');
@@ -259,6 +439,7 @@ async function verifyAutoGopayTransaction(order) {
   }
   return {
     ...transaction,
+    channel: 'gopay',
     transaction_id: transaction.transaction_id || transactionId,
     order_id: order.invoice_ref || transaction.order_id,
     amount: transaction.amount || Number(order.amount || 0)
@@ -274,6 +455,9 @@ async function verifyPaymentTransaction(order) {
 async function cancelPaymentTransaction(order) {
   if (!order) return { ok: false, state: 'not_found' };
   if (paymentProviderForOrder(order) !== 'autogopay') return { ok: true, state: 'local_cancel_only' };
+  // Dokumentasi AutoGoPay tidak menyediakan endpoint cancel untuk ShopeePay.
+  // Batalkan invoice hanya di sisi bot; QR ShopeePay akan expired sendiri.
+  if (autoGopayChannelForOrder(order) === 'shopeepay') return { ok: true, state: 'local_cancel_only' };
   const transactionId = normalizedText(order.provider_transaction_id);
   if (!transactionId || !config.autogopayApiKey) return { ok: true, state: 'local_cancel_only' };
   try {
@@ -323,8 +507,11 @@ function receiptContext(order, product, transaction, delivered) {
 
 function receiptMethodLabel(ctx, order = {}) {
   if (ctx.paymentMethod === 'wallet') return 'Saldo Bot';
-  const provider = String(ctx.paymentProvider || '').trim().toLowerCase() || paymentProviderForOrder(order);
-  return provider === 'autogopay' ? 'AutoGoPay' : 'QRIS';
+  if (ctx.paymentMethod === 'redeem') return 'Kode Redeem';
+  const rawProvider = String(ctx.paymentProvider || order?.payment_provider || '').trim().toLowerCase();
+  if (rawProvider === 'autogopay_shopeepay') return 'QRIS ShopeePay';
+  if (isAutoGopayProviderValue(rawProvider)) return 'QRIS GoPay';
+  return 'QRIS';
 }
 
 function termsBulletHtml(value) {
@@ -1531,16 +1718,21 @@ module.exports = {
   normalizePaymentStatus,
   normalizePakasirTransaction,
   normalizeAutoGopayTransaction,
+  normalizeShopeePayTransaction,
   validateWebhookPayload,
   validateAutoGopayWebhookPayload,
   paymentMatchesOrder,
   paymentProviderForOrder,
+  autoGopayChannelForOrder,
+  autoGopayChannelFromPaymentMethod,
   paymentProviderLabel,
   paymentConfigured,
+  getAutoGopayMethodStatus,
   displayPaymentReference,
   createPaymentTransaction,
   verifyPakasirTransaction,
   verifyAutoGopayTransaction,
+  verifyShopeePayTransaction,
   verifyPaymentTransaction,
   cancelPaymentTransaction,
   verifyTopupTransaction,

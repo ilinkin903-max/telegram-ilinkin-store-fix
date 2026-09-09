@@ -954,6 +954,7 @@ async function createPayment({ user, productCode, variantKey, quantity, voucherC
     qr_download_token: qrTokenSecret() ? issueQrDownloadToken(invoice, Number(user.id), expiresAt) : '',
     checkout_url: '',
     payment_provider: gatewayPayment.provider,
+    payment_method_label: gatewayPayment.method_label || 'QRIS',
     watcher_scheduled,
     delivery_mode: deliveryMode,
     supplier_source: String(supplierSource || '').toLowerCase()

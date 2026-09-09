@@ -87,6 +87,8 @@ function autoGopayRequestMeta(req, payload = {}) {
   const transactionId = String(
     transaction?.id ||
     transaction?.transaction_id ||
+    transaction?.order_sn ||
+    transaction?.order_id ||
     ''
   ).trim();
   const amount = Number(transaction?.amount || transaction?.total || 0);
@@ -124,7 +126,7 @@ function isAutoGopayCallbackProbe(req, payload = {}, validSignature = false) {
     Number.isFinite(meta.amount) &&
     meta.amount > 0
   );
-  const providerIsAutoGopay = String(config.paymentProvider || '').toLowerCase() === 'autogopay';
+  const providerIsAutoGopay = String(config.paymentProvider || '').toLowerCase().startsWith('autogopay');
 
   // v60 mendaftarkan callback dengan query verify=1. Request verifikasi yang
   // belum memiliki signature valid selalu dibalas HTTP 200 tanpa menyentuh order.
@@ -180,23 +182,44 @@ async function processAutoGopayWebhook(req, res, payload) {
     return res.status(200).json({ success: true, ignored: true, status: incoming.status });
   }
 
-  const order = await db.getPendingOrderByProviderTransactionId(incoming.transaction_id)
-    || (incoming.order_id ? await db.getPendingOrderByInvoice(incoming.order_id) : null);
+  const providerRefs = [...new Set([incoming.transaction_id, incoming.provider_reference, incoming.order_sn, incoming.order_id].map((x) => String(x || '').trim()).filter(Boolean))];
+  let order = null;
+  for (const ref of providerRefs) {
+    order = await db.getPendingOrderByProviderTransactionId(ref).catch(() => null);
+    if (order) break;
+  }
+  if (!order && incoming.order_id) order = await db.getPendingOrderByInvoice(incoming.order_id).catch(() => null);
+
   if (!order) {
-    const topup = await db.getPendingTopupByProviderTransactionId(incoming.transaction_id)
-      || (incoming.order_id ? await db.getPendingTopupByRef(incoming.order_id) : null);
+    let topup = null;
+    for (const ref of providerRefs) {
+      topup = await db.getPendingTopupByProviderTransactionId(ref).catch(() => null);
+      if (topup) break;
+    }
+    if (!topup && incoming.order_id) topup = await db.getPendingTopupByRef(incoming.order_id).catch(() => null);
     if (!topup) return res.status(200).json({ success: true, state: 'invoice_not_found' });
-    if (String(topup.payment_provider || '').toLowerCase() !== 'autogopay') {
+    if (paymentService.paymentProviderForOrder(topup) !== 'autogopay') {
       return res.status(400).json({ success: false, error: 'Provider top up tidak cocok.' });
+    }
+    const expectedChannel = paymentService.autoGopayChannelForOrder(topup);
+    const incomingChannel = paymentService.autoGopayChannelFromPaymentMethod(incoming.payment_method);
+    if (incoming.payment_method && expectedChannel !== incomingChannel) {
+      return res.status(400).json({ success: false, error: 'Metode AutoGoPay top up tidak cocok.' });
     }
     if (Number(topup.total_amount || 0) !== Number(incoming.amount || 0)) {
       return res.status(400).json({ success: false, error: 'Nominal top up tidak cocok.' });
     }
-    const topupResult = await paymentService.completeTopupPayment({ topup, incoming, source: 'autogopay-topup-webhook' });
-    return res.status(200).json({ success: true, state: topupResult.state, transaction_id: incoming.transaction_id, topup_ref: topup.topup_ref });
+    const stableIncoming = { ...incoming, transaction_id: String(topup.provider_transaction_id || incoming.transaction_id || '').trim() };
+    const topupResult = await paymentService.completeTopupPayment({ topup, incoming: stableIncoming, source: 'autogopay-topup-webhook' });
+    return res.status(200).json({ success: true, state: topupResult.state, transaction_id: stableIncoming.transaction_id, topup_ref: topup.topup_ref });
   }
-  if (String(order.payment_provider || '').toLowerCase() !== 'autogopay') {
+  if (paymentService.paymentProviderForOrder(order) !== 'autogopay') {
     return res.status(400).json({ success: false, error: 'Provider invoice tidak cocok.' });
+  }
+  const expectedChannel = paymentService.autoGopayChannelForOrder(order);
+  const incomingChannel = paymentService.autoGopayChannelFromPaymentMethod(incoming.payment_method);
+  if (incoming.payment_method && expectedChannel !== incomingChannel) {
+    return res.status(400).json({ success: false, error: 'Metode AutoGoPay invoice tidak cocok.' });
   }
   if (Number(order.amount || 0) !== Number(incoming.amount || 0)) {
     console.error('Webhook AutoGoPay amount tidak cocok:', {
@@ -289,7 +312,7 @@ async function handler(req, res) {
   try {
     const payload = parseWebhookBody(req);
     const autoGopayMeta = autoGopayRequestMeta(req, payload);
-    if (autoGopayMeta.looksLikeAutoGopay || String(config.paymentProvider).toLowerCase() === 'autogopay') {
+    if (autoGopayMeta.looksLikeAutoGopay || String(config.paymentProvider).toLowerCase().startsWith('autogopay')) {
       return await processAutoGopayWebhook(req, res, payload);
     }
     return await processPakasirWebhook(req, res, payload);

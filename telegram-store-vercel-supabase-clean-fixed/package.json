@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "85.1.0",
+  "version": "85.2.0",
   "private": true,
-  "description": "Link Auto Order v85.1.0: direct redeem-code claiming, Image2URL Media Hub, and image/video product media for Telegram + Marketplace.",
+  "description": "Link Auto Order v85.2.0: redeem success fix and switchable AutoGoPay GoPay/ShopeePay QRIS from owner settings.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

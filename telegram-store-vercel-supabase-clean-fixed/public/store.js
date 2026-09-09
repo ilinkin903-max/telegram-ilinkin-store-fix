@@ -892,7 +892,8 @@
       ['Produk', payment.product + (payment.variant ? ' - ' + payment.variant : '')],
       ['Harga satuan', rupiah(payment.unit_price)],
       ['Jumlah', payment.quantity],
-      ['Subtotal', rupiah(payment.subtotal)]
+      ['Subtotal', rupiah(payment.subtotal)],
+      ['Metode', payment.payment_method_label || 'QRIS']
     ];
     if (payment.discount > 0) rows.push([payment.discount_label || 'Diskon', '− ' + rupiah(payment.discount)]);
     if (payment.discount > 0) rows.push(['Setelah diskon', rupiah(payment.after_discount)]);
