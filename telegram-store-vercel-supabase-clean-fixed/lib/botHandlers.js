@@ -25,7 +25,7 @@ const BOT_MEMBERSHIP_CACHE_MS = 15 * 1000;
 const BOT_SUPPLIER_CACHE_MS = 10 * 1000;
 const BOT_USER_TOUCH_CACHE_MS = 30 * 1000;
 const FAST_MENU_CALLBACKS = new Set([
-  'wallet', 'daftarproduk', 'stok', 'riwayattransaksi', 'caraorder', 'kembaliawal', 'noop'
+  'wallet', 'redeem', 'daftarproduk', 'stok', 'riwayattransaksi', 'caraorder', 'kembaliawal', 'noop'
 ]);
 const botReadCache = {
   stats: { at: 0, value: null, promise: null },
@@ -528,7 +528,10 @@ function homeKeyboard(req, userId, settings = {}) {
   } else if (nokosUrl) {
     rows.push([styledButton('‹📱› Nokos', { url: nokosUrl }, 'primary')]);
   }
-  rows.push([styledButton('‹💰› Saldo & Referral', { callback_data: 'wallet' }, 'success')]);
+  rows.push([
+    styledButton('‹💰› Saldo & Referral', { callback_data: 'wallet' }, 'success'),
+    styledButton('‹🎁› Redeem', { callback_data: 'redeem' }, 'success')
+  ]);
   rows.push([
     styledButton('‹📋› Riwayat Transaksi', { callback_data: 'riwayattransaksi' }, 'primary'),
     styledButton('‹❓› Cara Order', { callback_data: 'caraorder' }, 'primary')
@@ -849,6 +852,133 @@ async function sendWalletPage(chatId, from, query = null) {
   const options = { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } };
   if (query?.message?.message_id) return editMessage(query, text, options);
   return tg.sendMessage(chatId, text, options);
+}
+
+
+async function sendRedeemPrompt(chatId) {
+  return tg.sendMessage(chatId,
+    `🎁 <b>REDEEM KODE</b>\n` +
+    `=======================\n` +
+    `Masukkan kode redeem yang kamu dapatkan. Kode yang valid akan langsung ditukar dengan produk/varian yang sudah ditentukan owner.\n\n` +
+    `Ketik kodenya sekarang atau gunakan format:\n<code>/redeem KODE</code>`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        force_reply: true,
+        selective: true,
+        input_field_placeholder: 'Masukkan kode redeem'
+      }
+    }
+  );
+}
+
+function redeemCodeFromCommand(text) {
+  return String(text || '').replace(/^\/redeem(?:@\w+)?\s*/i, '').trim().toUpperCase();
+}
+
+function redeemReplyMessage(msg = {}) {
+  const replied = String(msg.reply_to_message?.text || msg.reply_to_message?.caption || '');
+  return /REDEEM KODE/i.test(replied) && /Masukkan kode redeem/i.test(replied);
+}
+
+async function processRedeemCode(chatId, from, rawCode) {
+  const code = String(rawCode || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!code) return sendRedeemPrompt(chatId);
+  if (!/^[A-Z0-9-]{4,64}$/.test(code)) {
+    return tg.sendMessage(chatId, '⚠️ Format kode redeem tidak valid. Periksa kembali kode lalu coba lagi.');
+  }
+
+  const activeOrder = await db.getPendingOrder(from.id).catch(() => null);
+  if (activeOrder) {
+    const status = String(activeOrder.status || '').toLowerCase();
+    const expired = activeOrder.expires_at && Date.now() > new Date(activeOrder.expires_at).getTime();
+    if (!expired && !['expired','cancelled','canceled','failed'].includes(status)) {
+      return tg.sendMessage(chatId, '⚠️ Kamu masih memiliki pesanan aktif. Selesaikan atau batalkan pesanan tersebut sebelum memakai kode redeem.');
+    }
+    await db.deletePendingOrder(from.id, activeOrder.invoice_ref || '').catch(() => null);
+  }
+
+  let claimed = null;
+  let invoice = '';
+  let savedOrder = null;
+  try {
+    claimed = await db.claimRedeemCode(code, from.id);
+    const product = await db.getProductByCode(claimed.product_code);
+    if (!product) throw new Error('Produk untuk kode redeem ini sudah tidak tersedia. Hubungi owner.');
+    if (product.active === false) throw new Error('Produk untuk kode redeem ini sedang dinonaktifkan. Hubungi owner.');
+
+    let variant = null;
+    let variantIndex = -1;
+    let variantKeyValue = '';
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    if (variants.length) {
+      if (!claimed.variant_key) throw new Error('Kode redeem tidak memiliki target varian yang valid. Hubungi owner.');
+      const found = db.findVariant(product, claimed.variant_key);
+      variant = found.variant;
+      variantIndex = found.index;
+      if (!variant || variantIndex < 0) throw new Error('Varian untuk kode redeem ini sudah tidak tersedia. Hubungi owner.');
+      if (variant.active === false) throw new Error('Varian untuk kode redeem ini sedang dinonaktifkan. Hubungi owner.');
+      variantKeyValue = db.variantKey(variant, variantIndex);
+    }
+
+    const quantity = Math.max(1, Math.min(100, Number(claimed.quantity || 1)));
+    const selectionOrder = {
+      product_code: product.kode,
+      variant_key: variantKeyValue,
+      variant_name: variant ? String(variant.name || variant.nama || claimed.variant_name || variantKeyValue) : '',
+      quantity
+    };
+    const deliveryMode = db.variantDeliveryMode(product, variant);
+    const unitPrice = db.orderUnitPrice(product, selectionOrder);
+    const costUnit = db.orderUnitCost(product, selectionOrder);
+    invoice = `REDEEM-${code}`;
+
+    await db.upsertUser(from);
+    savedOrder = await db.upsertPendingOrder({
+      telegram_id: Number(from.id),
+      product_code: product.kode,
+      variant_key: variantKeyValue,
+      variant_name: selectionOrder.variant_name,
+      unit_price: unitPrice,
+      quantity,
+      voucher_code: '',
+      invoice_ref: invoice,
+      amount: 0,
+      fee: 0,
+      cost_unit: costUnit,
+      cost_total: Math.max(0, Number(costUnit || 0)) * quantity,
+      cost_source: Number(costUnit || 0) > 0 ? 'snapshot' : 'unset',
+      status: 'processing',
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      qr_payload: '',
+      payment_method: 'redeem',
+      payment_provider: 'redeem',
+      provider_transaction_id: '',
+      provider_checkout_url: '',
+      delivery_mode: deliveryMode
+    });
+
+    await tg.sendMessage(chatId, `⏳ Kode <b>${escapeHtml(code)}</b> valid. Produk sedang diproses...`, { parse_mode: 'HTML' }).catch(() => null);
+    const result = await paymentService.fulfillPaidOrder({ order: savedOrder, buyer: from, source: 'redeem-code' });
+    await db.completeRedeemCode(code, from.id, invoice);
+    botReadCache.histories.delete(String(from.id));
+    cachedProducts(true).catch(() => null);
+    if (result?.po_waiting) {
+      return tg.sendMessage(chatId, `✅ <b>REDEEM BERHASIL</b>\nKode sudah ditukar dengan <b>${escapeHtml(product.nama)}</b>${selectionOrder.variant_name ? ` · ${escapeHtml(selectionOrder.variant_name)}` : ''}. Pesanan sedang menunggu pengiriman otomatis/seller.`, { parse_mode: 'HTML' });
+    }
+    return null;
+  } catch (error) {
+    let transaction = null;
+    if (invoice) transaction = await db.getTransactionByOrderRef(invoice).catch(() => null);
+    if (transaction && claimed) {
+      await db.completeRedeemCode(code, from.id, invoice).catch(() => null);
+    } else if (claimed) {
+      await db.releaseRedeemCode(code, from.id).catch(() => null);
+      if (savedOrder) await db.deletePendingOrder(from.id, invoice).catch(() => null);
+    }
+    const message = String(error?.message || error || 'Redeem gagal.');
+    return tg.sendMessage(chatId, `⚠️ Redeem gagal: ${escapeHtml(message.slice(0, 500))}`, { parse_mode: 'HTML' });
+  }
 }
 
 async function beginTopup(query) {
@@ -1339,6 +1469,7 @@ async function sendHelp(chatId, from) {
     `*Command User:*\n` +
     `/start - Buka menu utama\n` +
     `/produk - Lihat daftar produk\n` +
+    `/redeem KODE - Tukarkan kode dengan produk\n` +
     `/cekorder - Cek pesanan/riwayat transaksi\n` +
     `/help - Tampilkan bantuan\n/lisensi - Cek masa aktif bot\n\n` +
     `*Cara Order:*\n` +
@@ -1606,6 +1737,7 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   }
   if (lower.startsWith('/produk') || lower.startsWith('/listproduk')) return sendProductList(chatId);
   if (lower.startsWith('/saldo') || lower.startsWith('/wallet') || lower.startsWith('/referral')) return sendWalletPage(chatId, from);
+  if (lower.startsWith('/redeem')) { const code=redeemCodeFromCommand(text); return code ? processRedeemCode(chatId, from, code) : sendRedeemPrompt(chatId); }
   if (lower.startsWith('/topup')) {
     return tg.sendMessage(chatId, `➕ <b>TOP UP SALDO</b>\nKlik tombol di bawah untuk memasukkan nominal top up.`, {
       parse_mode: 'HTML',
@@ -1812,6 +1944,8 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
     const top = (r.by_product || []).slice(0, 8).map((p, i) => `${i + 1}. *${escapeMarkdownText(p.name)}* \`${escapeMarkdownText(p.code)}\`\n   Qty: *${p.quantity}* | Total: *${formatRupiah(p.total_price)}*`).join('\n\n') || '-';
     return tg.sendMessage(chatId, `📊 *REKAP PENJUALAN ${String(r.month).padStart(2, '0')}/${r.year}*\n=======================\nTotal Order: *${r.orders}*\nTotal Produk Terjual: *${r.quantity}*\nTotal Omzet: *${formatRupiah(r.total_price)}*\n\n*Top Produk:*\n${top}`, { parse_mode: 'Markdown' });
   }
+
+  if (redeemReplyMessage(msg)) return processRedeemCode(chatId, from, text);
 
   const pendingTopup = await db.getPendingTopupByUser(from.id).catch(() => null);
   if (pendingTopup?.status === 'waiting_amount') {
@@ -2370,6 +2504,7 @@ async function handleCallbackQuery(query, req) {
   }
 
   if (cmd === 'wallet') return sendWalletPage(query.message.chat.id, query.from, query);
+  if (cmd === 'redeem') { await answerCallback(query); return sendRedeemPrompt(query.message.chat.id); }
   if (cmd === 'topup') return beginTopup(query);
   if (cmd.startsWith('cektopup:')) return checkTopup(query, cmd.slice('cektopup:'.length));
   if (cmd.startsWith('bataltopup:')) return cancelTopup(query, cmd.slice('bataltopup:'.length));

@@ -736,6 +736,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'users') return json(res, 200, { ok: true, data: await db.listUsers(200) });
     if (req.method === 'GET' && action === 'buyer-lookup') return json(res, 200, { ok: true, data: await lookupBuyerAccounts(req.query?.q || '') });
     if (req.method === 'GET' && action === 'vouchers') return json(res, 200, { ok: true, data: await db.listVouchers(200) });
+    if (req.method === 'GET' && action === 'redeem-codes') return json(res, 200, { ok: true, data: await db.listRedeemCodes(500) });
     if (req.method === 'GET' && action === 'rekap') return json(res, 200, { ok: true, data: await db.getMonthlyRekap(req.query?.month, req.query?.year) });
     if (req.method === 'GET' && action === 'settings') return json(res, 200, { ok: true, data: await db.getShopSettings() });
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
@@ -1632,6 +1633,69 @@ module.exports = async function handler(req, res) {
       if (!telegramId) return json(res, 400, { ok: false, error: 'ID Telegram user wajib diisi.' });
       await db.deleteUser(telegramId);
       return json(res, 200, { ok: true });
+    }
+
+    if (action === 'generate-redeem-codes') {
+      const body = bodyOf(req);
+      const productCode = String(body.product_code || '').trim().toUpperCase();
+      const variantKey = String(body.variant_key || '').trim().toUpperCase();
+      const quantity = Math.max(1, Math.min(100, Number(body.quantity || 1)));
+      const count = Math.max(1, Math.min(100, Number(body.count || 1)));
+      const prefix = String(body.prefix || 'RDM').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'RDM';
+      const expiresAtRaw = String(body.expires_at || '').trim();
+      const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+      if (!productCode) return json(res, 400, { ok: false, error: 'Produk redeem wajib dipilih.' });
+      if (expiresAt && !Number.isFinite(expiresAt.getTime())) return json(res, 400, { ok: false, error: 'Tanggal kedaluwarsa tidak valid.' });
+      if (expiresAt && expiresAt.getTime() <= Date.now()) return json(res, 400, { ok: false, error: 'Tanggal kedaluwarsa harus di masa depan.' });
+      const product = await db.getProductByCode(productCode);
+      if (!product) return json(res, 404, { ok: false, error: 'Produk redeem tidak ditemukan.' });
+      if (product.active === false) return json(res, 409, { ok: false, error: 'Produk sedang nonaktif. Aktifkan produk sebelum membuat kode redeem.' });
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      let variant = null;
+      let finalVariantKey = '';
+      let variantName = '';
+      if (variants.length) {
+        if (!variantKey) return json(res, 400, { ok: false, error: 'Produk ini memiliki varian. Pilih varian untuk kode redeem.' });
+        const found = db.findVariant(product, variantKey);
+        variant = found.variant;
+        if (!variant) return json(res, 404, { ok: false, error: 'Varian redeem tidak ditemukan.' });
+        if (variant.active === false) return json(res, 409, { ok: false, error: 'Varian sedang nonaktif.' });
+        finalVariantKey = db.variantKey(variant, found.index);
+        variantName = String(variant.name || variant.nama || finalVariantKey);
+      }
+      let created = null;
+      for (let attempt = 0; attempt < 4 && !created; attempt += 1) {
+        const rows = Array.from({ length: count }, () => ({
+          code: `${prefix}-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,
+          product_code: product.kode,
+          variant_key: finalVariantKey,
+          variant_name: variantName,
+          quantity,
+          expires_at: expiresAt ? expiresAt.toISOString() : null
+        }));
+        try { created = await db.createRedeemCodes(rows); }
+        catch (error) {
+          const message = String(error?.message || error);
+          if (!/duplicate|unique|23505/i.test(message) || attempt >= 3) throw error;
+        }
+      }
+      return json(res, 200, { ok: true, data: created || [] });
+    }
+
+    if (action === 'toggle-redeem-code') {
+      const body = bodyOf(req);
+      const code = String(body.code || '').trim().toUpperCase();
+      if (!code) return json(res, 400, { ok: false, error: 'Kode redeem wajib diisi.' });
+      const row = await db.setRedeemCodeActive(code, boolOf(body.active));
+      return json(res, 200, { ok: true, data: row });
+    }
+
+    if (action === 'delete-redeem-code') {
+      const body = bodyOf(req);
+      const code = String(body.code || '').trim().toUpperCase();
+      if (!code) return json(res, 400, { ok: false, error: 'Kode redeem wajib diisi.' });
+      await db.deleteRedeemCode(code);
+      return json(res, 200, { ok: true, data: { code, deleted: true } });
     }
 
     if (action === 'add-voucher') {

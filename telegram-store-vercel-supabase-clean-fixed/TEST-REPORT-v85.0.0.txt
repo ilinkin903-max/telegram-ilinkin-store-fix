@@ -1,0 +1,15 @@
+Link Auto Order v85.0.0 - Redeem Code verification
+
+PASS
+- node --check for every JavaScript file under api/, lib/, public/, scripts/, tests/
+- tests/v85-redeem-codes.test.js: 9/9 passed
+- v84.8.2 regression + v85 targeted test run: 23/23 passed (before final idempotency hardening; v85 suite re-run after hardening: 9/9 passed)
+
+FULL npm test NOTE
+- Full test discovery executed 293 tests in this sandbox before the final hardening pass.
+- 280 passed and 13 could not start because the uploaded ZIP does not contain node_modules and runtime dependencies such as axios/dotenv were unavailable.
+- The failures were dependency-loading failures, not assertion failures from the redeem implementation.
+- npm ci was attempted but dependency installation timed out in this execution environment.
+
+Deployment requirement
+- Run supabase/update-v85-redeem-codes.sql once in Supabase SQL Editor before using Redeem on an upgraded database.

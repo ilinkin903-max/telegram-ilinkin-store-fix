@@ -1301,7 +1301,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       }
     }
     await db.deletePendingOrder(order.telegram_id, order.invoice_ref);
-    await notifyFirstPurchaseReferral(order.telegram_id);
+    if (String(order.payment_method || '').trim().toLowerCase() !== 'redeem') await notifyFirstPurchaseReferral(order.telegram_id);
     await db.markClaimDone(processKey, { invoice, source, state: poWaiting ? 'awaiting_delivery' : 'completed' });
 
     return {

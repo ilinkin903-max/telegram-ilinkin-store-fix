@@ -1936,7 +1936,157 @@ async function listSupplierOrders(limit = 100) {
   return data || [];
 }
 
-const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_suppliers','reseller_supplier_ledger','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs','reseller_workflow_run_steps'];
+
+function normalizeRedeemCode(row) {
+  if (!row) return null;
+  const expiresAt = normalizeDateTime(row.expires_at);
+  const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= Date.now());
+  const redeemed = Boolean(row.redeemed_at || String(row.status || '').toLowerCase() === 'redeemed');
+  const active = boolValue(row.active, true) && !redeemed && !expired && String(row.status || '').toLowerCase() !== 'disabled';
+  return {
+    ...row,
+    code: String(row.code || '').trim().toUpperCase(),
+    product_code: String(row.product_code || '').trim().toUpperCase(),
+    variant_key: String(row.variant_key || '').trim().toUpperCase(),
+    variant_name: String(row.variant_name || ''),
+    quantity: Math.max(1, Number(row.quantity || 1)),
+    status: redeemed ? 'redeemed' : (expired ? 'expired' : String(row.status || (active ? 'active' : 'disabled')).toLowerCase()),
+    active,
+    expired,
+    redeemed,
+    expires_at: expiresAt
+  };
+}
+
+async function listRedeemCodes(limit = 300) {
+  try {
+    const { data, error } = await sb().from('redeem_codes').select('*').order('created_at', { ascending: false }).limit(Math.max(1, Math.min(1000, Number(limit || 300))));
+    if (error) throw error;
+    return (data || []).map(normalizeRedeemCode);
+  } catch (error) {
+    if (isMissingTableError(error)) return [];
+    throw error;
+  }
+}
+
+async function getRedeemCode(code) {
+  const value = String(code || '').trim().toUpperCase();
+  if (!value) return null;
+  const { data, error } = await sb().from('redeem_codes').select('*').ilike('code', value).maybeSingle();
+  if (error) {
+    if (isMissingTableError(error)) throw new Error('Fitur Redeem belum siap. Jalankan supabase/update-v85-redeem-codes.sql terlebih dahulu.');
+    throw error;
+  }
+  return normalizeRedeemCode(data);
+}
+
+async function createRedeemCodes(rows = []) {
+  const now = new Date().toISOString();
+  const payload = (Array.isArray(rows) ? rows : [rows]).filter(Boolean).map((row) => ({
+    code: String(row.code || '').trim().toUpperCase(),
+    product_code: String(row.product_code || '').trim().toUpperCase(),
+    variant_key: String(row.variant_key || '').trim().toUpperCase(),
+    variant_name: String(row.variant_name || ''),
+    quantity: Math.max(1, Math.min(100, Number(row.quantity || 1))),
+    status: 'active',
+    active: true,
+    expires_at: normalizeDateTime(row.expires_at),
+    created_at: row.created_at || now,
+    updated_at: now
+  })).filter((row) => row.code && row.product_code);
+  if (!payload.length) throw new Error('Data kode redeem tidak lengkap.');
+  const { data, error } = await sb().from('redeem_codes').insert(payload).select('*');
+  if (error) {
+    if (isMissingTableError(error)) throw new Error('Fitur Redeem belum siap. Jalankan supabase/update-v85-redeem-codes.sql terlebih dahulu.');
+    throw error;
+  }
+  runtimeCache.bumpMany(['dashboard']);
+  return (data || []).map(normalizeRedeemCode);
+}
+
+async function setRedeemCodeActive(code, active) {
+  const value = String(code || '').trim().toUpperCase();
+  if (!value) throw new Error('Kode redeem wajib diisi.');
+  const current = await getRedeemCode(value);
+  if (!current) throw new Error('Kode redeem tidak ditemukan.');
+  if (current.redeemed) throw new Error('Kode yang sudah diredeem tidak dapat diaktifkan ulang.');
+  if (current.status === 'processing') throw new Error('Kode redeem sedang diproses dan tidak dapat diubah sampai proses selesai.');
+  const enabled = boolValue(active, true);
+  const { data, error } = await sb().from('redeem_codes').update({
+    active: enabled,
+    status: enabled ? 'active' : 'disabled',
+    claimed_by: null,
+    claimed_at: null,
+    updated_at: new Date().toISOString()
+  }).ilike('code', value).neq('status', 'processing').select('*').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Kode redeem sedang diproses dan tidak dapat diubah sampai proses selesai.');
+  runtimeCache.bumpMany(['dashboard']);
+  return normalizeRedeemCode(data);
+}
+
+async function deleteRedeemCode(code) {
+  const value = String(code || '').trim().toUpperCase();
+  if (!value) throw new Error('Kode redeem wajib diisi.');
+  const current = await getRedeemCode(value);
+  if (!current) return false;
+  if (current.redeemed) throw new Error('Kode yang sudah diredeem disimpan sebagai riwayat dan tidak dapat dihapus.');
+  if (current.status === 'processing') throw new Error('Kode redeem sedang diproses dan tidak dapat dihapus sampai proses selesai.');
+  const { data, error } = await sb().from('redeem_codes').delete().ilike('code', value).neq('status', 'processing').select('code');
+  if (error) throw error;
+  if (!Array.isArray(data) || !data.length) throw new Error('Kode redeem sedang diproses dan tidak dapat dihapus sampai proses selesai.');
+  runtimeCache.bumpMany(['dashboard']);
+  return true;
+}
+
+async function claimRedeemCode(code, telegramId) {
+  const value = String(code || '').trim().toUpperCase();
+  const userId = Number(telegramId || 0);
+  if (!value) throw new Error('Kode redeem wajib diisi.');
+  try {
+    const { data, error } = await sb().rpc('claim_redeem_code_v85', { p_code: value, p_telegram_id: userId });
+    if (error) throw error;
+    return normalizeRedeemCode(data);
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (/REDEEM_NOT_FOUND/i.test(message)) throw new Error('Kode redeem tidak ditemukan.');
+    if (/REDEEM_DISABLED/i.test(message)) throw new Error('Kode redeem sedang dinonaktifkan.');
+    if (/REDEEM_EXPIRED/i.test(message)) throw new Error('Kode redeem sudah kedaluwarsa.');
+    if (/REDEEM_USED/i.test(message)) throw new Error('Kode redeem sudah pernah digunakan.');
+    if (/REDEEM_BUSY/i.test(message)) throw new Error('Kode redeem sedang diproses oleh pengguna lain.');
+    if (/claim_redeem_code_v85|schema cache|could not find the function|PGRST202|does not exist/i.test(message)) {
+      throw new Error('Fitur Redeem belum siap. Jalankan supabase/update-v85-redeem-codes.sql terlebih dahulu.');
+    }
+    throw error;
+  }
+}
+
+async function completeRedeemCode(code, telegramId, orderRef) {
+  const { data, error } = await sb().rpc('complete_redeem_code_v85', {
+    p_code: String(code || '').trim().toUpperCase(),
+    p_telegram_id: Number(telegramId || 0),
+    p_order_ref: String(orderRef || '').trim()
+  });
+  if (error) throw error;
+  runtimeCache.bumpMany(['dashboard']);
+  return normalizeRedeemCode(data);
+}
+
+async function releaseRedeemCode(code, telegramId) {
+  try {
+    const { data, error } = await sb().rpc('release_redeem_code_v85', {
+      p_code: String(code || '').trim().toUpperCase(),
+      p_telegram_id: Number(telegramId || 0)
+    });
+    if (error) throw error;
+    return data === true;
+  } catch (error) {
+    if (isMissingTableError(error)) return false;
+    throw error;
+  }
+}
+
+const BACKUP_TABLES = ['bot_users','products','transactions','pending_orders','pending_topups','wallet_ledger','vouchers','shop_settings','broadcast_polls','broadcast_poll_messages','broadcast_poll_answers','auto_promos','backup_logs','supplier_orders','reseller_suppliers','reseller_supplier_ledger','reseller_workflows','reseller_workflow_steps','reseller_workflow_runs','reseller_workflow_run_steps','redeem_codes'];
 
 async function safeSelectAll(table) {
   try {
@@ -2064,6 +2214,7 @@ async function importBackupData(backup = {}, options = {}) {
   if (tables.pending_topups) result.pending_topups = await upsertRows('pending_topups', tables.pending_topups, 'topup_ref');
   if (tables.wallet_ledger) result.wallet_ledger = await upsertRows('wallet_ledger', tables.wallet_ledger, 'entry_key');
   if (tables.auto_promos) result.auto_promos = await upsertRows('auto_promos', tables.auto_promos, 'code');
+  if (tables.redeem_codes) result.redeem_codes = await upsertRows('redeem_codes', tables.redeem_codes, 'code');
 
   // Transactions are imported only when explicitly requested. Setelah upsert,
   // counter kanonik direkonsiliasi agar restore order yang pernah dihitung tidak
@@ -3097,4 +3248,13 @@ module.exports = {
   completeResellerWorkflowRunStep,
   listResellerWorkflowRunSteps,
   resetResellerWorkflowRunStepGuards,
+  normalizeRedeemCode,
+  listRedeemCodes,
+  getRedeemCode,
+  createRedeemCodes,
+  setRedeemCodeActive,
+  deleteRedeemCode,
+  claimRedeemCode,
+  completeRedeemCode,
+  releaseRedeemCode,
 };

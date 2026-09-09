@@ -173,13 +173,13 @@ test('restore backup direkonsiliasi dan transaksi tanpa order_ref memakai primar
   assert.match(db, /runtimeCache\.bumpMany\(\['stats', 'products', 'catalog', 'settings', 'dashboard'\]\)/);
 });
 
-test('metadata rilis v84.8.2 konsisten', () => {
+test('metadata rilis aplikasi saat ini konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
   const lock = JSON.parse(read('package-lock.json'));
-  assert.equal(pkg.version, '84.8.2');
-  assert.equal(lock.version, '84.8.2');
-  assert.equal(lock.packages[''].version, '84.8.2');
-  assert.equal(read('VERSION').trim(), 'v84.8.2');
-  assert.equal(read('VERSION.txt').trim(), 'v84.8.2');
+  assert.equal(pkg.version, '85.0.0');
+  assert.equal(lock.version, '85.0.0');
+  assert.equal(lock.packages[''].version, '85.0.0');
+  assert.equal(read('VERSION').trim(), 'v85.0.0');
+  assert.equal(read('VERSION.txt').trim(), 'v85.0.0');
   assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.2/);
 });

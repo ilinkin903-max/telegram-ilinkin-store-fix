@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "84.8.2",
+  "version": "85.0.0",
   "private": true,
-  "description": "Link Auto Order v84.8.2: canonical order counter, live dashboard refresh, accurate reports, and revision-aware caches.",
+  "description": "Link Auto Order v85.0.0: owner-generated one-time redeem codes for specific products or variants, atomic claiming, and direct fulfillment.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",
