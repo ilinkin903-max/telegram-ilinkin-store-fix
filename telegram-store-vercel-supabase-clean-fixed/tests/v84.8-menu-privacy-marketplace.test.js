@@ -81,8 +81,8 @@ test('marketplace mengganti indikator workflow Otomatis menjadi jumlah stok', ()
 
 test('metadata rilis terbaru konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '85.2.0');
-  assert.equal(read('VERSION').trim(), 'v85.2.0');
-  assert.equal(read('VERSION.txt').trim(), 'v85.2.0');
+  assert.equal(pkg.version, '85.2.1');
+  assert.equal(read('VERSION').trim(), 'v85.2.1');
+  assert.equal(read('VERSION.txt').trim(), 'v85.2.1');
   assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.2/);
 });

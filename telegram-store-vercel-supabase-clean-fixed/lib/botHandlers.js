@@ -665,24 +665,6 @@ async function sendHome(chatId, from, req, options = {}) {
 }
 
 
-async function sendProductMedia(chatId, product) {
-  const media = String(product?.image_url || '').trim();
-  if (!media) return null;
-  const mediaType = String(product?.media_type || 'image').trim().toLowerCase();
-  const caption = `📦 <b>${escapeHtml(product?.nama || 'Produk')}</b>`;
-  try {
-    if (mediaType === 'video') {
-      return await tg.sendVideoRef(chatId, media, { caption, parse_mode: 'HTML' });
-    }
-    return await tg.sendPhotoRef(chatId, media, { caption, parse_mode: 'HTML' });
-  } catch (error) {
-    // Media tidak boleh menggagalkan checkout. URL yang tidak bisa diambil Telegram
-    // tetap dapat ditampilkan oleh Marketplace.
-    console.warn('Gagal kirim media produk:', error.message || error);
-    return null;
-  }
-}
-
 function settingEnabled(value, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
   return !['false', '0', 'off', 'no'].includes(String(value).trim().toLowerCase());
@@ -2108,7 +2090,6 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
     delivery_mode: isPoProduct(product, variant) ? 'po' : 'auto',
     status: 'draft'
   });
-  await sendProductMedia(userId, product);
   return showConfirmation(query, true, { order: savedOrder, product });
 }
 

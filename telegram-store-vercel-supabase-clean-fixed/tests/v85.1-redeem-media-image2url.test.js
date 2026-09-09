@@ -57,15 +57,14 @@ test('produk menyimpan media_type dan marketplace merender video', () => {
   assert.match(ui, /detailMediaType === 'video'/);
 });
 
-test('Telegram mendukung video produk, start, dan broadcast', () => {
+test('Telegram mendukung video untuk start dan broadcast tanpa mengirim media produk saat dipilih', () => {
   const tg = read('lib/telegram.js');
   const bot = read('lib/botHandlers.js');
   const api = read('api/reseller-data.js');
   assert.match(tg, /async function sendVideoRef/);
   assert.match(tg, /callTelegram\('sendVideo'/);
-  assert.match(bot, /mediaType === 'video'/);
-  assert.match(bot, /sendProductMedia/);
-  assert.match(bot, /sendVideoRef\(chatId, media/);
+  assert.match(bot, /mediaValue && mediaType === 'video'/);
+  assert.doesNotMatch(bot, /sendProductMedia/);
   assert.match(api, /type === 'video'/);
   assert.match(api, /sendVideoRef\(id, video/);
 });

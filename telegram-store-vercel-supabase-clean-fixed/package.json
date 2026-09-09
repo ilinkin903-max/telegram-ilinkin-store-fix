@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "85.2.0",
+  "version": "85.2.1",
   "private": true,
-  "description": "Link Auto Order v85.2.0: redeem success fix and switchable AutoGoPay GoPay/ShopeePay QRIS from owner settings.",
+  "description": "Link Auto Order v85.2.1: bot product-media send removed; marketplace media and AutoGoPay GoPay/ShopeePay remain intact.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

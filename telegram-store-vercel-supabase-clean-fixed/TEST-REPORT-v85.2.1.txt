@@ -1,0 +1,22 @@
+Link Auto Order v85.2.1 - Test Report
+========================================
+
+Perubahan yang diuji:
+- Bot tidak mengirim gambar/video produk saat user memilih produk.
+- Bot tidak mengirim gambar/video produk saat user memilih varian.
+- Flow tetap masuk ke showConfirmation setelah pending order dibuat.
+- Media produk tetap tersedia untuk Marketplace.
+- Video/gambar untuk /start dan broadcast tetap tersedia.
+- Fitur redeem v85/v85.1 dan GoPay/ShopeePay v85.2 tetap lolos regression test terpilih.
+
+Hasil test terpilih:
+- 22 passed
+- 0 failed
+
+Syntax check:
+- lib/botHandlers.js: PASS
+- tests/v85.1-redeem-media-image2url.test.js: PASS
+- tests/v85.2.1-no-product-media-bot.test.js: PASS
+
+Database:
+- Tidak ada SQL/migration baru untuk v85.2.1.
