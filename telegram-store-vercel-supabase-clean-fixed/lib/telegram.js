@@ -84,6 +84,15 @@ async function sendPhotoRef(chatId, photo, options = {}) {
   });
 }
 
+async function sendVideoRef(chatId, video, options = {}) {
+  return callTelegram('sendVideo', {
+    chat_id: chatId,
+    video,
+    supports_streaming: true,
+    ...options
+  });
+}
+
 async function sendSticker(chatId, sticker, options = {}) {
   return callTelegram('sendSticker', {
     chat_id: chatId,
@@ -167,6 +176,7 @@ module.exports = {
   deleteMessage,
   sendPhoto,
   sendPhotoRef,
+  sendVideoRef,
   sendSticker,
   sendPoll,
   getChatMember,

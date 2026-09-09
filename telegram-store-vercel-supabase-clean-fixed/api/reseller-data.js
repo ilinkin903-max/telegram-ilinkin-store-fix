@@ -634,6 +634,35 @@ async function importProdSellerProduct(body = {}) {
   });
 }
 
+async function uploadImageToImage2Url(payload = {}) {
+  const dataUrl = String(payload.data_url || payload.dataUrl || '').trim();
+  const filename = String(payload.filename || 'upload-image').trim().slice(0, 160) || 'upload-image';
+  if (dataUrl.length > 3 * 1024 * 1024) throw new Error('Payload gambar terlalu besar. Maksimal 2 MB per gambar.');
+  const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) throw new Error('File gambar tidak valid. Gunakan PNG, JPG/JPEG, GIF, atau WEBP.');
+  const mime = String(match[1]).toLowerCase().replace('image/jpg', 'image/jpeg');
+  const buffer = Buffer.from(match[2].replace(/\s+/g, ''), 'base64');
+  if (!buffer.length) throw new Error('File gambar kosong.');
+  if (buffer.length > 2 * 1024 * 1024) throw new Error('Upload langsung Image2URL maksimal 2 MB. Untuk file lebih besar, gunakan workspace Image2URL di Media Hub.');
+
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: mime }), filename);
+  const response = await fetch('https://www.image2url.com/api/upload', {
+    method: 'POST',
+    body: form,
+    headers: { 'Accept': 'application/json' }
+  });
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+  const url = String(data?.url || data?.data?.url || data?.result?.url || (/^https?:\/\//i.test(raw.trim()) ? raw.trim() : '')).trim();
+  if (!response.ok || !/^https:\/\//i.test(url)) {
+    const detail = String(data?.error || data?.message || raw || `HTTP ${response.status}`).slice(0, 500);
+    throw new Error(`Image2URL gagal mengunggah gambar: ${detail}`);
+  }
+  return { url, media_type: 'image', provider: 'image2url', size_bytes: buffer.length };
+}
+
 async function broadcast(payload = {}, req = null) {
   const typeForLock = String(payload.type || 'text').toLowerCase();
   const requestId = String(payload.request_id || payload.requestId || '').trim();
@@ -642,6 +671,7 @@ async function broadcast(payload = {}, req = null) {
     message: String(payload.message || '').trim(),
     caption: String(payload.caption || '').trim(),
     photo: String(payload.photo || payload.image_url || '').trim(),
+    video: String(payload.video || payload.video_url || '').trim(),
     sticker: String(payload.sticker || payload.sticker_file_id || '').trim()
   });
   // request_id dibuat baru setiap kali owner menekan Kirim. Dengan begitu konten/foto/stiker
@@ -659,6 +689,7 @@ async function broadcast(payload = {}, req = null) {
   const message = String(payload.message || '').trim();
   const caption = String(payload.caption || '').trim();
   const photo = String(payload.photo || payload.image_url || '').trim();
+  const video = String(payload.video || payload.video_url || '').trim();
   const sticker = String(payload.sticker || payload.sticker_file_id || '').trim();
   const orderMarkup = broadcastOrderMarkup(payload, req);
   let sent = 0;
@@ -669,6 +700,10 @@ async function broadcast(payload = {}, req = null) {
     if (type === 'photo') {
       if (!photo) throw new Error('URL/file_id gambar wajib diisi.');
       return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined, ...(orderMarkup ? { reply_markup: orderMarkup } : {}) });
+    }
+    if (type === 'video') {
+      if (!video) throw new Error('URL/file_id video wajib diisi.');
+      return tg.sendVideoRef(id, video, { caption: caption || message || undefined, ...(orderMarkup ? { reply_markup: orderMarkup } : {}) });
     }
     if (type === 'sticker') {
       if (!sticker) throw new Error('File ID stiker wajib diisi.');
@@ -789,6 +824,11 @@ module.exports = async function handler(req, res) {
     }
 
     const body = bodyOf(req);
+
+    if (action === 'image2url-upload') {
+      const data = await uploadImageToImage2Url(body);
+      return json(res, 200, { ok: true, data });
+    }
 
     if (action === 'reseller-supplier-save') {
       const id = String(body.id || '').trim();
@@ -1487,6 +1527,7 @@ module.exports = async function handler(req, res) {
       const deskripsi = String(body.deskripsi || '').trim();
       const snk = String(body.snk || '').trim();
       const image_url = String(body.image_url || '').trim();
+      const media_type = String(body.media_type || 'image').trim().toLowerCase() === 'video' ? 'video' : 'image';
       const category = String(body.category || body.kategori || '').trim();
       const display_scope = String(body.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
       const delivery_mode = String(body.delivery_mode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto';
@@ -1498,7 +1539,7 @@ module.exports = async function handler(req, res) {
       const finalDeskripsi = deskripsi || (hasVariants ? (variants[0].description || 'Produk dengan varian.') : '');
       const finalSnk = snk || (hasVariants ? (variants[0].snk || 'Syarat mengikuti varian yang dipilih.') : '');
       if (!nama || !kode || !finalHarga || !finalDeskripsi || !finalSnk) return json(res, 400, { ok: false, error: hasVariants ? 'Nama, kode, dan minimal satu varian dengan harga wajib diisi.' : 'Nama, kode, harga, deskripsi, dan SnK wajib diisi.' });
-      const product = await db.addProduct({ nama, kode, harga: finalHarga, cost_price: finalCostPrice, deskripsi: finalDeskripsi, snk: finalSnk, image_url, category, display_scope, delivery_mode, bulk_prices, variants, data: delivery_mode === 'po' ? [] : splitStock(body.stock_text || '') });
+      const product = await db.addProduct({ nama, kode, harga: finalHarga, cost_price: finalCostPrice, deskripsi: finalDeskripsi, snk: finalSnk, image_url, media_type, category, display_scope, delivery_mode, bulk_prices, variants, data: delivery_mode === 'po' ? [] : splitStock(body.stock_text || '') });
       return json(res, 200, { ok: true, data: product });
     }
 
@@ -1540,7 +1581,7 @@ module.exports = async function handler(req, res) {
       const code = String(body.current_code || body.kode || '').trim().toUpperCase();
       if (!code) return json(res, 400, { ok: false, error: 'Kode produk wajib diisi.' });
       const updates = {};
-      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'category', 'display_scope', 'delivery_mode'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
+      ['nama', 'kode', 'deskripsi', 'snk', 'image_url', 'media_type', 'category', 'display_scope', 'delivery_mode'].forEach((key) => { if (body[key] !== undefined) updates[key] = body[key]; });
       if (body.active !== undefined) updates.active = boolOf(body.active);
       if (body.kategori !== undefined) updates.category = body.kategori;
       if (body.harga !== undefined) updates.harga = numberOf(body.harga);

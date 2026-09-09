@@ -296,6 +296,7 @@ async function broadcastToUsers(payload = {}) {
   const message = String(payload.message || '').trim();
   const caption = String(payload.caption || '').trim();
   const photo = String(payload.photo || payload.image_url || '').trim();
+  const video = String(payload.video || payload.video_url || '').trim();
   const sticker = String(payload.sticker || payload.sticker_file_id || '').trim();
   const fromChatId = payload.from_chat_id || payload.fromChatId;
   const messageId = payload.message_id || payload.messageId;
@@ -316,6 +317,7 @@ async function broadcastToUsers(payload = {}) {
       catch (e) { return tg.copyMessage(id, fromChatId, messageId); }
     }
     if (type === 'photo') return tg.sendPhotoRef(id, photo, { caption: caption || message || undefined });
+    if (type === 'video') return tg.sendVideoRef(id, video, { caption: caption || message || undefined });
     if (type === 'sticker') {
       await tg.sendSticker(id, sticker);
       if (message) await tg.sendMessage(id, message);
@@ -636,6 +638,18 @@ async function sendHome(chatId, from, req, options = {}) {
     }
   }
 
+  if (mediaValue && mediaType === 'video') {
+    try {
+      return await tg.sendVideoRef(chatId, mediaValue, {
+        caption: mediaCaption || text,
+        parse_mode: mediaCaption ? undefined : 'HTML',
+        reply_markup
+      });
+    } catch (error) {
+      console.error('Gagal kirim video /start:', error.message);
+    }
+  }
+
   if (mediaValue && mediaType === 'sticker') {
     try {
       await tg.sendSticker(chatId, mediaValue);
@@ -650,6 +664,24 @@ async function sendHome(chatId, from, req, options = {}) {
   });
 }
 
+
+async function sendProductMedia(chatId, product) {
+  const media = String(product?.image_url || '').trim();
+  if (!media) return null;
+  const mediaType = String(product?.media_type || 'image').trim().toLowerCase();
+  const caption = `📦 <b>${escapeHtml(product?.nama || 'Produk')}</b>`;
+  try {
+    if (mediaType === 'video') {
+      return await tg.sendVideoRef(chatId, media, { caption, parse_mode: 'HTML' });
+    }
+    return await tg.sendPhotoRef(chatId, media, { caption, parse_mode: 'HTML' });
+  } catch (error) {
+    // Media tidak boleh menggagalkan checkout. URL yang tidak bisa diambil Telegram
+    // tetap dapat ditampilkan oleh Marketplace.
+    console.warn('Gagal kirim media produk:', error.message || error);
+    return null;
+  }
+}
 
 function settingEnabled(value, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -1978,6 +2010,18 @@ Contoh error: ${escapeMarkdownText(result.errors[0]).slice(0, 500)}` : '';
     });
   }
 
+  // v85.1: kode redeem boleh dikirim langsung tanpa /redeem.
+  // Pengecekan diletakkan setelah input top up/voucher agar teks untuk flow aktif
+  // tidak salah dibaca sebagai kode redeem. Hanya kode yang benar-benar ada di DB
+  // yang diteruskan ke processRedeemCode; teks biasa tetap masuk fallback lama.
+  if (!String(text || '').trim().startsWith('/')) {
+    const plainRedeemCode = String(text || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (/^[A-Z0-9-]{4,64}$/.test(plainRedeemCode)) {
+      const existingRedeem = await db.getRedeemCode(plainRedeemCode).catch(() => null);
+      if (existingRedeem) return processRedeemCode(chatId, from, plainRedeemCode);
+    }
+  }
+
   return tg.sendMessage(chatId, 'Perintah tidak dikenal. Ketik /start untuk membuka menu.');
 }
 
@@ -2043,6 +2087,7 @@ async function startOrderWithSelection(query, product, variant, index = -1) {
     delivery_mode: isPoProduct(product, variant) ? 'po' : 'auto',
     status: 'draft'
   });
+  await sendProductMedia(userId, product);
   return showConfirmation(query, true, { order: savedOrder, product });
 }
 

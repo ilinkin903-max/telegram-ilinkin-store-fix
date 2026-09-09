@@ -188,6 +188,11 @@ module.exports = async function handler(req, res) {
     .supplierPanel{background:#d9fbff}.supplierHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.supplierStat{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:12px;background:#fff}.supplierStat:nth-child(2){background:var(--lime)}.supplierStat:nth-child(3){background:var(--yellow)}.supplierStat:nth-child(4){background:#e6d7ff}.supplierStat small{display:block;font-size:10px;text-transform:uppercase}.supplierStat b{display:block;font-size:20px;margin-top:5px}.supplierToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.supplierToolbar .input{flex:1;min-width:220px}.supplierGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.supplierCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px;display:flex;flex-direction:column;gap:9px}.supplierCard.selected{background:#f3ffe0}.supplierCardTop{display:flex;gap:10px;align-items:flex-start}.supplierThumb{width:64px;height:64px;object-fit:cover;border:2px solid #000;border-radius:8px;background:#eee}.supplierThumbFallback{width:64px;height:64px;border:2px solid #000;border-radius:8px;background:var(--cyan);display:grid;place-items:center;font-size:25px}.supplierCard h3{margin:0;font-size:17px;line-height:1.2}.supplierMeta{font-size:12px;line-height:1.5;color:#333}.supplierPriceRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.supplierOrderList{display:grid;gap:9px}.supplierOrder{border:2px solid #000;border-radius:8px;background:#fff;padding:10px;font-size:12px;line-height:1.5}.supplierOrder.error{background:#ffd8d8}.supplierOrder.delivered{background:#e4ffd1}.supplierConfigWarning{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:14px;background:var(--yellow);margin-bottom:12px}.supplierApiBadge{display:inline-flex;border:2px solid #000;border-radius:999px;padding:4px 8px;font-size:10px;background:var(--lime)}
     .workflowPanel{background:#eefcff}.workflowStatus{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0}.workflowStat{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);padding:10px;background:#fff}.workflowStat b{display:block;font-size:17px;margin-top:4px}.workflowRecorder{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:12px;margin-top:12px}.workflowMessage{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:13px;min-height:150px}.workflowMessage pre{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-weight:800;margin:8px 0}.workflowButtons{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.workflowButtons .workflowButtonSelected{background:#36c66b!important;border-color:#126b36!important;color:#fff!important;box-shadow:0 0 0 2px #126b36 inset,3px 3px 0 rgba(0,0,0,.18)}.workflowButtons .workflowButtonSelected::before{content:'✓ ';font-weight:900}.workflowButtons .workflowButtonQuantity{background:#7b61ff!important;color:#fff!important;border-color:#4d39b7!important}.workflowButtonPicker{display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:2px dashed #000;border-radius:8px;background:#f7f7ff}.workflowButtonPicker button.selected{background:#36c66b!important;border-color:#126b36!important;color:#fff!important}.workflowButtonPicker button:disabled{opacity:.5}.workflowSteps{display:grid;gap:8px}.workflowStep{border:2px solid #000;border-radius:8px;background:#fff;padding:10px;font-size:12px;line-height:1.45}.workflowStep.result{background:#e2ffd4}.workflowStep .stepResponse{margin-top:6px;padding:7px;border:2px dashed #000;background:#f8f8f8;white-space:pre-wrap;word-break:break-word;max-height:130px;overflow:auto}.workflowList{display:grid;gap:9px}.workflowCard{border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#fff;padding:12px}.workflowCard.active{background:#e4ffd1}.workflowRun.attention{background:#ffd8d8}.workflowRun.delivered{background:#e4ffd1}.workflowPlaceholder{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}.workflowPlaceholder button{font-size:11px}.workflowDanger{background:#ffd8d8;border:2px solid #000;padding:9px;border-radius:7px}.workflowHint{background:#fff6b9;border:2px solid #000;padding:9px;border-radius:7px;font-size:12px;line-height:1.45}.workflowMessageChoice{border:2px solid #000;border-radius:8px;padding:10px;margin-top:9px;background:#fff}.workflowMessageChoice.selected{background:#e4ffd1;box-shadow:3px 3px 0 #000}.workflowMessageChoice.pending{background:#fff6b9}.workflowMessageChoice .messageHead{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.workflowMessageChoice pre{max-height:180px;overflow:auto}.workflowSelectableText{width:100%;min-height:120px;max-height:220px;resize:vertical;border:2px solid #000;border-radius:7px;background:#f8f8f8;padding:9px;font:800 12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}.workflowMessageChoice.selected .workflowSelectableText{background:#fff}.workflowSelectionInfo{font-size:11px;font-weight:800;margin-top:6px}.workflowCategoryBox{border:2px solid #000;border-radius:8px;padding:10px;background:#f5f5ff}.workflowCategoryBox.quantity{background:#e5fbff}.workflowSelectionWarning{background:#ffdca8;border:2px solid #000;border-radius:7px;padding:8px;margin-top:8px;font-size:12px;font-weight:800}
     @media(max-width:700px){.supplierHero,.workflowStatus{grid-template-columns:1fr 1fr}.supplierPriceRow{grid-template-columns:1fr}.supplierToolbar .input{min-width:100%}.workflowRecorder{grid-template-columns:1fr}}
+    /* v85.1: Media Hub Image2URL */
+    .mediaHubGrid{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:14px;align-items:start}.mediaHubPanel{background:#e8fff0}.mediaHubProvider{background:#e9f7ff}.mediaHubPreview{min-height:220px;border:var(--line);border-radius:var(--radius);background:#f5f5f5;display:grid;place-items:center;overflow:hidden}.mediaHubPreview img,.mediaHubPreview video{width:100%;max-height:360px;object-fit:contain;display:block;background:#111}.image2urlFrame{width:100%;height:650px;border:var(--line);border-radius:var(--radius);background:#fff}.mediaHubStatus{border:2px dashed #111;border-radius:10px;background:#fff;padding:10px;font-size:12px;line-height:1.45}.mediaHubActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mediaHubActions .btn{width:100%}.mediaInline{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px}.mediaProviderButtons{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.mediaProviderButtons .btn{text-decoration:none}.mediaNote{background:#fff7c4;border:2px solid #111;border-radius:10px;padding:10px;font-size:12px;line-height:1.45}.mediaTypeBadge{display:inline-block;border:2px solid #000;border-radius:999px;background:var(--cyan);padding:3px 8px;font-size:10px}.mediaUploadButton{margin-top:4px}
+    @media(max-width:860px){.mediaHubGrid{grid-template-columns:1fr}.image2urlFrame{height:560px}}
+    @media(max-width:620px){.mediaInline,.mediaHubActions{grid-template-columns:1fr}.image2urlFrame{height:480px}}
+
     /* v84.7: chat pembeli langsung dari dashboard */
     .buyerChatLookup{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:end;border:var(--line);box-shadow:var(--soft);border-radius:var(--radius);background:#d9fbff;padding:11px;margin-bottom:12px}.buyerChatLookup .field{min-width:0}.buyerChatLookup .btn{min-height:46px;white-space:nowrap}.buyerChatBtn{background:var(--cyan)!important;color:#000!important}.orderActions{grid-template-columns:repeat(3,minmax(0,1fr))}.poActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.poActions .btn{width:100%}.buyerResultList{display:grid;gap:8px}.buyerResult{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:2px solid #000;border-radius:8px;background:#f8fafc;padding:9px}.buyerResult small{display:block;color:#64748b;margin-top:3px}.buyerResult .btn{white-space:nowrap}.userActions{flex-wrap:wrap;min-width:220px}.userActions .buyerChatBtn{min-width:66px}.topUserActions{display:flex;justify-content:flex-end;margin-top:8px}.topUserActions .btn{min-width:120px}.modalBuyerActions{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px}
     @media(max-width:760px){.buyerChatLookup{grid-template-columns:1fr}.buyerChatLookup .btn{width:100%}.orderActions{grid-template-columns:1fr 1fr}.orderActions .buyerChatBtn{grid-column:1/-1}.poActions{grid-template-columns:1fr}.buyerResult{grid-template-columns:1fr}.buyerResult .btn{width:100%}.modalBuyerActions{grid-template-columns:1fr}.userActions{min-width:0}}
@@ -215,6 +220,7 @@ module.exports = async function handler(req, res) {
     <button class="tile" data-tab="broadcast"><span class="ico">📣</span>Broadcast</button>
     <button class="tile" data-tab="promos"><span class="ico">🎟</span>Promo</button>
     <button class="tile" data-tab="redeem"><span class="ico">🎁</span>Redeem</button>
+    <button class="tile" data-tab="mediaHub"><span class="ico">🖼️</span>Media</button>
     <button class="tile" data-tab="settings"><span class="ico">⚙️</span>Pengaturan</button>
   </nav>
 
@@ -257,7 +263,7 @@ module.exports = async function handler(req, res) {
         </div>
         <div class="row3">
           <div class="field"><label class="label">Kategori</label><input class="input" name="category" placeholder="Contoh: Akun Premium"></div>
-          <div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive"></div></div>
+          <div class="field"><label class="label">Media Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar / Video Produk</div><select class="select" name="media_type"><option value="image">Gambar</option><option value="video">Video</option></select><input class="input" name="image_url" placeholder="URL HTTPS hasil Image2URL"><button class="btn small cyan mediaUploadButton" type="button" id="addProductMediaHub">📤 Upload via Image2URL</button></div></div>
           <div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both">Bot Telegram + Marketplace</option><option value="marketplace">Marketplace saja</option></select><p class="help">Marketplace saja tidak akan muncul pada daftar /produk dan stok di bot.</p></div>
         </div>
         <div class="row">
@@ -301,9 +307,10 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
         <h2 class="sectionTitle">Kirim Broadcast</h2>
         <p class="help">Pilih satu jenis broadcast. Kolom yang tidak sesuai tipe akan diabaikan.</p>
         <form id="broadcastForm" class="form">
-          <div class="field"><label class="label">Jenis Broadcast</label><select class="select" name="type"><option value="text">Teks</option><option value="photo">Gambar URL / file_id</option><option value="sticker">Stiker file_id</option></select></div>
+          <div class="field"><label class="label">Jenis Broadcast</label><select class="select" name="type"><option value="text">Teks</option><option value="photo">Gambar URL / file_id</option><option value="video">Video URL / file_id</option><option value="sticker">Stiker file_id</option></select></div>
           <div class="field"><label class="label">Pesan / Caption</label><textarea class="textarea" name="message" placeholder="Contoh: Stok Canva sudah tersedia, cek sekarang."></textarea></div>
           <div class="field"><label class="label">Gambar</label><input class="input" name="photo" placeholder="URL HTTPS atau file_id foto Telegram"></div>
+          <div class="field"><label class="label">Video</label><input class="input" name="video" placeholder="URL HTTPS video (disarankan MP4) atau file_id Telegram"><button class="btn small cyan mediaUploadButton" type="button" id="broadcastMediaHub">📤 Ambil dari Media Hub</button></div>
           <div class="field"><label class="label">Stiker</label><input class="input" name="sticker" placeholder="file_id stiker, contoh CAACAg..."></div>
           <div class="broadcastOrderBox">
             <label class="switchLabel"><input id="broadcastOrderEnabled" type="checkbox" name="order_button_enabled" value="true"><span class="toggleTrack"></span><span>Tambahkan tombol “Order Sekarang”</span></label>
@@ -315,6 +322,27 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       <div class="panel pollPanel"><h2 class="sectionTitle">Polling Broadcast</h2><p class="help">Draft dan hasil polling disatukan di halaman Broadcast agar menu utama tidak dobel.</p><div id="pollList"></div></div>
     </div>
   </section>
+  <section id="mediaHub" class="section">
+    <div class="panel sectionToolbar"><div><h2 class="sectionTitle">Media Hub · Image2URL</h2><p class="help">Upload gambar langsung dari dashboard, buka workspace Image2URL untuk video, lalu gunakan URL hasilnya untuk produk, /start, broadcast, bot, dan marketplace.</p></div><a class="btn yellow" href="https://www.image2url.com/id/dashboard" target="_blank" rel="noopener noreferrer">Buka Image2URL ↗</a></div>
+    <div class="mediaHubGrid">
+      <div class="panel mediaHubPanel">
+        <h2 class="sectionTitle">Upload & URL Media</h2>
+        <div class="field"><label class="label">Upload Gambar Langsung</label><input class="input" id="image2urlFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><p class="help">PNG/JPG/GIF/WEBP. Upload langsung memakai endpoint Image2URL. Maksimal 2 MB per gambar.</p><button class="btn lime" id="image2urlUploadBtn" type="button">⬆️ Upload Gambar ke Image2URL</button></div>
+        <div class="mediaHubStatus" id="image2urlStatus">Belum ada upload. Untuk video, gunakan workspace Image2URL di panel kanan lalu salin URL hasilnya.</div>
+        <div class="mediaInline" style="margin-top:10px"><div class="field"><label class="label">Tipe Media</label><select class="select" id="mediaHubType"><option value="image">Gambar</option><option value="video">Video</option></select></div><div class="field"><label class="label">URL Hasil Image2URL</label><input class="input" id="mediaHubUrl" type="url" placeholder="https://..."></div></div>
+        <div class="mediaHubPreview" id="mediaHubPreview"><span class="help">Preview media akan muncul di sini.</span></div>
+        <div class="mediaHubActions" style="margin-top:10px"><button class="btn cyan" id="mediaHubPaste" type="button">📋 Paste URL</button><button class="btn yellow" id="mediaHubCopy" type="button">📄 Copy URL</button><button class="btn lime" id="mediaUseProduct" type="button">📦 Pakai di Tambah Produk</button><button class="btn purple" id="mediaUseBroadcast" type="button">📣 Pakai di Broadcast</button><button class="btn orange" id="mediaUseStart" type="button">▶️ Pakai di /start</button><button class="btn red" id="mediaHubClear" type="button">Bersihkan</button></div>
+        <div class="mediaNote" style="margin-top:10px"><b>Video:</b> untuk kompatibilitas paling aman di Telegram dan browser marketplace, gunakan URL video publik HTTPS dengan format MP4. Image2URL berjalan sebagai layanan pihak ketiga; URL harus tetap dapat diakses publik.</div>
+      </div>
+      <div class="panel mediaHubProvider">
+        <h2 class="sectionTitle">Workspace Image2URL</h2>
+        <div class="mediaProviderButtons"><button class="btn cyan" id="image2urlDashboardView" type="button">Dashboard</button><button class="btn purple" id="image2urlVideoView" type="button">Video to URL</button><a class="btn yellow" href="https://www.image2url.com/id/video-to-url" target="_blank" rel="noopener noreferrer">Video di Tab Baru ↗</a></div>
+        <p class="help">Workspace ditampilkan di dashboard. Jika browser/provider memblokir iframe atau login pihak ketiga, gunakan tombol tab baru, lalu paste URL hasilnya ke kolom di kiri.</p>
+        <iframe class="image2urlFrame" id="image2urlFrame" src="https://www.image2url.com/id/dashboard" title="Image2URL Dashboard" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+    </div>
+  </section>
+
   <section id="maintenance" class="section">
     <button class="btn yellow" data-tab="settings" type="button" style="margin-bottom:12px">← Kembali ke Pengaturan</button>
     <div class="panel orange"><h2 class="sectionTitle">Maintenance Database</h2><p class="help">Bersihkan data lama agar Supabase Free tetap ringan. Pilih target dengan hati-hati. Data yang dihapus tidak bisa dikembalikan kecuali kamu punya backup.</p><div id="maintenanceStats" class="detailGrid"></div></div>
@@ -433,7 +461,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       <div class="settingsSubNav">
         <button class="settingsSubBtn" data-tab="storeSettings" type="button"><span class="ico">🏪</span><b>Pengaturan Toko</b><small>Nama toko, logo, customer service, dan grup.</small></button>
         <button class="settingsSubBtn" data-tab="bannerSettings" type="button"><span class="ico">🖼️</span><b>Banner Promosi</b><small>Kelola gambar promosi dan kecepatan pergantian.</small></button>
-        <button class="settingsSubBtn" data-tab="startSettings" type="button"><span class="ico">▶️</span><b>Media /start</b><small>Atur gambar, stiker, dan caption pembuka bot.</small></button>
+        <button class="settingsSubBtn" data-tab="startSettings" type="button"><span class="ico">▶️</span><b>Media /start</b><small>Atur gambar, video, stiker, dan caption pembuka bot.</small></button>
         <button class="settingsSubBtn" data-tab="walletSettings" type="button"><span class="ico">💰</span><b>Saldo, Referral & Top Up</b><small>Atur hadiah referral, isi saldo, dan pembayaran memakai saldo.</small></button>
         <button class="settingsSubBtn" data-tab="supplierSettings" type="button"><span class="ico">🔄</span><b>Supplier / Reseller</b><small>Kelola Supplier 1, Supplier 2, saldo manual, modal, stok perkiraan, serta ProdSeller.</small></button>
         <button class="settingsSubBtn" data-tab="workflowSettings" type="button"><span class="ico">🎙️</span><b>Workflow Reseller</b><small>Rekam /start, klik tombol, atau kirim teks ke bot supplier lalu jalankan ulang otomatis saat order.</small></button>
@@ -497,7 +525,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     <div class="panel settingsPanel">
       <h2 class="sectionTitle">Media saat user membuka /start</h2>
       <form id="startMediaForm" class="form">
-        <div class="row"><div class="field"><label class="label">Jenis Media</label><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="sticker">Stiker Telegram</option></select></div><div class="field"><label class="label">URL / File ID</label><input class="input" name="start_media_value" placeholder="URL HTTPS gambar atau file_id stiker"></div></div>
+        <div class="row"><div class="field"><label class="label">Jenis Media</label><select class="select" name="start_media_type"><option value="none">Tanpa media</option><option value="photo">Gambar toko</option><option value="video">Video toko</option><option value="sticker">Stiker Telegram</option></select></div><div class="field"><label class="label">URL / File ID</label><input class="input" name="start_media_value" placeholder="URL HTTPS gambar/video atau file_id Telegram"></div></div>
         <div class="field"><label class="label">Caption /start</label><textarea class="textarea" name="start_media_caption" placeholder="Kosongkan untuk menggunakan pesan bawaan bot."></textarea></div>
         <p class="help">Gambar memakai URL HTTPS publik atau file_id Telegram. Stiker memakai file_id stiker Telegram.</p>
         <button class="btn lime" type="submit">Simpan Media /start</button>
@@ -636,6 +664,49 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   }
   function formData(form){ var d=Object.fromEntries(new FormData(form).entries()); Object.keys(d).forEach(function(k){ if(d[k]==='') delete d[k]; }); return d; }
   function formDataRaw(form){ return Object.fromEntries(new FormData(form).entries()); }
+
+  function mediaHubCurrent(){
+    var urlEl=document.getElementById('mediaHubUrl');
+    var typeEl=document.getElementById('mediaHubType');
+    return {url:String((urlEl&&urlEl.value)||'').trim(),type:String((typeEl&&typeEl.value)||'image').toLowerCase()==='video'?'video':'image'};
+  }
+  function renderMediaHubPreview(){
+    var box=document.getElementById('mediaHubPreview'); if(!box)return;
+    var media=mediaHubCurrent();
+    if(!media.url){box.innerHTML='<span class="help">Preview media akan muncul di sini.</span>';return;}
+    if(!/^https:\/\//i.test(media.url)){box.innerHTML='<span class="help">URL harus HTTPS publik.</span>';return;}
+    if(media.type==='video') box.innerHTML='<video src="'+esc(media.url)+'" controls playsinline preload="metadata"></video>';
+    else box.innerHTML='<img src="'+esc(media.url)+'" alt="Preview Image2URL">';
+  }
+  function setMediaHubValue(url,type,status){
+    var urlEl=document.getElementById('mediaHubUrl'); var typeEl=document.getElementById('mediaHubType'); var statusEl=document.getElementById('image2urlStatus');
+    if(urlEl)urlEl.value=String(url||''); if(typeEl)typeEl.value=String(type||'image').toLowerCase()==='video'?'video':'image'; if(statusEl&&status)statusEl.textContent=status; renderMediaHubPreview(); updateMediaUseButton();
+  }
+  function updateMediaUseButton(){ var btn=document.getElementById('mediaUseProduct'); if(!btn)return; btn.textContent=state.mediaHubEditCode?('💾 Simpan Media ke '+String(state.mediaHubEditCode)):'📦 Pakai di Tambah Produk'; }
+  function openMediaHub(source,product){
+    state.mediaHubSource=source||'';
+    if(product&&product.kode){state.mediaHubEditCode=product.kode;setMediaHubValue(product.image_url||'',product.media_type||'image','Edit media produk '+product.kode+'. Pilih/upload media lalu simpan.');}
+    else {state.mediaHubEditCode='';updateMediaUseButton();}
+    closeModal(); switchTab('mediaHub');
+  }
+  function readFileDataUrl(file){ return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(String(r.result||''));};r.onerror=function(){reject(new Error('Gagal membaca file.'));};r.readAsDataURL(file);}); }
+  async function uploadImage2UrlFromDashboard(){
+    var input=document.getElementById('image2urlFile'); var btn=document.getElementById('image2urlUploadBtn'); var status=document.getElementById('image2urlStatus'); var file=input&&input.files&&input.files[0];
+    if(!file)return toast('Pilih gambar dulu.',true);
+    if(!/^image\/(png|jpeg|jpg|gif|webp)$/i.test(String(file.type||'')))return toast('Format gambar harus PNG, JPG/JPEG, GIF, atau WEBP.',true);
+    if(Number(file.size||0)>2*1024*1024)return toast('Upload langsung maksimal 2 MB. Gunakan workspace Image2URL untuk file lebih besar.',true);
+    if(btn){btn.disabled=true;btn.textContent='Mengupload...';} if(status)status.textContent='Mengupload '+file.name+' ke Image2URL...';
+    try{var dataUrl=await readFileDataUrl(file);var r=await api('image2url-upload',{data_url:dataUrl,filename:file.name});var data=r.data||{};if(!data.url)throw new Error('Image2URL tidak mengembalikan URL.');setMediaHubValue(data.url,'image','Upload berhasil. URL publik siap digunakan di bot dan marketplace.');toast('Gambar berhasil diupload ke Image2URL.');}
+    catch(e){if(status)status.textContent='Upload gagal: '+(e.message||e);toast(e.message||'Upload Image2URL gagal.',true);}
+    finally{if(btn){btn.disabled=false;btn.textContent='⬆️ Upload Gambar ke Image2URL';}}
+  }
+  async function copyMediaHubUrl(){var m=mediaHubCurrent();if(!m.url)return toast('Belum ada URL media.',true);try{await navigator.clipboard.writeText(m.url);toast('URL media disalin.');}catch(e){toast('Browser tidak mengizinkan clipboard.',true);}}
+  async function pasteMediaHubUrl(){try{var text=String(await navigator.clipboard.readText()||'').trim();if(!text)return toast('Clipboard kosong.',true);setMediaHubValue(text,mediaHubCurrent().type,'URL dari clipboard sudah dimasukkan.');}catch(e){toast('Izin baca clipboard ditolak. Paste manual ke kolom URL.',true);}}
+  function requireMediaHubUrl(){var m=mediaHubCurrent();if(!/^https:\/\//i.test(m.url)){toast('Masukkan URL HTTPS publik hasil Image2URL.',true);return null;}return m;}
+  async function useMediaHubForProduct(){var m=requireMediaHubUrl();if(!m)return;if(state.mediaHubEditCode){var code=state.mediaHubEditCode;await post('edit-product-full',{kode:code,image_url:m.url,media_type:m.type});state.mediaHubEditCode='';updateMediaUseButton();switchTab('products');return;}var f=document.getElementById('addForm');if(f){f.image_url.value=m.url;f.media_type.value=m.type;}switchTab('addProduct');toast('Media dimasukkan ke form Tambah Produk.');}
+  function useMediaHubForBroadcast(){var m=requireMediaHubUrl();if(!m)return;var f=document.getElementById('broadcastForm');if(!f)return;if(m.type==='video'){f.type.value='video';f.video.value=m.url;if(f.photo)f.photo.value='';}else{f.type.value='photo';f.photo.value=m.url;if(f.video)f.video.value='';}switchTab('broadcast');toast('Media dimasukkan ke Broadcast.');}
+  function useMediaHubForStart(){var m=requireMediaHubUrl();if(!m)return;var f=document.getElementById('startMediaForm');if(!f)return;f.start_media_type.value=m.type==='video'?'video':'photo';f.start_media_value.value=m.url;switchTab('startSettings');toast('Media dimasukkan ke pengaturan /start. Klik Simpan untuk menerapkan.');}
+
   function searchQuery(){ var el=document.getElementById('search'); return String((el&&el.value)||'').trim().toLowerCase(); }
   function textMatch(parts,q){ if(!q) return true; return parts.map(function(x){ return String(x==null?'':x).toLowerCase(); }).join(' ').indexOf(q)>=0; }
   function cleanTelegramUsername(value){ return String(value==null?'':value).trim().replace(/^@+/, '').replace(/[^A-Za-z0-9_]/g,''); }
@@ -1375,7 +1446,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function productInitial(p){ return String((p&&p.nama)||'?').trim().charAt(0).toUpperCase() || '?'; }
 
   function productColor(p){ var text=String((p&&p.kode)||(p&&p.nama)||'x'); var h=0; for(var i=0;i<text.length;i++) h=(h*31+text.charCodeAt(i))%360; return 'hsl('+h+' 85% 68%)'; }
-  function productMediaHtml(p){ if(p.image_url) return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
+  function productMediaHtml(p){ if(p.image_url){ if(String(p.media_type||'image').toLowerCase()==='video') return '<video class="productImg" src="'+esc(p.image_url)+'" muted playsinline preload="metadata"></video>'; return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; } return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
   function productVariants(p){ return Array.isArray(p&&p.variants) ? p.variants.filter(function(v){ return (v.name||v.nama||v.sku||v.kode) && Number(v.price||v.harga||0)>0; }) : []; }
   function supplierSourceOf(x){return String(x&&x.supplier_source||'').trim().toLowerCase();}
   function isExternalSupplierLink(x){var src=supplierSourceOf(x);return (src==='prodseller'||src==='telegram_workflow')&&String(x&&x.supplier_product_id||'').trim();}
@@ -1518,7 +1589,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       : '<div class="row"><div class="field"><label class="label">Sistem Pengiriman Default</label><select class="select" name="delivery_mode"><option value="auto" '+(String(p.delivery_mode||'auto')!=='po'?'selected':'')+'>Otomatis dari stok</option><option value="po" '+(String(p.delivery_mode||'auto')==='po'?'selected':'')+'>Pre-Order · kirim manual</option></select><p class="help">Pesanan PRE-ORDER baru dikirim setelah Anda mengisi produk pada menu Pesanan PO.</p></div><div class="field"><label class="label">Mode Aktif</label><div class="variantMainCompact">'+(String(p.delivery_mode||'auto')==='po'?'PRE-ORDER · tidak memotong stok otomatis':'AUTO · produk diambil dari stok setelah pembayaran')+'</div></div></div>';
     return '<form id="modalEditForm" class="form"><input type="hidden" name="kode" value="'+esc(p.kode)+'">'+
       '<div class="row3"><div class="field"><label class="label">Nama Produk</label><input class="input" name="nama" placeholder="Contoh: Canva Pro 1 Bulan" value="'+esc(p.nama||'')+'"></div><div class="field"><label class="label">Kode Produk</label><input class="input" name="kode_baru" placeholder="Contoh: CANVA1B" value="'+esc(p.kode||'')+'"></div><div class="field"><label class="label">Kategori</label><input class="input" name="category" placeholder="Contoh: Akun Premium" value="'+esc(p.category||'')+'"></div></div>'+
-      '<div class="row"><div class="field"><label class="label">Link Gambar Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar Produk</div><input class="input" name="image_url" placeholder="https://domain.com/produk.jpg atau Google Drive" value="'+esc(p.image_url||'')+'"></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ deliveryEditor+
+      '<div class="row"><div class="field"><label class="label">Media Produk</label><div class="linkFieldBox"><div class="linkFieldTitle">Gambar / Video Produk</div><select class="select" name="media_type"><option value="image" '+(String(p.media_type||'image').toLowerCase()!=='video'?'selected':'')+'>Gambar</option><option value="video" '+(String(p.media_type||'image').toLowerCase()==='video'?'selected':'')+'>Video</option></select><input class="input" name="image_url" placeholder="URL HTTPS hasil Image2URL" value="'+esc(p.image_url||'')+'"><button class="btn small cyan" type="button" id="editProductMediaHub">📤 Media Hub</button></div></div><div class="field"><label class="label">Tampilkan Produk Di</label><select class="select" name="display_scope"><option value="both" '+(p.display_scope!=='marketplace'?'selected':'')+'>Bot Telegram + Marketplace</option><option value="marketplace" '+(p.display_scope==='marketplace'?'selected':'')+'>Marketplace saja</option></select></div></div>'+ deliveryEditor+
       '<div class="row3 '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Harga Jual Satuan</label><input class="input" name="harga" type="number" placeholder="Contoh: 13000" value="'+esc(p.harga||'')+'"></div><div class="field"><label class="label">Modal Supplier / Item</label><input class="input" name="cost_price" type="number" min="0" placeholder="Contoh: 9000" value="'+esc(p.cost_price||'')+'"><p class="help">Berlaku untuk checkout berikutnya.</p></div><div class="field"><label class="label">Harga Grosir</label><textarea class="textarea" name="bulk_text" placeholder="Contoh per baris:\n5|5000\n10|9000">'+esc(bulkToText(p.bulk_prices||[]))+'</textarea></div></div>'+
       '<div class="row '+(hasVar?'hidden':'')+'" data-hide-when-edit-variant><div class="field"><label class="label">Deskripsi</label><textarea class="textarea tall" name="deskripsi" placeholder="Contoh:\nCanva EDU 1 tahun.\nLogin via email.">'+esc(p.deskripsi||'')+'</textarea></div><div class="field"><label class="label">Syarat & Ketentuan</label><textarea class="textarea tall" name="snk" placeholder="Contoh:\nGaransi 7 hari.\nDilarang ganti password.">'+esc(p.snk||'')+'</textarea></div></div>'+
       '<div class="switchBox" style="background:#f4e7ff"><label class="switchLabel"><input id="editVariantToggle" type="checkbox" '+(hasVar?'checked':'')+'><span class="toggleTrack"></span><span>Aktifkan / Edit Varian Produk</span></label><p class="help">Jika aktif, harga, grosir, deskripsi, dan SnK utama disembunyikan. Gunakan tombol + Tambah Varian untuk menambah pilihan varian. Stok tetap dikelola dari tombol Stok/Kelola.</p><input type="hidden" name="variants_text" id="editVariantsText"><div id="editVariantBuilder" class="variantBuilder '+(hasVar?'show':'')+'"><div class="variantMainCompact">Mode varian aktif: harga, grosir, deskripsi, dan SnK diatur per varian. Stok tidak ikut diedit di sini.</div><div id="editSharedStockWrap" class="field sharedStockField"><label class="label">Stok Produk Bersama</label><textarea class="textarea tall" id="editSharedStock" placeholder="Satu stok per baris">'+esc((p.data||[]).join('\\n'))+'</textarea><p class="help">Dipakai oleh semua varian yang memilih STOK BERSAMA.</p></div><div id="editVariantCards">'+variantCards+'</div><button class="btn purple small" type="button" id="addEditVariantRowBtn">+ Tambah Varian</button></div></div>'+
@@ -1534,6 +1605,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     toggleEditVariantBuilder();
     refreshEditSharedStockVisibility(p);
     document.querySelectorAll('#editVariantCards [data-evfield="stock_mode"]').forEach(function(el){ el.onchange=function(){ refreshEditSharedStockVisibility(p); }; });
+    var editMediaHubBtn=document.getElementById('editProductMediaHub'); if(editMediaHubBtn) editMediaHubBtn.onclick=function(){openMediaHub('edit',p);};
     document.getElementById('modalEditForm').onsubmit=async function(e){
       e.preventDefault();
       var d=formDataRaw(e.target);
@@ -1966,6 +2038,20 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   var buyerLookupButton=document.getElementById('buyerChatLookupOpen'); if(buyerLookupButton) buyerLookupButton.onclick=function(){openBuyerLookup().catch(function(error){toast(error&&error.message?error.message:'Gagal mencari pembeli.',true);});};
   var buyerLookupInput=document.getElementById('buyerChatLookupInput'); if(buyerLookupInput) buyerLookupInput.onkeydown=function(event){ if(event.key==='Enter'){ event.preventDefault(); openBuyerLookup().catch(function(error){toast(error&&error.message?error.message:'Gagal mencari pembeli.',true);}); } };
   document.querySelectorAll('[data-promo-sub]').forEach(function(btn){btn.onclick=function(){ if(btn.dataset.promoSub==='create') promoUnifiedReset(); else setPromoSub(btn.dataset.promoSub||'list'); };});
+  var addProductMediaHub=document.getElementById('addProductMediaHub'); if(addProductMediaHub)addProductMediaHub.onclick=function(){openMediaHub('add');};
+  var broadcastMediaHub=document.getElementById('broadcastMediaHub'); if(broadcastMediaHub)broadcastMediaHub.onclick=function(){openMediaHub('broadcast');};
+  var image2urlUploadBtn=document.getElementById('image2urlUploadBtn'); if(image2urlUploadBtn)image2urlUploadBtn.onclick=uploadImage2UrlFromDashboard;
+  var mediaHubUrl=document.getElementById('mediaHubUrl'); if(mediaHubUrl)mediaHubUrl.oninput=renderMediaHubPreview;
+  var mediaHubType=document.getElementById('mediaHubType'); if(mediaHubType)mediaHubType.onchange=renderMediaHubPreview;
+  var mediaHubPaste=document.getElementById('mediaHubPaste'); if(mediaHubPaste)mediaHubPaste.onclick=pasteMediaHubUrl;
+  var mediaHubCopy=document.getElementById('mediaHubCopy'); if(mediaHubCopy)mediaHubCopy.onclick=copyMediaHubUrl;
+  var mediaUseProduct=document.getElementById('mediaUseProduct'); if(mediaUseProduct)mediaUseProduct.onclick=function(){useMediaHubForProduct().catch(function(e){toast(e.message||'Gagal menyimpan media.',true);});};
+  var mediaUseBroadcast=document.getElementById('mediaUseBroadcast'); if(mediaUseBroadcast)mediaUseBroadcast.onclick=useMediaHubForBroadcast;
+  var mediaUseStart=document.getElementById('mediaUseStart'); if(mediaUseStart)mediaUseStart.onclick=useMediaHubForStart;
+  var mediaHubClear=document.getElementById('mediaHubClear'); if(mediaHubClear)mediaHubClear.onclick=function(){state.mediaHubEditCode='';var file=document.getElementById('image2urlFile');if(file)file.value='';setMediaHubValue('','image','Media Hub dibersihkan.');};
+  var image2urlDashboardView=document.getElementById('image2urlDashboardView'); if(image2urlDashboardView)image2urlDashboardView.onclick=function(){var f=document.getElementById('image2urlFrame');if(f)f.src='https://www.image2url.com/id/dashboard';};
+  var image2urlVideoView=document.getElementById('image2urlVideoView'); if(image2urlVideoView)image2urlVideoView.onclick=function(){var f=document.getElementById('image2urlFrame');if(f)f.src='https://www.image2url.com/id/video-to-url';};
+
   document.getElementById('addForm').onsubmit=async function(e){
     e.preventDefault();
     var variants=compileAddVariants();
@@ -2046,6 +2132,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     e.preventDefault();
     var d=formDataRaw(e.target);
     if(d.type==='photo' && !String(d.photo||'').trim()) return toast('URL/file_id gambar wajib diisi untuk broadcast gambar', true);
+    if(d.type==='video' && !String(d.video||'').trim()) return toast('URL/file_id video wajib diisi untuk broadcast video', true);
     if(d.type==='sticker' && !String(d.sticker||'').trim()) return toast('File ID stiker wajib diisi untuk broadcast stiker', true);
     if(d.type==='text' && !String(d.message||'').trim()) return toast('Pesan teks wajib diisi', true);
     d.request_id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('bc-'+Date.now()+'-'+Math.random().toString(36).slice(2));

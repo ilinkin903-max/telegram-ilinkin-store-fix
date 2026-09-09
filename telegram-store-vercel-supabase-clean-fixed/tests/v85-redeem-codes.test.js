@@ -89,12 +89,12 @@ test('redeem tidak memberi bonus referral first purchase', () => {
 });
 
 
-test('metadata rilis v85.0.0 konsisten', () => {
+test('metadata rilis v85.1.0 konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
   const lock = JSON.parse(read('package-lock.json'));
-  assert.equal(pkg.version, '85.0.0');
-  assert.equal(lock.version, '85.0.0');
-  assert.equal(lock.packages[''].version, '85.0.0');
-  assert.equal(read('VERSION').trim(), 'v85.0.0');
-  assert.equal(read('VERSION.txt').trim(), 'v85.0.0');
+  assert.equal(pkg.version, '85.1.0');
+  assert.equal(lock.version, '85.1.0');
+  assert.equal(lock.packages[''].version, '85.1.0');
+  assert.equal(read('VERSION').trim(), 'v85.1.0');
+  assert.equal(read('VERSION.txt').trim(), 'v85.1.0');
 });

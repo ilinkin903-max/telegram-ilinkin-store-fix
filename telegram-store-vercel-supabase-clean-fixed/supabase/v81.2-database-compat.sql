@@ -22,6 +22,7 @@ create table if not exists public.products (
   description text not null default '',
   terms text not null default '',
   image_url text not null default '',
+  media_type text not null default 'image',
   category text not null default '',
   bulk_prices jsonb not null default '[]'::jsonb,
   variants jsonb not null default '[]'::jsonb,
@@ -120,6 +121,7 @@ alter table public.pending_orders add column if not exists cost_unit integer not
 alter table public.pending_orders add column if not exists cost_total integer not null default 0;
 alter table public.pending_orders add column if not exists cost_source text not null default 'unset';
 alter table public.products add column if not exists image_url text not null default '';
+alter table public.products add column if not exists media_type text not null default 'image';
 alter table public.products add column if not exists category text not null default '';
 alter table public.products add column if not exists bulk_prices jsonb not null default '[]'::jsonb;
 alter table public.products add column if not exists variants jsonb not null default '[]'::jsonb;

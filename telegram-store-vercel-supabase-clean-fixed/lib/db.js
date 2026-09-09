@@ -213,6 +213,7 @@ function normalizeProduct(row) {
     deskripsi: row.description || '',
     snk: row.terms || '',
     image_url: row.image_url || '',
+    media_type: String(row.media_type || 'image').trim().toLowerCase() === 'video' ? 'video' : 'image',
     category: row.category || '',
     active: row.active !== false,
     display_scope: String(row.display_scope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
@@ -656,6 +657,7 @@ async function addProduct(input) {
     description: String(input.deskripsi || input.description || ''),
     terms: String(input.snk || input.terms || ''),
     image_url: String(input.image_url || input.imageUrl || '').trim(),
+    media_type: String(input.media_type || input.mediaType || 'image').trim().toLowerCase() === 'video' ? 'video' : 'image',
     category: String(input.category || input.kategori || '').trim(),
     display_scope: String(input.display_scope || input.displayScope || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both',
     delivery_mode: String(input.delivery_mode || input.deliveryMode || 'auto').toLowerCase() === 'po' ? 'po' : 'auto',
@@ -710,6 +712,7 @@ async function updateProductByCode(code, updates = {}) {
   if (updates.deskripsi !== undefined || updates.description !== undefined) payload.description = String(updates.deskripsi ?? updates.description);
   if (updates.snk !== undefined || updates.terms !== undefined) payload.terms = String(updates.snk ?? updates.terms);
   if (updates.image_url !== undefined || updates.imageUrl !== undefined) payload.image_url = String((updates.image_url ?? updates.imageUrl) || '').trim();
+  if (updates.media_type !== undefined || updates.mediaType !== undefined) payload.media_type = String((updates.media_type ?? updates.mediaType) || 'image').trim().toLowerCase() === 'video' ? 'video' : 'image';
   if (updates.category !== undefined || updates.kategori !== undefined) payload.category = String((updates.category ?? updates.kategori) || '').trim();
   if (updates.display_scope !== undefined || updates.displayScope !== undefined) payload.display_scope = String((updates.display_scope ?? updates.displayScope) || 'both').toLowerCase() === 'marketplace' ? 'marketplace' : 'both';
   if (updates.delivery_mode !== undefined || updates.deliveryMode !== undefined) payload.delivery_mode = String((updates.delivery_mode ?? updates.deliveryMode) || 'auto').toLowerCase() === 'po' ? 'po' : 'auto';

@@ -171,7 +171,7 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
 .modal-close { position: absolute; z-index: 4; right: 14px; top: 14px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.94); box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 23px; cursor: pointer; }
 .product-detail-layout { display: grid; grid-template-columns: minmax(280px, .9fr) minmax(360px, 1.1fr); gap: 26px; }
 .detail-image-wrap { position: sticky; top: 0; align-self: start; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden; background: #f1f4f8; }
-.detail-image-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.detail-image-wrap img, .detail-image-wrap video { width: 100%; height: 100%; object-fit: cover; display:block; background:#111; }
 .detail-stock-badge { position: absolute; left: 12px; bottom: 12px; border-radius: 10px; background: rgba(17,24,39,.8); color: white; font-size: 11px; font-weight: 800; padding: 7px 10px; }
 .detail-content { padding: 8px 4px 4px; }
 .detail-content h2 { margin: 3px 44px 8px 0; font-size: 25px; letter-spacing: -.02em; line-height: 1.22; }
@@ -469,7 +469,7 @@ main { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; }
 }
 .flash-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(24,34,52,.10); }
 .flash-image-wrap { position: relative; aspect-ratio: 1.28 / 1; background: #f4f6f8; overflow: hidden; }
-.flash-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.flash-image-wrap img, .flash-image-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; background:#111; }
 .flash-discount {
   position: absolute;
   right: 8px;

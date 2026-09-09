@@ -43,7 +43,7 @@
     customerServiceBubble: $('customerServiceBubble'), groupFooter: $('groupFooter'),
     footerStoreName: $('footerStoreName'), categoryList: $('categoryList'), productGrid: $('productGrid'), productSummary: $('productSummary'),
     emptyState: $('emptyState'), sortSelect: $('sortSelect'), resellerButton: $('resellerButton'), mobilePanel: $('mobilePanel'),
-    productModal: $('productModal'), detailImage: $('detailImage'), detailCategory: $('detailCategory'), productModalTitle: $('productModalTitle'),
+    productModal: $('productModal'), detailImage: $('detailImage'), detailVideo: $('detailVideo'), detailCategory: $('detailCategory'), productModalTitle: $('productModalTitle'),
     detailSold: $('detailSold'), detailCode: $('detailCode'), detailPrice: $('detailPrice'), detailPromo: $('detailPromo'),
     detailDescription: $('detailDescription'), detailDescriptionToggle: $('detailDescriptionToggle'), detailTerms: $('detailTerms'), detailStockBadge: $('detailStockBadge'),
     variantSection: $('variantSection'), variantOptions: $('variantOptions'), variantHint: $('variantHint'), stockHint: $('stockHint'),
@@ -207,6 +207,15 @@
       fallback.textContent = String(productName || 'P').slice(0, 1).toUpperCase();
       parent.appendChild(fallback);
     };
+  }
+
+  function productMediaMarkup(product, className, fallbackClass, withControls) {
+    var url=String(product && product.image_url || '').trim();
+    var name=String(product && product.name || 'Produk');
+    var type=String(product && product.media_type || 'image').toLowerCase()==='video'?'video':'image';
+    if(url && type==='video') return '<video class="'+escapeHtml(className||'product-image')+'" src="'+escapeHtml(url)+'" muted playsinline preload="metadata"'+(withControls?' controls':'')+'></video>';
+    if(url) return '<img class="'+escapeHtml(className||'product-image')+'" src="'+escapeHtml(url)+'" alt="'+escapeHtml(name)+'">';
+    return '<div class="'+escapeHtml(fallbackClass||'product-image-fallback')+'">'+escapeHtml(name.slice(0,1).toUpperCase())+'</div>';
   }
 
   function clearBannerTimer() {
@@ -473,9 +482,7 @@
       var original = promo.original;
       var final = promo.final;
       var pct = original > 0 ? Math.max(1, Math.round(((original - final) / original) * 100)) : 0;
-      var image = product.image_url
-        ? '<img src="' + escapeHtml(product.image_url) + '" alt="' + escapeHtml(product.name) + '">'
-        : '<div class="product-image-fallback">' + escapeHtml(String(product.name || 'P').slice(0, 1).toUpperCase()) + '</div>';
+      var image = productMediaMarkup(product, 'flash-media', 'product-image-fallback', false);
       var price = '<strong>' + escapeHtml(rupiah(final)) + '</strong><del>' + escapeHtml(rupiah(original)) + '</del>';
       var sold = Math.max(0, Number(promo.sold || 0));
       var stockBase = promo.variant
@@ -586,9 +593,7 @@
     return Math.max(1, Math.min(100, Math.round(((originalValue - finalValue) / originalValue) * 100)));
   }
   function productCard(product) {
-    var image = product.image_url
-      ? '<img class="product-image" src="' + escapeHtml(product.image_url) + '" alt="' + escapeHtml(product.name) + '">'
-      : '<div class="product-image-fallback">' + escapeHtml(product.name.slice(0, 1).toUpperCase()) + '</div>';
+    var image = productMediaMarkup(product, 'product-image', 'product-image-fallback', false);
     var bestPromo = cardBestPromo(product);
     var pct = bestPromo ? discountPercent(bestPromo.original, bestPromo.final) : 0;
     var badge = pct
@@ -764,10 +769,17 @@
     els.detailCode.textContent = 'Kode ' + product.code;
     setDetailDescription(product.description || 'Tidak ada deskripsi.');
     els.detailTerms.textContent = product.terms || 'Tidak ada ketentuan khusus.';
-    els.detailImage.src = product.image_url || '';
-    els.detailImage.alt = product.name;
-    els.detailImage.style.display = product.image_url ? 'block' : 'none';
-    if (product.image_url) imageFallback(els.detailImage, product.name);
+    var detailMediaType = String(product.media_type || 'image').toLowerCase() === 'video' ? 'video' : 'image';
+    if (detailMediaType === 'video' && product.image_url) {
+      els.detailImage.style.display = 'none';
+      if (els.detailVideo) { els.detailVideo.src = product.image_url; els.detailVideo.classList.remove('hidden'); els.detailVideo.style.display = 'block'; }
+    } else {
+      if (els.detailVideo) { try { els.detailVideo.pause(); } catch (_) {} els.detailVideo.removeAttribute('src'); els.detailVideo.load(); els.detailVideo.classList.add('hidden'); els.detailVideo.style.display = 'none'; }
+      els.detailImage.src = product.image_url || '';
+      els.detailImage.alt = product.name;
+      els.detailImage.style.display = product.image_url ? 'block' : 'none';
+      if (product.image_url) imageFallback(els.detailImage, product.name);
+    }
     renderVariants(product);
     updateProductEstimate();
     openModal(els.productModal);

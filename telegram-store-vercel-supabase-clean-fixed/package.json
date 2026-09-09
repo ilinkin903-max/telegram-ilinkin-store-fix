@@ -1,8 +1,8 @@
 {
   "name": "telegram-store-vercel-supabase",
-  "version": "85.0.0",
+  "version": "85.1.0",
   "private": true,
-  "description": "Link Auto Order v85.0.0: owner-generated one-time redeem codes for specific products or variants, atomic claiming, and direct fulfillment.",
+  "description": "Link Auto Order v85.1.0: direct redeem-code claiming, Image2URL Media Hub, and image/video product media for Telegram + Marketplace.",
   "scripts": {
     "dev": "npx vercel dev",
     "import:supabase": "node scripts/import-json-to-supabase.js",

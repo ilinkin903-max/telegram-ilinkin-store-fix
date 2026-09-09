@@ -206,10 +206,10 @@ test('pengecekan lisensi paralel digabung menjadi satu rangkaian request', async
   }
 });
 
-test('metadata rilis v84.8.2 konsisten', () => {
+test('metadata rilis terbaru konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '84.8.2');
-  assert.equal(read('VERSION').trim(), 'v84.8.2');
-  assert.equal(read('VERSION.txt').trim(), 'v84.8.2');
+  assert.equal(pkg.version, '85.1.0');
+  assert.equal(read('VERSION').trim(), 'v85.1.0');
+  assert.equal(read('VERSION.txt').trim(), 'v85.1.0');
   assert.match(read('api/index.js'), /Link Auto Order · v84\.8\.2/);
 });

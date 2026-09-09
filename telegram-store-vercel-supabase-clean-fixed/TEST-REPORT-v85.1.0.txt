@@ -1,0 +1,31 @@
+Link Auto Order v85.1.0 - Test Report
+Date: 2026-09-10
+
+1. Targeted v85/v85.1 tests
+   Command: node --test tests/v85-redeem-codes.test.js tests/v85.1-redeem-media-image2url.test.js
+   Result: 14 passed, 0 failed.
+
+2. JavaScript syntax
+   All JavaScript files under api/, lib/, scripts/, and public/ passed node --check.
+
+3. Dashboard rendered client JavaScript
+   - HTML rendered from api/reseller.js.
+   - Inline browser scripts extracted and passed node --check.
+   - Duplicate DOM IDs: 0.
+   - Media Hub IDs found exactly once.
+
+4. Selected UI regression suite
+   Result: 55 passed, 3 could not start because source archive has no node_modules.
+   Missing dependencies reported by those tests: dotenv / axios.
+   No regression assertion failure was observed in tests that could execute.
+
+5. Image2URL integration
+   Static/integration checks verify:
+   - owner-only image2url-upload action;
+   - HTTPS Image2URL /api/upload proxy for images;
+   - 2 MB image validation;
+   - embedded Dashboard/Video-to-URL workspace + external fallback;
+   - product media_type propagation to bot and marketplace;
+   - Telegram video send support.
+
+Note: live Image2URL upload could not be exercised from the isolated container because outbound DNS for image2url.com was unavailable there. The endpoint and documented constraints were verified against Image2URL's published documentation/web pages.

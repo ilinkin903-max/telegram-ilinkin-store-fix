@@ -444,6 +444,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     terms: product.snk || '',
     category: product.category || 'Lainnya',
     image_url: normalizePublicImageUrl(product.image_url),
+    media_type: String(product.media_type || 'image').toLowerCase() === 'video' ? 'video' : 'image',
     display_scope: String(product.display_scope || 'both') === 'marketplace' ? 'marketplace' : 'both',
     delivery_mode: (isSupplier || isWorkflow) ? 'auto' : productDeliveryMode,
     supplier_source: String(product?.supplier_source || '').toLowerCase(),
