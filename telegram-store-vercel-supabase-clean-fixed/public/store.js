@@ -603,7 +603,7 @@
       ? '<strong>' + escapeHtml(rupiah(bestPromo.final)) + '</strong><del>' + escapeHtml(rupiah(bestPromo.original)) + '</del>'
       : '<strong>' + escapeHtml(productPriceText(product)) + '</strong>';
     var isPo = String(product.delivery_mode || 'auto').toLowerCase() === 'po';
-    var isSupplier = String(product.supplier_source || '').toLowerCase() === 'prodseller';
+    var isSupplier = ['prodseller','aiversehub'].includes(String(product.supplier_source || '').toLowerCase());
     var isWorkflow = String(product.supplier_source || '').toLowerCase() === 'telegram_workflow';
     var hasSupplierVariants = Boolean(product.has_supplier_variants);
     var hasWorkflowVariants = Boolean(product.has_workflow_variants);
@@ -639,7 +639,7 @@
     if (!state.selectedProduct) return null;
     return state.selectedProduct.variants.find(function (variant) { return variant.key === state.selectedVariantKey; }) || null;
   }
-  function selectedIsSupplier(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='prodseller' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='prodseller'))); }
+  function selectedIsSupplier(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (['prodseller','aiversehub'].includes(String((variant&&variant.supplier_source)||'').toLowerCase()) || (!variant && ['prodseller','aiversehub'].includes(String(state.selectedProduct.supplier_source || '').toLowerCase())))); }
   function selectedIsWorkflow(){ var variant=activeVariant(); return Boolean(state.selectedProduct && (String((variant&&variant.supplier_source)||'').toLowerCase()==='telegram_workflow' || (!variant && String(state.selectedProduct.supplier_source || '').toLowerCase()==='telegram_workflow'))); }
   function selectedDeliveryMode() {
     if (!state.selectedProduct) return 'auto';
@@ -808,7 +808,7 @@
         ['Produk', preview.product || product.name],
         ['Varian', preview.variant || 'Tanpa varian'],
         ['Jumlah', Number(preview.quantity || qty) + ' item'],
-        ['Pengiriman', ['prodseller','telegram_workflow'].includes(String(preview.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Otomatis setelah pembayaran' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
+        ['Pengiriman', ['prodseller','aiversehub','telegram_workflow'].includes(String(preview.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Otomatis setelah pembayaran' : (String(preview.delivery_mode || 'auto') === 'po' ? 'PRE-ORDER · dikirim seller' : 'Otomatis setelah pembayaran')],
         ['Subtotal', rupiah(preview.subtotal || 0)]
       ];
       if (Number(preview.discount || 0) > 0) {
@@ -864,7 +864,7 @@
         if (els.paymentSuccessText) {
           var used = Number(payment.wallet_main_used || 0) + Number(payment.wallet_referral_used || 0);
           var poWaiting = payment.status === 'awaiting_delivery' || String(payment.delivery_mode || '') === 'po';
-          var supplierWaiting = poWaiting && ['prodseller','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase());
+          var supplierWaiting = poWaiting && ['prodseller','aiversehub','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase());
           els.paymentSuccessText.textContent = supplierWaiting
             ? 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.'
             : (poWaiting ? 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong. Pesanan PRE-ORDER sudah masuk dan produk/akun akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Saldo sebesar ' + rupiah(used || payment.total) + ' telah dipotong dan produk dikirim ke chat Telegram Anda.');
@@ -876,7 +876,7 @@
       } else {
         state.activePayment = payment;
         if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = 'Pembayaran Berhasil';
-        if (els.paymentSuccessText) els.paymentSuccessText.textContent = ['prodseller','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Pembayaran berhasil. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.' : (String(payment.delivery_mode || '') === 'po' ? 'Pembayaran berhasil. Pesanan PRE-ORDER akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Produk telah diproses dan dikirim ke chat Telegram Anda.');
+        if (els.paymentSuccessText) els.paymentSuccessText.textContent = ['prodseller','aiversehub','telegram_workflow'].includes(String(payment.supplier_source || product.supplier_source || '').toLowerCase()) ? 'Pembayaran berhasil. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.' : (String(payment.delivery_mode || '') === 'po' ? 'Pembayaran berhasil. Pesanan PRE-ORDER akan dikirim seller ke chat Telegram setelah disiapkan.' : 'Produk telah diproses dan dikirim ke chat Telegram Anda.');
         showPayment(payment);
       }
     } catch (error) {
@@ -1004,7 +1004,7 @@
         clearPaymentTimers(); clearActivePaymentStorage(); state.paymentStatus = 'success'; updatePaymentBubble();
         els.paymentPendingView.classList.add('hidden'); els.paymentSuccessView.classList.remove('hidden'); els.paymentExpiredView.classList.add('hidden');
         var poWaiting = status.status === 'awaiting_delivery' || String(status.delivery_mode || state.activePayment.delivery_mode || '') === 'po';
-        var supplierWaiting = poWaiting && ['prodseller','telegram_workflow'].includes(String(status.supplier_source || state.activePayment.supplier_source || '').toLowerCase());
+        var supplierWaiting = poWaiting && ['prodseller','aiversehub','telegram_workflow'].includes(String(status.supplier_source || state.activePayment.supplier_source || '').toLowerCase());
         if (els.paymentSuccessTitle) els.paymentSuccessTitle.textContent = supplierWaiting ? 'Pembayaran Berhasil · Diproses Otomatis' : (poWaiting ? 'Pembayaran Berhasil · PRE-ORDER' : 'Pembayaran Berhasil');
         if (els.paymentSuccessText) els.paymentSuccessText.textContent = supplierWaiting
           ? 'Pembayaran sudah terdeteksi. Sistem sedang memproses produk otomatis dan akan mengirim hasil ke chat Telegram Anda.'

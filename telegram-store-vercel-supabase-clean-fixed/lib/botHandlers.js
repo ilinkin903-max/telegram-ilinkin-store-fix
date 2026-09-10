@@ -7,6 +7,8 @@ const db = require('./db');
 const paymentService = require('./paymentService');
 const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
+const aiverseHub = require('./aiverseHubService');
+const apiSuppliers = require('./apiSupplierRegistry');
 const walletNotifications = require('./walletNotifications');
 const workflowUserbot = require('./userbotWorkflowService');
 const license = require('./license');
@@ -32,6 +34,7 @@ const botReadCache = {
   settings: { at: 0, value: null, promise: null },
   products: { at: 0, value: null, promise: null },
   supplierBalance: { at: 0, value: null, promise: null },
+  aiverseBalance: { at: 0, value: null, promise: null },
   wallets: new Map(),
   histories: new Map(),
   memberships: new Map(),
@@ -141,6 +144,15 @@ async function cachedSupplierBalance(force = false) {
   return readThroughBotCache(
     botReadCache.supplierBalance,
     () => prodseller.getBalance(),
+    BOT_SUPPLIER_CACHE_MS,
+    force
+  );
+}
+
+async function cachedAiverseBalance(force = false) {
+  return readThroughBotCache(
+    botReadCache.aiverseBalance,
+    () => aiverseHub.getBalance(),
     BOT_SUPPLIER_CACHE_MS,
     force
   );
@@ -1172,10 +1184,10 @@ function supplierSelection(product, selection = null) {
   else if (selection && typeof selection === 'object') variant = selectedVariant(product, selection);
   const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
   const variantProductId = String(variant?.supplier_product_id || '').trim();
-  if (variantSource === 'prodseller' && variantProductId) return { productId: variantProductId, variant };
+  if (apiSuppliers.isApiSupplierSource(variantSource) && variantProductId) return { source: variantSource, productId: variantProductId, variant };
   const source = String(product?.supplier_source || '').trim().toLowerCase();
   const productId = String(product?.supplier_product_id || '').trim();
-  if (source === 'prodseller' && productId) return { productId, variant: null };
+  if (apiSuppliers.isApiSupplierSource(source) && productId) return { source, productId, variant: null };
   return null;
 }
 
@@ -1275,39 +1287,60 @@ function storedSupplierProduct(product, variant = null) {
 }
 
 async function cachedSupplierAvailability(productId, meta, balanceData, force = false) {
-  const entry = botMapCacheEntry(botReadCache.supplierProducts, String(productId), 600);
+  const source = String(meta?.source || meta?.supplier_source || 'prodseller').trim().toLowerCase();
+  const entry = botMapCacheEntry(botReadCache.supplierProducts, apiSuppliers.supplierKey(source, productId), 600);
   return readThroughBotCache(entry, async () => {
+    const service = source === 'aiversehub' ? aiverseHub : prodseller;
     try {
-      const live = await prodseller.getProduct(productId);
-      return prodseller.availabilityFrom({ balanceData, product: live });
+      const live = source === 'aiversehub'
+        ? await aiverseHub.getProduct(productId)
+        : await prodseller.getProduct(productId);
+      return source === 'aiversehub'
+        ? aiverseHub.availabilityFrom({ balanceData, product: live })
+        : prodseller.availabilityFrom({ balanceData, product: live });
     } catch (_) {
-      return prodseller.availabilityFrom({ balanceData, product: storedSupplierProduct(meta.product, meta.variant) });
+      const stored = storedSupplierProduct(meta.product, meta.variant);
+      return source === 'aiversehub'
+        ? aiverseHub.availabilityFrom({ balanceData, product: stored })
+        : prodseller.availabilityFrom({ balanceData, product: stored });
     }
   }, BOT_SUPPLIER_CACHE_MS, force);
 }
 
 async function supplierAvailabilityForProducts(products = [], options = {}) {
   const map = new Map();
-  if (!prodseller.configured()) return map;
   const refs = new Map();
   (products || []).forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) refs.set(direct.productId, { product, variant: null });
+    if (direct) refs.set(apiSuppliers.supplierKey(direct.source, direct.productId), { ...direct, product, variant: null });
     activeVariantsWithIndex(product).forEach(({ variant }) => {
       const ref = supplierSelection(product, variant);
-      if (ref) refs.set(ref.productId, { product, variant });
+      if (ref) refs.set(apiSuppliers.supplierKey(ref.source, ref.productId), { ...ref, product, variant });
     });
   });
   if (!refs.size) return map;
 
-  const balanceData = await cachedSupplierBalance(Boolean(options.force)).catch(() => null);
-  if (!balanceData) return map;
-  const rows = await Promise.allSettled([...refs.entries()].map(async ([productId, meta]) => {
-    const availability = await cachedSupplierAvailability(productId, meta, balanceData, Boolean(options.force));
-    return [productId, availability];
+  const force = Boolean(options.force);
+  const balances = {};
+  if ([...refs.values()].some((ref) => ref.source === 'prodseller') && prodseller.configured()) {
+    balances.prodseller = await cachedSupplierBalance(force).catch(() => null);
+  }
+  if ([...refs.values()].some((ref) => ref.source === 'aiversehub') && aiverseHub.configured()) {
+    balances.aiversehub = await cachedAiverseBalance(force).catch(() => null);
+  }
+
+  const rows = await Promise.allSettled([...refs.entries()].map(async ([key, meta]) => {
+    const balanceData = balances[meta.source];
+    if (!balanceData) return [key, null];
+    const availability = await cachedSupplierAvailability(meta.productId, meta, balanceData, force);
+    return [key, availability];
   }));
   rows.forEach((row) => {
-    if (row.status === 'fulfilled' && row.value) map.set(String(row.value[0]), row.value[1]);
+    if (row.status === 'fulfilled' && row.value && row.value[1]) {
+      map.set(String(row.value[0]), row.value[1]);
+      const meta = refs.get(String(row.value[0]));
+      if (meta?.source === 'prodseller') map.set(String(meta.productId), row.value[1]);
+    }
   });
   return map;
 }
@@ -1315,7 +1348,7 @@ async function supplierAvailabilityForProducts(products = [], options = {}) {
 function supplierStockForSelection(product, selection = null, availabilityMap = null) {
   const ref = supplierSelection(product, selection);
   if (!ref) return null;
-  const found = availabilityMap instanceof Map ? availabilityMap.get(ref.productId) : null;
+  const found = availabilityMap instanceof Map ? (availabilityMap.get(apiSuppliers.supplierKey(ref.source, ref.productId)) || availabilityMap.get(ref.productId)) : null;
   if (found) return Math.max(0, Math.floor(Number(found.availableStock || 0)));
   const variant = ref.variant || (selection && selection.variant_key !== undefined ? selectedVariant(product, selection) : null);
   const stored = storedSupplierProduct(product, variant);
@@ -2188,14 +2221,17 @@ async function calculateCheckoutPricing(userId, order, product) {
       throw error;
     }
   } else if (isSupplierProduct(product, order)) {
-    if (!prodseller.configured()) {
+    const supplier = supplierSelection(product, order);
+    const supplierService = supplier?.source === 'aiversehub' ? aiverseHub : prodseller;
+    if (!supplierService.configured()) {
       const error = new Error('Produk sedang tidak tersedia. Silakan coba lagi nanti.');
       error.code = 'SUPPLIER_NOT_CONFIGURED';
       throw error;
     }
     try {
-      const supplier = supplierSelection(product, order);
-      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+      const availability = supplier.source === 'aiversehub'
+        ? await aiverseHub.getAvailability(supplier.productId, { force: true })
+        : await prodseller.getAvailability(supplier.productId, { force: true });
       if (availability.availableStock < quantity) {
         const error = new Error(`Stok produk tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`);
         error.code = 'SUPPLIER_STOCK';
@@ -2203,7 +2239,7 @@ async function calculateCheckoutPricing(userId, order, product) {
       }
       if (availability.unitPrice > 0) {
         const settings = await cachedSettings();
-        const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+        const rate = apiSuppliers.rateToIdr(supplier.source, settings);
         costUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         const found = db.findVariant(product, order.variant_key || '');
         if (found.variant && isSupplierProduct(product, found.variant)) {
@@ -2228,8 +2264,9 @@ async function calculateCheckoutPricing(userId, order, product) {
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      const friendly = new Error(error?.code === 'PRODSELLER_STOCK' ? 'Stok produk sedang habis. Silakan pilih produk lain.' : 'Stok produk sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.');
-      friendly.code = error?.code === 'PRODSELLER_STOCK' ? 'SUPPLIER_STOCK' : 'SUPPLIER_UNAVAILABLE';
+      const stockError = ['PRODSELLER_STOCK', 'AIVERSEHUB_STOCK', 'PRODSELLER_BALANCE', 'AIVERSEHUB_BALANCE'].includes(error?.code);
+      const friendly = new Error(stockError ? 'Stok produk sedang habis atau saldo supplier tidak mencukupi. Silakan pilih produk lain.' : 'Stok produk sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.');
+      friendly.code = stockError ? 'SUPPLIER_STOCK' : 'SUPPLIER_UNAVAILABLE';
       throw friendly;
     }
   }

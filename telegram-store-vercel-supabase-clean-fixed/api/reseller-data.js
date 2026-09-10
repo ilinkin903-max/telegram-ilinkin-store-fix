@@ -3,6 +3,8 @@ const db = require('../lib/db');
 const tg = require('../lib/telegram');
 const paymentService = require('../lib/paymentService');
 const prodseller = require('../lib/prodsellerService');
+const aiverseHub = require('../lib/aiverseHubService');
+const apiSuppliers = require('../lib/apiSupplierRegistry');
 const workflowUserbot = require('../lib/userbotWorkflowService');
 const crypto = require('crypto');
 const license = require('../lib/license');
@@ -296,14 +298,24 @@ function shortHash(value) {
 
 
 function prodsellerPriceIdr(priceUsdt, settings = {}) {
-  const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-  const markup = Math.max(0, Number(settings.prodseller_markup_percent || 25));
-  const raw = Math.max(0, Number(priceUsdt || 0)) * rate * (1 + markup / 100);
-  return Math.max(1000, Math.ceil(raw / 500) * 500);
+  return apiSuppliers.priceToIdr('prodseller', priceUsdt, settings);
+}
+
+function aiverseHubPriceIdr(priceUnit, settings = {}) {
+  return apiSuppliers.priceToIdr('aiversehub', priceUnit, settings);
+}
+
+function externalSupplierCode(source, productId) {
+  const prefix = String(source || '').toLowerCase() === 'aiversehub' ? 'AVH' : 'PS';
+  return `${prefix}${shortHash(String(productId || '')).slice(0, 8).toUpperCase()}`;
 }
 
 function prodsellerCode(productId) {
-  return `PS${shortHash(String(productId || '')).slice(0, 8).toUpperCase()}`;
+  return externalSupplierCode('prodseller', productId);
+}
+
+function aiverseHubCode(productId) {
+  return externalSupplierCode('aiversehub', productId);
 }
 
 
@@ -428,10 +440,11 @@ async function resellerSupplierSummary() {
   });
 }
 
-function supplierLinkOf(product, variant = null) {
+function apiSupplierLinkOf(product, variant = null, expectedSource = '') {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (source !== 'prodseller' || !productId) return null;
+  if (!apiSuppliers.isApiSupplierSource(source) || !productId) return null;
+  if (expectedSource && source !== String(expectedSource).trim().toLowerCase()) return null;
   return {
     source,
     productId,
@@ -442,67 +455,85 @@ function supplierLinkOf(product, variant = null) {
   };
 }
 
+function supplierLinkOf(product, variant = null) {
+  return apiSupplierLinkOf(product, variant, 'prodseller');
+}
+
+function aiverseHubLinkOf(product, variant = null) {
+  return apiSupplierLinkOf(product, variant, 'aiversehub');
+}
+
 function automatedSupplierLinkOf(product, variant = null) {
   const item = variant || product || {};
   const source = String(item.supplier_source || '').trim().toLowerCase();
   const productId = String(item.supplier_product_id || '').trim();
-  if (!['prodseller', 'telegram_workflow'].includes(source) || !productId) return null;
+  if (!(apiSuppliers.isApiSupplierSource(source) || source === 'telegram_workflow') || !productId) return null;
   return { source, productId };
 }
 
-function localSupplierLinks(products = []) {
+function localSupplierLinks(products = [], source = 'prodseller') {
   const links = [];
   for (const product of products || []) {
-    const direct = supplierLinkOf(product, null);
+    const direct = apiSupplierLinkOf(product, null, source);
     if (direct) links.push({ ...direct, product, variant: null, variantIndex: -1, link_type: 'product' });
     (Array.isArray(product?.variants) ? product.variants : []).forEach((variant, index) => {
-      const link = supplierLinkOf(product, variant);
+      const link = apiSupplierLinkOf(product, variant, source);
       if (link) links.push({ ...link, product, variant, variantIndex: index, link_type: 'variant' });
     });
   }
   return links;
 }
 
-async function getProdSellerStatus() {
+async function getExternalSupplierStatus(source, service) {
   const localProducts = await db.listProducts().catch(() => []);
-  const selected = localSupplierLinks(localProducts);
-  if (!prodseller.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length };
-  const balance = await prodseller.getBalance();
+  const selected = localSupplierLinks(localProducts, source);
+  if (!service.configured()) return { configured: false, balance: null, membership: '', selected_count: selected.length, source };
+  const balance = await service.getBalance();
   return {
     configured: true,
+    source,
     balance: Number(balance.balance || 0),
     membership: String(balance.membership || ''),
-    username: String(balance.username || ''),
-    telegramId: balance.telegramId || null,
+    username: String(balance.username || balance.firstName || ''),
+    telegramId: balance.telegramId || balance.chatId || null,
     selected_count: selected.length
   };
 }
 
-async function getProdSellerCatalog() {
+async function getProdSellerStatus() {
+  return getExternalSupplierStatus('prodseller', prodseller);
+}
+
+async function getAiverseHubStatus() {
+  return getExternalSupplierStatus('aiversehub', aiverseHub);
+}
+
+async function getExternalSupplierCatalog(source, service) {
   const [remoteProducts, localProducts, settings] = await Promise.all([
-    prodseller.listProducts(),
+    service.listProducts(),
     db.listProducts(),
     db.getShopSettings()
   ]);
   const localBySupplierId = new Map();
-  localSupplierLinks(localProducts).forEach((link) => {
+  localSupplierLinks(localProducts, source).forEach((link) => {
     const id = String(link.productId || '');
     if (id && !localBySupplierId.has(id)) localBySupplierId.set(id, link);
   });
   return remoteProducts.map((item) => {
-    const link = localBySupplierId.get(String(item.id || '')) || null;
+    const link = localBySupplierId.get(String(item.id || item.service_id || '')) || null;
     const local = link?.product || null;
     return {
-      id: String(item.id || ''),
+      id: String(item.id || item.service_id || ''),
       name: String(item.name || ''),
       description: String(item.description || ''),
       price: Number(item.price || 0),
       publicPrice: Number(item.publicPrice || 0),
+      stock: item.stock == null ? null : Number(item.stock),
       imageUrl: String(item.imageUrl || ''),
       delivery: item.delivery || {},
       sold: Number(item.sold || 0),
-      inStock: item.inStock !== false,
-      suggested_price_idr: prodsellerPriceIdr(item.price, settings),
+      inStock: item.inStock !== false && (item.stock == null || Number(item.stock || 0) > 0),
+      suggested_price_idr: apiSuppliers.priceToIdr(source, item.price, settings),
       selected: Boolean(local),
       link_type: link?.link_type || '',
       local_code: local?.kode || '',
@@ -511,25 +542,39 @@ async function getProdSellerCatalog() {
       local_variant_key: link?.variant ? String(link.variant.sku || '') : '',
       local_price: Number(link?.variant?.price || local?.harga || 0),
       local_active: link?.variant ? link.variant.active !== false : (local ? local.active !== false : false),
-      local_synced_at: link?.syncedAt || local?.supplier_synced_at || null
+      local_synced_at: link?.syncedAt || local?.supplier_synced_at || null,
+      source
     };
   });
 }
 
-async function importProdSellerProduct(body = {}) {
+async function getProdSellerCatalog() {
+  return getExternalSupplierCatalog('prodseller', prodseller);
+}
+
+async function getAiverseHubCatalog() {
+  return getExternalSupplierCatalog('aiversehub', aiverseHub);
+}
+
+async function importExternalSupplierProduct(body = {}, options = {}) {
+  const source = String(options.source || '').trim().toLowerCase();
+  const service = options.service;
+  const label = String(options.label || apiSuppliers.labelFor(source));
+  if (!apiSuppliers.isApiSupplierSource(source) || !service) throw new Error('Supplier API tidak dikenali.');
   const productId = String(body.product_id || body.productId || '').trim();
-  if (!productId) throw new Error('Pilih produk ProdSeller terlebih dahulu.');
+  if (!productId) throw new Error(`Pilih produk ${label} terlebih dahulu.`);
+
   const [detailRaw, catalog, settings, localProducts] = await Promise.all([
-    prodseller.getProduct(productId),
-    prodseller.listProducts(),
+    service.getProduct(productId),
+    service.listProducts(),
     db.getShopSettings(),
     db.listProducts()
   ]);
-  const listItem = (Array.isArray(catalog) ? catalog : []).find((item) => String(item.id || '') === productId) || {};
+  const listItem = (Array.isArray(catalog) ? catalog : []).find((item) => String(item.id || item.service_id || '') === productId) || {};
   const detail = { ...listItem, ...(detailRaw || {}) };
   const supplierPrice = Number(detail.price || 0);
-  const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
-  const defaultPrice = prodsellerPriceIdr(supplierPrice, settings);
+  const rate = apiSuppliers.rateToIdr(source, settings);
+  const defaultPrice = apiSuppliers.priceToIdr(source, supplierPrice, settings);
   const sellingPrice = Math.max(1000, Number(body.selling_price || body.harga || defaultPrice));
   const costIdr = Math.max(0, Math.round(supplierPrice * rate));
   const syncedAt = new Date().toISOString();
@@ -540,7 +585,7 @@ async function importProdSellerProduct(body = {}) {
     if (!targetCode) throw new Error('Pilih produk iLink yang akan dijadikan produk induk varian.');
     const target = localProducts.find((p) => String(p.kode || '').trim().toUpperCase() === targetCode);
     if (!target) throw new Error('Produk induk iLink tidak ditemukan. Muat ulang dashboard lalu coba lagi.');
-    if (supplierLinkOf(target, null)) throw new Error('Produk supplier mandiri tidak dapat dijadikan produk induk. Pilih produk iLink biasa.');
+    if (automatedSupplierLinkOf(target, null)) throw new Error('Produk supplier mandiri tidak dapat dijadikan produk induk. Pilih produk iLink biasa.');
 
     let variants = Array.isArray(target.variants) ? target.variants.map((v) => ({ ...v })) : [];
     let clearBaseStock = false;
@@ -562,7 +607,7 @@ async function importProdSellerProduct(body = {}) {
     }
 
     const linkedIndex = variants.findIndex((variant) => {
-      const link = supplierLinkOf(target, variant);
+      const link = apiSupplierLinkOf(target, variant, source);
       return link && String(link.productId) === productId;
     });
     const variantName = String(body.variant_name || body.variantName || detail.name || 'Varian Supplier').trim();
@@ -572,16 +617,16 @@ async function importProdSellerProduct(body = {}) {
       price: sellingPrice,
       cost_price: costIdr,
       sku: linkedIndex >= 0
-        ? String(variants[linkedIndex].sku || prodsellerCode(productId)).trim().toUpperCase()
-        : `${prodsellerCode(productId)}-V`,
-      note: 'Supplier otomatis ProdSeller',
+        ? String(variants[linkedIndex].sku || externalSupplierCode(source, productId)).trim().toUpperCase()
+        : `${externalSupplierCode(source, productId)}-V`,
+      note: `Supplier otomatis ${label}`,
       description: String(body.description || detail.description || target.deskripsi || 'Produk digital dikirim otomatis setelah pembayaran berhasil.'),
       snk: String(body.snk || 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.'),
       delivery_mode: 'po',
       active: body.active === undefined ? (linkedIndex >= 0 ? variants[linkedIndex].active !== false : true) : boolOf(body.active),
       stock: [],
       bulk_prices: linkedIndex >= 0 && Array.isArray(variants[linkedIndex].bulk_prices) ? variants[linkedIndex].bulk_prices : [],
-      supplier_source: 'prodseller',
+      supplier_source: source,
       supplier_product_id: productId,
       supplier_price_usdt: supplierPrice,
       supplier_public_price_usdt: Number(detail.publicPrice || 0),
@@ -599,13 +644,13 @@ async function importProdSellerProduct(body = {}) {
   }
 
   const existing = localProducts.find((p) => {
-    const link = supplierLinkOf(p, null);
+    const link = apiSupplierLinkOf(p, null, source);
     return link && String(link.productId) === productId;
   }) || null;
   const base = {
     harga: sellingPrice,
     cost_price: costIdr,
-    supplier_source: 'prodseller',
+    supplier_source: source,
     supplier_product_id: productId,
     supplier_price_usdt: supplierPrice,
     supplier_public_price_usdt: Number(detail.publicPrice || 0),
@@ -619,19 +664,27 @@ async function importProdSellerProduct(body = {}) {
     return db.updateProductByCode(existing.kode, {
       ...base,
       image_url: existing.image_url || String(detail.imageUrl || ''),
-      category: String(body.category || existing.category || settings.prodseller_default_category || 'Produk Digital')
+      category: String(body.category || existing.category || apiSuppliers.defaultCategory(source, settings))
     });
   }
   return db.addProduct({
     ...base,
-    nama: String(body.name || detail.name || 'Produk ProdSeller').trim(),
-    kode: prodsellerCode(productId),
+    nama: String(body.name || detail.name || `Produk ${label}`).trim(),
+    kode: externalSupplierCode(source, productId),
     deskripsi: String(detail.description || 'Produk digital dikirim otomatis setelah pembayaran berhasil.'),
     snk: 'Produk diproses otomatis melalui supplier setelah pembayaran berhasil. Simpan data akun/key yang diterima dengan baik.',
     image_url: String(detail.imageUrl || ''),
-    category: String(body.category || settings.prodseller_default_category || 'Produk Digital'),
+    category: String(body.category || apiSuppliers.defaultCategory(source, settings)),
     stock: []
   });
+}
+
+async function importProdSellerProduct(body = {}) {
+  return importExternalSupplierProduct(body, { source: 'prodseller', service: prodseller, label: 'ProdSeller' });
+}
+
+async function importAiverseHubProduct(body = {}) {
+  return importExternalSupplierProduct(body, { source: 'aiversehub', service: aiverseHub, label: 'AIVerseHub' });
 }
 
 async function uploadImageToImage2Url(payload = {}) {
@@ -781,6 +834,8 @@ module.exports = async function handler(req, res) {
     }
     if (req.method === 'GET' && action === 'prodseller-status') return json(res, 200, { ok: true, data: await getProdSellerStatus() });
     if (req.method === 'GET' && action === 'prodseller-products') return json(res, 200, { ok: true, data: await getProdSellerCatalog() });
+    if (req.method === 'GET' && action === 'aiversehub-status') return json(res, 200, { ok: true, data: await getAiverseHubStatus() });
+    if (req.method === 'GET' && action === 'aiversehub-products') return json(res, 200, { ok: true, data: await getAiverseHubCatalog() });
     if (req.method === 'GET' && action === 'supplier-orders') return json(res, 200, { ok: true, data: await db.listSupplierOrders(100) });
     if (req.method === 'GET' && action === 'reseller-suppliers') return json(res, 200, { ok: true, data: await resellerSupplierSummary() });
     if (req.method === 'GET' && action === 'reseller-supplier-ledger') return json(res, 200, { ok: true, data: await db.listResellerSupplierLedger(req.query?.id || '', 100) });
@@ -822,9 +877,15 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, data });
     }
 
-    if (action === 'prodseller-retry') {
+    if (action === 'aiversehub-import') {
       const body = bodyOf(req);
-      const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner' });
+      const data = await importAiverseHubProduct(body);
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'prodseller-retry' || action === 'supplier-retry') {
+      const body = bodyOf(req);
+      const data = await paymentService.retrySupplierOrder(body.order_ref || body.invoice || '', { id: config.ownerId, first_name: 'Owner', force_aiverse_retry: boolOf(body.force_aiverse_retry) });
       return json(res, 200, { ok: true, data });
     }
 
@@ -1509,7 +1570,10 @@ module.exports = async function handler(req, res) {
         autogopay_payment_method: body.autogopay_payment_method === undefined ? undefined : (String(body.autogopay_payment_method || '').trim().toLowerCase() === 'shopeepay' ? 'shopeepay' : 'gopay'),
         prodseller_usdt_to_idr: body.prodseller_usdt_to_idr,
         prodseller_markup_percent: body.prodseller_markup_percent,
-        prodseller_default_category: body.prodseller_default_category
+        prodseller_default_category: body.prodseller_default_category,
+        aiversehub_unit_to_idr: body.aiversehub_unit_to_idr,
+        aiversehub_markup_percent: body.aiversehub_markup_percent,
+        aiversehub_default_category: body.aiversehub_default_category
       });
       let bot_name_sync = { ok: true, skipped: true };
       const requestedBotName = String(body.store_name || '').trim();
@@ -1598,11 +1662,11 @@ module.exports = async function handler(req, res) {
       if (body.field && body.value !== undefined) updates[body.field] = ['harga','cost_price','modal','harga_modal'].includes(body.field) ? numberOf(body.value) : String(body.value || '').trim();
       const currentProduct = await db.getProductByCode(code);
       const currentSupplierSource = String(currentProduct?.supplier_source || '').toLowerCase();
-      if (['prodseller', 'telegram_workflow'].includes(currentSupplierSource)) {
+      if (['prodseller', 'aiversehub', 'telegram_workflow'].includes(currentSupplierSource)) {
         updates.delivery_mode = 'po';
         // ProdSeller tidak memakai stok lokal. Workflow Telegram sengaja mempertahankan
         // stok lama agar saat workflow dinonaktifkan produk dapat kembali seperti semula.
-        if (currentSupplierSource === 'prodseller') updates.stock = [];
+        if (['prodseller', 'aiversehub'].includes(currentSupplierSource)) updates.stock = [];
         else delete updates.stock;
       }
       const product = await db.updateProductByCode(code, updates);

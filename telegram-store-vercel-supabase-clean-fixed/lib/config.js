@@ -32,6 +32,8 @@ const config = {
   autogopayRedirectUrl: required('AUTOGOPAY_REDIRECT_URL', ''),
   prodsellerApiKey: required('PRODSELLER_API_KEY', '').trim(),
   prodsellerBaseUrl: required('PRODSELLER_BASE_URL', 'https://prodseller.com/v1').replace(/\/$/, ''),
+  aiverseHubApiKey: required('AIVERSEHUB_API_KEY', '').trim(),
+  aiverseHubBaseUrl: required('AIVERSEHUB_BASE_URL', 'https://aiversehub.store/api/v1').replace(/\/$/, ''),
   userbotApiId: Math.max(0, Number(required('TG_API_ID', required('TELEGRAM_API_ID', '0'))) || 0),
   userbotApiHash: required('TG_API_HASH', required('TELEGRAM_API_HASH', '')).trim(),
   userbotStringSession: required('TG_STRING_SESSION', required('TELEGRAM_STRING_SESSION', '')).trim(),

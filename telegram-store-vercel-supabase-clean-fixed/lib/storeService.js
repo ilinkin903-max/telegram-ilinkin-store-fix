@@ -6,6 +6,8 @@ const runtimeCache = require('./runtimeCache');
 const paymentService = require('./paymentService');
 const paymentPoll = require('./paymentPollService');
 const prodseller = require('./prodsellerService');
+const aiverseHub = require('./aiverseHubService');
+const apiSuppliers = require('./apiSupplierRegistry');
 const { config } = require('./config');
 const { randomFee, randomRef } = require('./utils');
 
@@ -310,7 +312,7 @@ function promoDisplay(promo, originalPrice) {
 function supplierSelection(product, variant = null) {
   const source = String(variant?.supplier_source || (!variant ? product?.supplier_source : '') || '').trim().toLowerCase();
   const productId = String(variant?.supplier_product_id || (!variant ? product?.supplier_product_id : '') || '').trim();
-  if (source !== 'prodseller' || !productId) return null;
+  if (!apiSuppliers.isApiSupplierSource(source) || !productId) return null;
   return { source, productId, variant };
 }
 
@@ -321,9 +323,9 @@ function workflowSelection(product, variant = null) {
   return { source, workflowId, variant };
 }
 
-function supplierAvailabilityFromProduct(product, supplierId, fallbackStock = 0) {
+function supplierAvailabilityFromProduct(product, supplierId, fallbackStock = 0, source = 'prodseller') {
   const map = product?._supplier_availability_by_id || {};
-  const availability = map && map[String(supplierId || '')];
+  const availability = map && (map[apiSuppliers.supplierKey(source, supplierId)] || map[String(supplierId || '')]);
   if (availability) return availability;
   return { availableStock: Math.max(0, Math.floor(Number(fallbackStock || 0))), unitPrice: 0, publicPrice: 0, supplierStock: fallbackStock == null ? null : Number(fallbackStock) };
 }
@@ -341,7 +343,7 @@ function sanitizeVariant(variant, index, promos = [], productCode = '', flashPro
   const flashPromo = promoDisplay(bestPromoForSelection(flashPromos, productCode, key, 1, price), price);
   const supplier = supplierSelection(product, variant);
   const workflow = workflowSelection(product, variant);
-  const availability = supplier ? supplierAvailabilityFromProduct(product, supplier.productId, variant?.supplier_stock) : null;
+  const availability = supplier ? supplierAvailabilityFromProduct(product, supplier.productId, variant?.supplier_stock, supplier.source) : null;
   const deliveryMode = db.normalizeDeliveryMode(variant?.delivery_mode, '');
   return {
     key,
@@ -397,7 +399,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
   const buyableVariants = variants.filter((variant) => variant.price > 0 && (variant.effective_delivery_mode === 'po' || variant.stock > 0));
   const baseStock = Array.isArray(product?.data) ? product.data.length : 0;
   const supplierAvailableStock = isSupplier
-    ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock).availableStock || 0)))
+    ? Math.max(0, Math.floor(Number(supplierAvailabilityFromProduct(product, directSupplier.productId, product?.supplier_stock, directSupplier.source).availableStock || 0)))
     : null;
   const workflowAvailableStock = isWorkflow ? workflowAvailabilityFromProduct(product, null).availableStock : null;
   let sharedStockCounted = false;
@@ -434,7 +436,7 @@ function sanitizeProduct(product, promos = [], flashPromos = []) {
     ? (displayPrices.length ? Math.max(...displayPrices) : priceMax)
     : (basePromo ? basePromo.final_price : priceMax);
   const hasPromo = Boolean(basePromo || variants.some((variant) => variant.promo));
-  const hasSupplierVariants = variants.some((variant) => variant.supplier_source === 'prodseller');
+  const hasSupplierVariants = variants.some((variant) => apiSuppliers.isApiSupplierSource(variant.supplier_source));
   const hasWorkflowVariants = variants.some((variant) => variant.supplier_source === 'telegram_workflow');
 
   return {
@@ -491,57 +493,73 @@ async function buildPublicCatalog() {
     ? promos.filter((promo) => flashPromoCodeSet.has(String(promo.code || '').trim().toUpperCase()))
     : [];
   const supplierAvailability = new Map();
-  const supplierRefs = new Set();
+  const supplierRefsBySource = new Map([
+    ['prodseller', new Set()],
+    ['aiversehub', new Set()]
+  ]);
+  const supplierRefs = supplierRefsBySource.get('prodseller');
   products.forEach((product) => {
     const direct = supplierSelection(product, null);
-    if (direct) supplierRefs.add(direct.productId);
+    if (direct) { if (direct.source === 'prodseller') supplierRefs.add(direct.productId); else supplierRefsBySource.get(direct.source)?.add(direct.productId); }
     (Array.isArray(product?.variants) ? product.variants : []).forEach((variant) => {
       const ref = supplierSelection(product, variant);
-      if (ref) supplierRefs.add(ref.productId);
+      if (ref) { if (ref.source === 'prodseller') supplierRefs.add(ref.productId); else supplierRefsBySource.get(ref.source)?.add(ref.productId); }
     });
   });
-  if (supplierRefs.size && prodseller.configured()) {
-    const balanceData = await prodseller.getBalance({ timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS }).catch(() => null);
-    const rows = balanceData ? await Promise.allSettled([...supplierRefs].map(async (supplierId) => {
-      const liveProduct = await prodseller.getProduct(supplierId, { timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS });
-      return [supplierId, prodseller.availabilityFrom({ balanceData, product: liveProduct })];
+
+  async function loadSupplierAvailability(source, service) {
+    const refs = supplierRefsBySource.get(source) || new Set();
+    if (!refs.size || !service.configured()) return;
+    const balanceData = await service.getBalance({ timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS }).catch(() => null);
+    const rows = balanceData ? await Promise.allSettled([...refs].map(async (supplierId) => {
+      const liveProduct = await service.getProduct(supplierId, { timeout: STORE_SUPPLIER_CATALOG_TIMEOUT_MS });
+      return [supplierId, service.availabilityFrom({ balanceData, product: liveProduct })];
     })) : [];
     rows.forEach((row) => {
-      if (row.status === 'fulfilled' && row.value) supplierAvailability.set(String(row.value[0]), row.value[1]);
-    });
-
-    const syncedAt = new Date().toISOString();
-    products.forEach((product) => {
-      const direct = supplierSelection(product, null);
-      const variants = Array.isArray(product?.variants) ? product.variants.map((variant) => ({ ...variant })) : [];
-      let variantsChanged = false;
-      variants.forEach((variant, index) => {
-        const ref = supplierSelection(product, variant);
-        const availability = ref ? supplierAvailability.get(ref.productId) : null;
-        if (!availability) return;
-        variants[index] = {
-          ...variant,
-          supplier_price_usdt: availability.unitPrice,
-          supplier_public_price_usdt: availability.publicPrice,
-          supplier_stock: availability.supplierStock,
-          supplier_synced_at: syncedAt
-        };
-        variantsChanged = true;
-      });
-      const directAvailability = direct ? supplierAvailability.get(direct.productId) : null;
-      if (directAvailability || variantsChanged) {
-        db.updateProductByCode(product.kode, {
-          ...(directAvailability ? {
-            supplier_price_usdt: directAvailability.unitPrice,
-            supplier_public_price_usdt: directAvailability.publicPrice,
-            supplier_stock: directAvailability.supplierStock,
-            supplier_synced_at: syncedAt
-          } : {}),
-          ...(variantsChanged ? { variants } : {})
-        }).catch(() => null);
+      if (row.status === 'fulfilled' && row.value) {
+        const key = apiSuppliers.supplierKey(source, row.value[0]);
+        supplierAvailability.set(key, row.value[1]);
+        if (source === 'prodseller') supplierAvailability.set(String(row.value[0]), row.value[1]);
       }
     });
   }
+
+  await Promise.all([
+    loadSupplierAvailability('prodseller', prodseller),
+    loadSupplierAvailability('aiversehub', aiverseHub)
+  ]);
+
+  const syncedAt = new Date().toISOString();
+  products.forEach((product) => {
+    const direct = supplierSelection(product, null);
+    const variants = Array.isArray(product?.variants) ? product.variants.map((variant) => ({ ...variant })) : [];
+    let variantsChanged = false;
+    variants.forEach((variant, index) => {
+      const ref = supplierSelection(product, variant);
+      const availability = ref ? supplierAvailability.get(apiSuppliers.supplierKey(ref.source, ref.productId)) : null;
+      if (!availability) return;
+      variants[index] = {
+        ...variant,
+        supplier_price_usdt: availability.unitPrice,
+        supplier_public_price_usdt: availability.publicPrice,
+        supplier_stock: availability.supplierStock,
+        supplier_synced_at: syncedAt
+      };
+      variantsChanged = true;
+    });
+    const directAvailability = direct ? supplierAvailability.get(apiSuppliers.supplierKey(direct.source, direct.productId)) : null;
+    if (directAvailability || variantsChanged) {
+      db.updateProductByCode(product.kode, {
+        ...(directAvailability ? {
+          supplier_price_usdt: directAvailability.unitPrice,
+          supplier_public_price_usdt: directAvailability.publicPrice,
+          supplier_stock: directAvailability.supplierStock,
+          supplier_synced_at: syncedAt
+        } : {}),
+        ...(variantsChanged ? { variants } : {})
+      }).catch(() => null);
+    }
+  });
 
 
   const publicProducts = products
@@ -549,10 +567,10 @@ async function buildPublicCatalog() {
     .map((product) => {
       const map = {};
       const direct = supplierSelection(product, null);
-      if (direct && supplierAvailability.has(direct.productId)) map[direct.productId] = supplierAvailability.get(direct.productId);
+      if (direct) { const key = apiSuppliers.supplierKey(direct.source, direct.productId); if (supplierAvailability.has(key)) map[key] = supplierAvailability.get(key); }
       (Array.isArray(product?.variants) ? product.variants : []).forEach((variant) => {
         const ref = supplierSelection(product, variant);
-        if (ref && supplierAvailability.has(ref.productId)) map[ref.productId] = supplierAvailability.get(ref.productId);
+        if (ref) { const key = apiSuppliers.supplierKey(ref.source, ref.productId); if (supplierAvailability.has(key)) map[key] = supplierAvailability.get(key); }
       });
       const enriched = { ...product, _supplier_availability_by_id: map };
       return sanitizeProduct(enriched, activePromos, flashPromos);
@@ -731,11 +749,14 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
   const isSupplier = Boolean(supplier);
   let liveSupplierCostUnit = null;
   if (isSupplier) {
-    if (!prodseller.configured()) {
+    const supplierService = supplier.source === 'aiversehub' ? aiverseHub : prodseller;
+    if (!supplierService.configured()) {
       throw httpError('Produk supplier otomatis sedang tidak tersedia. Silakan coba lagi nanti.', 503, 'SUPPLIER_NOT_CONFIGURED');
     }
     try {
-      const availability = await prodseller.getAvailability(supplier.productId, { force: true });
+      const availability = supplier.source === 'aiversehub'
+        ? await aiverseHub.getAvailability(supplier.productId, { force: true })
+        : await prodseller.getAvailability(supplier.productId, { force: true });
       if (availability.availableStock < qty) {
         throw httpError(`Stok tidak mencukupi. Stok tersedia: ${Math.max(0, availability.availableStock)}.`, 409, 'SUPPLIER_STOCK', {
           available_stock: Math.max(0, availability.availableStock)
@@ -743,7 +764,7 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
       }
       if (availability.unitPrice > 0) {
         const settings = await db.getShopSettings();
-        const rate = Math.max(1, Number(settings.prodseller_usdt_to_idr || 16500));
+        const rate = apiSuppliers.rateToIdr(supplier.source, settings);
         liveSupplierCostUnit = Math.max(0, Math.round(availability.unitPrice * rate));
         if (selected.variant) {
           const nextVariants = (Array.isArray(product.variants) ? product.variants : []).map((variant, index) => index === selected.index ? {
@@ -767,10 +788,10 @@ async function prepareCheckout({ user, productCode, variantKey, quantity, vouche
       }
     } catch (error) {
       if (error?.code === 'SUPPLIER_STOCK') throw error;
-      if (error?.code === 'PRODSELLER_BALANCE') {
+      if (['PRODSELLER_BALANCE', 'AIVERSEHUB_BALANCE'].includes(error?.code)) {
         throw httpError('Stok produk sedang 0. Saldo supplier belum mencukupi untuk mengambil produk ini.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
       }
-      if (error?.code === 'PRODSELLER_STOCK' || Number(error?.statusCode || 0) === 409) {
+      if (['PRODSELLER_STOCK', 'AIVERSEHUB_STOCK'].includes(error?.code) || Number(error?.statusCode || 0) === 409) {
         throw httpError('Stok produk sedang habis. Silakan pilih produk lain.', 409, 'SUPPLIER_STOCK', { available_stock: 0 });
       }
       throw httpError('Stok supplier sedang tidak dapat diverifikasi. Silakan coba lagi sebentar.', 503, 'SUPPLIER_UNAVAILABLE');

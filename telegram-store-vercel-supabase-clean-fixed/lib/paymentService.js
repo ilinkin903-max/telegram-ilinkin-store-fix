@@ -4,6 +4,7 @@ const db = require('./db');
 const tg = require('./telegram');
 const walletNotifications = require('./walletNotifications');
 const prodseller = require('./prodsellerService');
+const aiverseHub = require('./aiverseHubService');
 const workflowUserbot = require('./userbotWorkflowService');
 const { formatRupiah, formatWIB } = require('./utils');
 
@@ -833,6 +834,21 @@ function isProdSellerProduct(product = {}, order = {}) {
   return Boolean(prodSellerSelection(product, order));
 }
 
+function aiverseHubSelection(product = {}, order = {}) {
+  const variant = selectedVariant(product, order);
+  const variantSource = String(variant?.supplier_source || '').trim().toLowerCase();
+  const variantProductId = String(variant?.supplier_product_id || '').trim();
+  if (variantSource === 'aiversehub' && variantProductId) return { productId: variantProductId, variant };
+  const source = String(product?.supplier_source || '').trim().toLowerCase();
+  const productId = String(product?.supplier_product_id || '').trim();
+  if (source === 'aiversehub' && productId) return { productId, variant: null };
+  return null;
+}
+
+function isAiverseHubProduct(product = {}, order = {}) {
+  return Boolean(aiverseHubSelection(product, order));
+}
+
 
 function workflowSelection(product = {}, order = {}) {
   const variant = selectedVariant(product, order);
@@ -1231,8 +1247,8 @@ async function notifyOwnerSupplierIssue(order, product, error, supplierRow = nul
       `=======================\n` +
       `Invoice: ${ref}\n` +
       `Produk: ${product?.nama || product?.kode || '-'}\n` +
-      `Supplier: ProdSeller\n` +
-      `Product ID: ${prodSellerSelection(product, order)?.productId || '-'}\n` +
+      `Supplier: ${isAiverseHubProduct(product, order) ? 'AIVerseHub' : 'ProdSeller'}\n` +
+      `Product ID: ${(aiverseHubSelection(product, order) || prodSellerSelection(product, order))?.productId || '-'}\n` +
       `Jumlah: ${Number(order?.quantity || 1)}\n` +
       `Status: ${supplierRow?.status || 'error'}\n` +
       `Keterangan: ${String(error?.message || error || 'Belum terkirim')}\n\n` +
@@ -1349,15 +1365,123 @@ async function processProdSellerDelivery({ order, product, transaction, buyer = 
   }
 }
 
+async function processAiverseHubDelivery({ order, product, transaction, buyer = {}, source = 'supplier-auto' }) {
+  const invoice = String(order?.invoice_ref || transaction?.order_ref || '').trim();
+  if (!invoice) throw new Error('Invoice supplier tidak ditemukan.');
+  const supplier = aiverseHubSelection(product, transaction || order);
+  if (!supplier) return { handled: false };
+  const supplierProductId = supplier.productId;
+
+  const existingPo = await db.getPoOrder(invoice).catch(() => null);
+  if (existingPo?.status === 'delivered' && existingPo.delivery_text) {
+    const delivered = String(existingPo.delivery_text).split(/\r?\n/).filter(Boolean);
+    try {
+      await sendSupplierDeliveryOnce({ invoice, userId: Number(order?.telegram_id || transaction?.telegram_id), poOrder: existingPo, deliveryText: existingPo.delivery_text, product });
+      await sendOwnerLog({ ...order, invoice_ref: invoice }, product, transaction, buyer);
+    } catch (error) {
+      await notifyOwnerSupplierIssue({ ...order, invoice_ref: invoice }, product, error, await db.getSupplierOrder(invoice).catch(() => null));
+      return { handled: true, pending: true, error, delivered, po_order: existingPo, transaction };
+    }
+    return { handled: true, delivered, po_order: existingPo, transaction };
+  }
+
+  let supplierRow = await db.getSupplierOrder(invoice).catch(() => null);
+  let remote = null;
+  try {
+    if (supplierRow?.supplier_order_id && !['delivered', 'failed'].includes(String(supplierRow.status || '').toLowerCase())) {
+      remote = await aiverseHub.getOrder(supplierRow.supplier_order_id);
+    }
+    if (!remote || !remote.orderId) {
+      remote = await aiverseHub.createOrder({
+        productId: supplierProductId,
+        quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1))
+      });
+    }
+
+    const delivered = aiverseHub.deliveredItems(remote);
+    const remoteStatus = String(remote?.status || (delivered.length ? 'delivered' : 'pending')).trim().toLowerCase();
+    supplierRow = await db.upsertSupplierOrder({
+      order_ref: invoice,
+      supplier: 'aiversehub',
+      supplier_order_id: remote?.orderId || supplierRow?.supplier_order_id || '',
+      supplier_product_id: supplierProductId,
+      quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+      amount_usdt: Number(remote?.amount || supplierRow?.amount_usdt || 0),
+      status: delivered.length ? 'delivered' : remoteStatus,
+      delivered_text: delivered.join('\n'),
+      error_code: '',
+      error_message: '',
+      raw_response: remote?.raw || remote || {}
+    });
+
+    if (!delivered.length || !['delivered', 'success', 'completed'].includes(remoteStatus)) {
+      const pendingError = new Error('Order AIVerseHub sudah dibuat tetapi produk belum terkirim. Gunakan Retry Supplier untuk mengecek order yang sama.');
+      pendingError.code = 'AIVERSEHUB_PENDING';
+      pendingError.statusCode = 202;
+      throw pendingError;
+    }
+
+    const marked = await db.markPoDelivered(invoice, delivered.join('\n'), config.ownerId || null);
+    const poOrder = marked?.po_order || await db.getPoOrder(invoice);
+    const finalTransaction = marked?.transaction || transaction;
+    await sendSupplierDeliveryOnce({
+      invoice,
+      userId: Number(order?.telegram_id || transaction?.telegram_id),
+      poOrder: poOrder || { ...order, order_ref: invoice },
+      deliveryText: delivered.join('\n'),
+      product
+    });
+    await sendOwnerLog({ ...order, invoice_ref: invoice }, product, finalTransaction, buyer);
+    return { handled: true, delivered, po_order: poOrder, transaction: finalTransaction, supplier_order: supplierRow };
+  } catch (error) {
+    if (error?.code !== 'AIVERSEHUB_PENDING') {
+      const supplierAlreadyDelivered = Boolean(String(supplierRow?.delivered_text || '').trim());
+      supplierRow = await db.upsertSupplierOrder({
+        order_ref: invoice,
+        supplier: 'aiversehub',
+        supplier_order_id: supplierRow?.supplier_order_id || '',
+        supplier_product_id: supplierProductId,
+        quantity: Math.max(1, Number(order?.quantity || transaction?.quantity || 1)),
+        amount_usdt: Number(supplierRow?.amount_usdt || 0),
+        status: supplierAlreadyDelivered ? 'delivery_pending' : 'error',
+        delivered_text: supplierRow?.delivered_text || '',
+        error_code: supplierAlreadyDelivered ? 'TELEGRAM_DELIVERY' : String(error?.code || 'AIVERSEHUB_ERROR'),
+        error_message: String(error?.message || error || 'AIVerseHub error'),
+        raw_response: {
+          ...(supplierRow?.raw_response || {}),
+          retry_uncertain: error?.retryUncertain === true
+        }
+      }).catch(() => supplierRow);
+    }
+    await notifyOwnerSupplierIssue({ ...order, invoice_ref: invoice }, product, error, supplierRow);
+    return { handled: true, pending: true, error, supplier_order: supplierRow, transaction };
+  }
+}
+
 async function retrySupplierOrder(orderRef, actor = {}) {
   const invoice = String(orderRef || '').trim();
   if (!invoice) throw new Error('Invoice supplier wajib diisi.');
   const transaction = await db.getTransactionByOrderRef(invoice);
   if (!transaction) throw new Error('Transaksi pelanggan tidak ditemukan.');
   const product = await db.getProductByCode(transaction.product_code);
-  if (!isProdSellerProduct(product, transaction)) throw new Error('Produk/varian pada invoice ini bukan produk ProdSeller.');
+  const isProdSeller = isProdSellerProduct(product, transaction);
+  const isAiverse = isAiverseHubProduct(product, transaction);
+  if (!isProdSeller && !isAiverse) throw new Error('Produk/varian pada invoice ini bukan produk supplier API.');
   const buyer = Object.keys(actor || {}).length ? actor : (await db.getUserByTelegramId(transaction.telegram_id).catch(() => null)) || {};
-  const result = await processProdSellerDelivery({
+
+  if (isAiverse) {
+    const existingSupplier = await db.getSupplierOrder(invoice).catch(() => null);
+    const uncertain = existingSupplier?.raw_response?.retry_uncertain === true;
+    if (uncertain && actor?.force_aiverse_retry !== true) {
+      const error = new Error('Order AIVerseHub sebelumnya timeout/koneksi terputus sehingga status pembelian belum pasti. Cek riwayat order AIVerseHub terlebih dahulu untuk memastikan belum terpotong. Setelah itu gunakan Paksa Retry AIVerseHub.');
+      error.code = 'AIVERSEHUB_RETRY_CONFIRM_REQUIRED';
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  const runner = isAiverse ? processAiverseHubDelivery : processProdSellerDelivery;
+  const result = await runner({
     order: {
       invoice_ref: invoice,
       telegram_id: Number(transaction.telegram_id || 0),
@@ -1441,7 +1565,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
         result.transaction = workflowResult.transaction || result.transaction;
         result.delivered = workflowResult.delivered;
       }
-    } else if (poWaiting && isProdSellerProduct(product, result.transaction || order)) {
+    } else if (poWaiting && (isProdSellerProduct(product, result.transaction || order) || isAiverseHubProduct(product, result.transaction || order))) {
       const paidNoticeKey = `supplier_paid_notice:${invoice}`;
       const paidNoticeClaimed = await db.claimOnce(paidNoticeKey, 30 * 24 * 60 * 60, { invoice, telegram_id: Number(order.telegram_id || 0) }, { failClosed: true });
       if (paidNoticeClaimed) {
@@ -1453,7 +1577,9 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
           throw noticeError;
         }
       }
-      supplierResult = await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
+      supplierResult = isAiverseHubProduct(product, result.transaction || order)
+        ? await processAiverseHubDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source })
+        : await processProdSellerDelivery({ order, product, transaction: result.transaction, buyer: currentBuyer, source });
       if (supplierResult && !supplierResult.pending && supplierResult.delivered?.length) {
         poWaiting = false;
         result.transaction = supplierResult.transaction || result.transaction;
@@ -1468,7 +1594,7 @@ async function fulfillPaidOrder({ order, buyer = {}, source = 'webhook' }) {
       if (noticeClaimed) {
         try {
           if (!(workflowResult && workflowResult.workflow_failure_notified)) {
-            if (isProdSellerProduct(product, result.transaction || order) || isWorkflowProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
+            if (isProdSellerProduct(product, result.transaction || order) || isAiverseHubProduct(product, result.transaction || order) || isWorkflowProduct(product, result.transaction || order)) await sendSupplierPendingNotice(order.telegram_id);
             else await sendPoPaidNotice(order.telegram_id, order, product, result.transaction);
           }
           await db.markClaimDone(noticeKey, { invoice, state: workflowResult?.workflow_failure_notified ? 'workflow_failed' : 'notified' }).catch(() => null);
@@ -1742,6 +1868,9 @@ module.exports = {
   scheduleTopupWatcher,
   fulfillPaidOrder,
   retrySupplierOrder,
+  processAiverseHubDelivery,
+  isAiverseHubProduct,
+  aiverseHubSelection,
   retryWorkflowOrder,
   processWorkflowDelivery,
   isWorkflowProduct,

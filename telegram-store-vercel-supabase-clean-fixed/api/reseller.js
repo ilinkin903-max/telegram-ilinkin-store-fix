@@ -613,6 +613,31 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
       <div id="supplierOrderList" class="supplierOrderList"></div>
     </div>
     </details>
+
+    <details class="panel supplierPanel" id="aiverseOptionalPanel">
+      <summary class="sectionTitle" style="cursor:pointer">AIVerseHub API (Opsional)</summary>
+      <div class="sectionToolbar compactToolbar" style="margin-top:12px"><div><h2 class="sectionTitle">AIVerseHub API</h2><p class="help">Saldo supplier tetap berada di akun AIVerseHub yang Anda top up. iLink memakai API key server untuk membaca saldo, katalog/stok, dan membeli produk otomatis setelah pembayaran pelanggan berhasil.</p></div><button class="btn cyan" id="refreshAiverse" type="button">Refresh AIVerseHub</button></div>
+      <div id="aiverseConfigWarning" class="supplierConfigWarning hidden"></div>
+      <div id="aiverseStatus" class="supplierHero"></div>
+      <form id="aiverseSettingsForm" class="form">
+        <div class="row3">
+          <div class="field"><label class="label">Kurs 1 Unit Saldo → Rupiah</label><input class="input" type="number" min="0.000001" step="0.000001" name="aiversehub_unit_to_idr" placeholder="1"><p class="help">Dokumentasi AIVerseHub tidak menyebut mata uang balance/price secara eksplisit. Jika nilainya sudah Rupiah, isi 1. Jika USD/USDT, isi kurs Rupiah yang Anda gunakan.</p></div>
+          <div class="field"><label class="label">Markup Default (%)</label><input class="input" type="number" min="0" step="1" name="aiversehub_markup_percent" placeholder="25"><p class="help">Dipakai hanya untuk saran harga jual. Harga per produk tetap dapat diubah.</p></div>
+          <div class="field"><label class="label">Kategori Default</label><input class="input" name="aiversehub_default_category" placeholder="Produk Digital"></div>
+        </div>
+        <button class="btn lime" type="submit">Simpan Pengaturan AIVerseHub</button>
+      </form>
+      <div class="panel">
+        <div class="sectionToolbar compactToolbar"><div><h2 class="sectionTitle">Pilih Produk AIVerseHub</h2><p class="help">Pilih service yang akan dijual, tentukan harga jual iLink, lalu masukkan sebagai produk mandiri atau varian.</p></div></div>
+        <div class="supplierToolbar"><input id="aiverseSearch" class="input" placeholder="Cari produk AIVerseHub..."><span class="chip" id="aiverseProductCount">0 produk</span></div>
+        <div id="aiverseProductList" class="supplierGrid"></div>
+      </div>
+      <div class="panel">
+        <h2 class="sectionTitle">Order AIVerseHub Terakhir</h2>
+        <p class="help">Jika order gagal karena saldo/stok, perbaiki saldo atau tunggu stok lalu Retry. Untuk timeout/koneksi terputus, cek riwayat order AIVerseHub dulu sebelum Paksa Retry agar tidak double purchase.</p>
+        <div id="aiverseOrderList" class="supplierOrderList"></div>
+      </div>
+    </details>
   </section>
 
   <section id="workflowSettings" class="section">
@@ -656,7 +681,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
   var initData = tg && tg.initData ? tg.initData : '';
-  var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], redeemCodes:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[], supplierStatus:{}, supplierProducts:[], supplierOrders:[], resellerSuppliers:[], supplierLoaded:false, workflowStatus:{}, workflows:[], workflowRuns:[], workflowDetail:null, workflowLoaded:false };
+  var state = { stats:{}, products:[], orders:[], poOrders:[], users:[], vouchers:[], redeemCodes:[], polls:[], settings:{}, analytics:{}, maintenance:{}, backups:[], promos:[], deepStats:{}, license:{}, promoTargets:[], supplierStatus:{}, supplierProducts:[], aiverseStatus:{}, aiverseProducts:[], supplierOrders:[], resellerSuppliers:[], supplierLoaded:false, workflowStatus:{}, workflows:[], workflowRuns:[], workflowDetail:null, workflowLoaded:false };
   var workflowRecorderBusy=false, workflowRecorderActionLock=false, workflowRecorderLoopStarted=false, workflowRecorderLoopGeneration=0;
   var dashboardLiveBusy=false, dashboardLiveTimer=null, dashboardLiveStarted=false;
   function rupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0)); }
@@ -1153,7 +1178,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     return Array.from(document.querySelectorAll('[data-banner-row]')).map(function(row,i){return bannerRowData(row,i);}).filter(function(x){return x.type==='native'?(x.title||x.description||x.kicker):x.url;}).slice(0,12);
   }
   function datetimeLocalValue(value){ if(!value)return ''; var text=String(value).trim(); var m=text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if(m)return m[1]; try{var d=new Date(text);if(isNaN(d.getTime()))return '';var pad=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}catch(e){return '';} }
-  function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); var payment=document.getElementById('paymentSettingsForm'); var supplier=document.getElementById('supplierSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','nokos_link','bot_menu_mode','bot_enabled','bot_maintenance_message','show_total_users','join_required_enabled','required_channel_id','required_channel_link','transaction_notifications_enabled','transaction_channel_id'].forEach(function(k){ if(store[k]) store[k].value=s[k]!==undefined&&s[k]!==null?String(s[k]):''; }); if(store.bot_enabled&&!store.bot_enabled.value)store.bot_enabled.value='true'; if(store.show_total_users&&!store.show_total_users.value)store.show_total_users.value='true'; if(store.join_required_enabled&&!store.join_required_enabled.value)store.join_required_enabled.value='false'; if(store.transaction_notifications_enabled&&!store.transaction_notifications_enabled.value)store.transaction_notifications_enabled.value='true'; } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } if(payment&&payment.autogopay_payment_method){ payment.autogopay_payment_method.value=String(s.autogopay_payment_method||'gopay').toLowerCase()==='shopeepay'?'shopeepay':'gopay'; } if(supplier){ supplier.prodseller_usdt_to_idr.value=Number(s.prodseller_usdt_to_idr||16500); supplier.prodseller_markup_percent.value=Number(s.prodseller_markup_percent||25); supplier.prodseller_default_category.value=String(s.prodseller_default_category||'Produk Digital'); } }
+  function renderSettingsForm(){ var s=state.settings||{}; var store=document.getElementById('storeSettingsForm'); var banner=document.getElementById('bannerSettingsForm'); var start=document.getElementById('startMediaForm'); var wallet=document.getElementById('walletSettingsForm'); var payment=document.getElementById('paymentSettingsForm'); var supplier=document.getElementById('supplierSettingsForm'); var aiverse=document.getElementById('aiverseSettingsForm'); if(store){ ['store_name','logo_url','customer_service_link','group_link','nokos_link','bot_menu_mode','bot_enabled','bot_maintenance_message','show_total_users','join_required_enabled','required_channel_id','required_channel_link','transaction_notifications_enabled','transaction_channel_id'].forEach(function(k){ if(store[k]) store[k].value=s[k]!==undefined&&s[k]!==null?String(s[k]):''; }); if(store.bot_enabled&&!store.bot_enabled.value)store.bot_enabled.value='true'; if(store.show_total_users&&!store.show_total_users.value)store.show_total_users.value='true'; if(store.join_required_enabled&&!store.join_required_enabled.value)store.join_required_enabled.value='false'; if(store.transaction_notifications_enabled&&!store.transaction_notifications_enabled.value)store.transaction_notifications_enabled.value='true'; } if(banner){ if(banner.banner_interval_seconds) banner.banner_interval_seconds.value=s.banner_interval_seconds||'5'; if(banner.store_description) banner.store_description.value=''; if(banner.banner_url) banner.banner_url.value=''; renderBannerRows(parseAdminBannerItems(s)); } if(start){ ['start_media_type','start_media_value','start_media_caption'].forEach(function(k){ if(start[k]) start[k].value=s[k]||(k==='start_media_type'?'none':''); }); } if(wallet){ wallet.referral_enabled.value=String(s.referral_enabled===undefined?'true':s.referral_enabled).toLowerCase()==='false'?'false':'true'; wallet.referral_reward_amount.value=Number(s.referral_reward_amount||500); wallet.referral_reward_mode.value=String(s.referral_reward_mode||'signup')==='first_purchase'?'first_purchase':'signup'; wallet.topup_enabled.value=String(s.topup_enabled===undefined?'true':s.topup_enabled).toLowerCase()==='false'?'false':'true'; wallet.wallet_payment_enabled.value=String(s.wallet_payment_enabled===undefined?'true':s.wallet_payment_enabled).toLowerCase()==='false'?'false':'true'; wallet.topup_min_amount.value=Number(s.topup_min_amount||10000); wallet.topup_max_amount.value=Number(s.topup_max_amount||1000000); } if(payment&&payment.autogopay_payment_method){ payment.autogopay_payment_method.value=String(s.autogopay_payment_method||'gopay').toLowerCase()==='shopeepay'?'shopeepay':'gopay'; } if(supplier){ supplier.prodseller_usdt_to_idr.value=Number(s.prodseller_usdt_to_idr||16500); supplier.prodseller_markup_percent.value=Number(s.prodseller_markup_percent||25); supplier.prodseller_default_category.value=String(s.prodseller_default_category||'Produk Digital'); } if(aiverse){ aiverse.aiversehub_unit_to_idr.value=Number(s.aiversehub_unit_to_idr||1); aiverse.aiversehub_markup_percent.value=Number(s.aiversehub_markup_percent||25); aiverse.aiversehub_default_category.value=String(s.aiversehub_default_category||'Produk Digital'); } }
   function renderFlashSaleForm(){
     var s=state.settings||{}; var f=document.getElementById('flashSaleForm'); if(!f) return;
     f.flash_sale_enabled.value=String(s.flash_sale_enabled||'false').toLowerCase()==='true'?'true':'false';
@@ -1170,6 +1195,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
 
 
   function usdt(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4}); }
+  function providerUnit(n){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:6}); }
   function supplierMatches(p,q){ return textMatch([p.id,p.name,p.description,p.local_code,p.local_name,p.local_variant_name,p.price,p.publicPrice],q); }
   function supplierById(id){return (state.resellerSuppliers||[]).find(function(x){return String(x.id)===String(id||'');})||null;}
   function workflowSupplierOptionsHtml(selected){return '<option value="">-- Pilih Supplier --</option>'+(state.resellerSuppliers||[]).filter(function(s){return s.active!==false||String(s.id)===String(selected||'');}).map(function(s){return '<option value="'+esc(s.id)+'" '+(String(s.id)===String(selected||'')?'selected':'')+'>'+esc(s.name||'Supplier')+' · '+esc(s.target_username||'-')+' · '+rupiah(s.manual_balance_idr||0)+'</option>';}).join('');}
@@ -1225,7 +1251,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
     };});
 
     var orderList=document.getElementById('supplierOrderList');
-    if(orderList){ orderList.innerHTML=(state.supplierOrders||[]).map(function(o){
+    if(orderList){ orderList.innerHTML=(state.supplierOrders||[]).filter(function(o){return String(o.supplier||'prodseller').toLowerCase()==='prodseller';}).map(function(o){
       var statusText=String(o.status||'pending').toUpperCase(); var cls=String(o.status||'')==='delivered'?'delivered':(String(o.status||'')==='error'?'error':'');
       return '<div class="supplierOrder '+cls+'"><b>'+esc(displayRef(o.order_ref||'-'))+'</b> · <span class="chip '+(cls==='delivered'?'green':(cls==='error'?'red':'yellow'))+'">'+esc(statusText)+'</span><br>Supplier Order: '+esc(o.supplier_order_id||'-')+' · Qty '+esc(o.quantity||1)+' · '+usdt(o.amount_usdt||0)+(o.error_message?'<br><b>Error:</b> '+esc(o.error_message):'')+(String(o.status||'')!=='delivered'?'<br><button class="btn small cyan" type="button" data-supplier-retry="'+esc(o.order_ref||'')+'">Retry Supplier</button>':'')+'</div>';
     }).join('')||'<div class="empty">Belum ada order supplier.</div>'; }
@@ -1233,15 +1259,82 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   }
 
 
+  function renderAiverse(){
+    var st=state.aiverseStatus||{};
+    var warning=document.getElementById('aiverseConfigWarning');
+    if(warning){
+      warning.classList.toggle('hidden',!!st.configured);
+      warning.innerHTML=st.configured?'':'<b>API key AIVerseHub belum terhubung.</b><br>Tambahkan <code>AIVERSEHUB_API_KEY</code> pada Vercel → Project Settings → Environment Variables, lalu Redeploy. API key hanya dibaca server.';
+    }
+    var status=document.getElementById('aiverseStatus');
+    if(status){ status.innerHTML=[
+      ['API',st.configured?'TERHUBUNG':'BELUM DIATUR'],
+      ['Saldo AIVerseHub',st.configured?providerUnit(st.balance):'-'],
+      ['Akun',st.username||'-'],
+      ['Produk / Varian Dipilih',Number(st.selected_count||0)]
+    ].map(function(x){return '<div class="supplierStat"><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>';}).join(''); }
+
+    var q=String((document.getElementById('aiverseSearch')||{}).value||'').trim().toLowerCase();
+    var rows=(state.aiverseProducts||[]).filter(function(p){return supplierMatches(p,q);});
+    var count=document.getElementById('aiverseProductCount'); if(count) count.textContent=rows.length+' produk';
+    var list=document.getElementById('aiverseProductList');
+    if(list){
+      if(!st.configured) list.innerHTML='<div class="empty">Atur AIVERSEHUB_API_KEY terlebih dahulu untuk memuat katalog AIVerseHub.</div>';
+      else list.innerHTML=rows.map(function(p){
+        var image=p.imageUrl?'<img class="supplierThumb" src="'+esc(p.imageUrl)+'" alt="">':'<div class="supplierThumbFallback">🤖</div>';
+        var stockCount=p.stock==null?'-':Math.max(0,Number(p.stock||0));
+        var stock=p.inStock===false?'<span class="chip red">STOK HABIS</span>':'<span class="chip green">TERSEDIA</span>';
+        var selected=p.selected?'<span class="supplierApiBadge">SUDAH DIRESELLER</span>':'';
+        var sell=Number(p.local_price||p.suggested_price_idr||0);
+        var mode=p.link_type==='variant'?'variant':'product';
+        var normalProducts=(state.products||[]).filter(function(x){return !isExternalSupplierLink(x);});
+        var targetOptions='<option value="">Pilih produk induk...</option>'+normalProducts.map(function(x){return '<option value="'+esc(x.kode)+'" '+(mode==='variant'&&String(p.local_code||'')===String(x.kode||'')?'selected':'')+'>'+esc(x.nama)+' · '+esc(x.kode)+'</option>';}).join('');
+        var linked=p.selected?('<div class="help"><b>Terhubung:</b> '+esc(p.local_name||p.name)+(p.link_type==='variant'?' → varian <b>'+esc(p.local_variant_name||'-')+'</b>':' · produk mandiri')+' · '+esc(p.local_code||'-')+'</div>'):'';
+        return '<article class="supplierCard '+(p.selected?'selected':'')+'" data-aiverse-card="'+esc(p.id)+'"><div class="supplierCardTop">'+image+'<div><h3>'+esc(p.name||'Produk')+'</h3><div class="supplierMeta">Service ID '+esc(p.id)+'<br>'+stock+' '+selected+'</div></div></div><div class="supplierMeta">'+esc(p.description||'')+'</div><div class="supplierPriceRow"><div class="detailItem"><b>Modal API</b><br>'+providerUnit(p.price)+'</div><div class="detailItem"><b>Stok API</b><br>'+esc(stockCount)+'</div></div><div class="field"><label class="label">Harga Jual iLink (Rupiah)</label><input class="input" type="number" min="1000" step="500" data-aiverse-price value="'+esc(sell)+'"></div><div class="field"><label class="label">Masukkan Sebagai</label><select class="select" data-aiverse-mode><option value="product" '+(mode==='product'?'selected':'')+'>Produk baru / produk mandiri</option><option value="variant" '+(mode==='variant'?'selected':'')+'>Varian produk yang sudah ada</option></select></div><div data-aiverse-variant-target class="'+(mode==='variant'?'':'hidden')+'"><div class="field"><label class="label">Produk Induk iLink</label><select class="select" data-aiverse-target-product>'+targetOptions+'</select></div><div class="field"><label class="label">Nama Varian</label><input class="input" data-aiverse-variant-name value="'+esc(p.local_variant_name||p.name||'')+'" placeholder="Nama varian"></div><p class="help">Stok dan saldo AIVerseHub dibaca otomatis saat checkout.</p></div><button class="btn '+(p.selected?'yellow':'lime')+'" type="button" data-aiverse-import="'+esc(p.id)+'">'+(p.selected?'Update Reseller':'Resellerkan Produk')+'</button>'+linked+'</article>';
+      }).join('')||'<div class="empty">Produk AIVerseHub tidak ditemukan.</div>';
+    }
+    document.querySelectorAll('[data-aiverse-mode]').forEach(function(sel){ sel.onchange=function(){ var card=sel.closest('[data-aiverse-card]'); var box=card&&card.querySelector('[data-aiverse-variant-target]'); if(box) box.classList.toggle('hidden',sel.value!=='variant'); }; });
+    document.querySelectorAll('[data-aiverse-import]').forEach(function(btn){btn.onclick=async function(){
+      var card=btn.closest('[data-aiverse-card]'); var input=card&&card.querySelector('[data-aiverse-price]'); var price=Math.max(1000,Number(input&&input.value||0));
+      var modeEl=card&&card.querySelector('[data-aiverse-mode]'); var mode=modeEl?modeEl.value:'product';
+      var targetEl=card&&card.querySelector('[data-aiverse-target-product]'); var nameEl=card&&card.querySelector('[data-aiverse-variant-name]');
+      if(!price) return toast('Isi harga jual Rupiah terlebih dahulu.',true);
+      if(mode==='variant' && !(targetEl&&targetEl.value)) return toast('Pilih produk induk untuk varian supplier.',true);
+      if(mode==='variant' && !String(nameEl&&nameEl.value||'').trim()) return toast('Isi nama varian supplier.',true);
+      btn.disabled=true; var old=btn.textContent; btn.textContent='Memproses...';
+      try{ await api('aiversehub-import',{product_id:btn.dataset.aiverseImport,selling_price:price,target_mode:mode,target_product_code:targetEl&&targetEl.value||'',variant_name:nameEl&&nameEl.value||''}); toast(mode==='variant'?'Produk AIVerseHub berhasil dimasukkan sebagai varian.':'Produk AIVerseHub berhasil disimpan ke katalog iLink.'); await load(); await loadSupplier(true); }
+      catch(e){toast(e.message,true);} finally{btn.disabled=false;btn.textContent=old;}
+    };});
+
+    var orderList=document.getElementById('aiverseOrderList');
+    if(orderList){ orderList.innerHTML=(state.supplierOrders||[]).filter(function(o){return String(o.supplier||'').toLowerCase()==='aiversehub';}).map(function(o){
+      var statusText=String(o.status||'pending').toUpperCase(); var cls=String(o.status||'')==='delivered'?'delivered':(String(o.status||'')==='error'?'error':'');
+      var uncertain=Boolean(o.raw_response&&o.raw_response.retry_uncertain)||['AIVERSEHUB_TIMEOUT','AIVERSEHUB_NETWORK','AIVERSEHUB_UPSTREAM'].includes(String(o.error_code||''));
+      var retry=String(o.status||'')!=='delivered'?'<br><button class="btn small '+(uncertain?'yellow':'cyan')+'" type="button" data-aiverse-retry="'+esc(o.order_ref||'')+'" data-aiverse-force="'+(uncertain?'1':'0')+'">'+(uncertain?'Paksa Retry AIVerseHub':'Retry Supplier')+'</button>':'';
+      return '<div class="supplierOrder '+cls+'"><b>'+esc(displayRef(o.order_ref||'-'))+'</b> · <span class="chip '+(cls==='delivered'?'green':(cls==='error'?'red':'yellow'))+'">'+esc(statusText)+'</span><br>Supplier Order: '+esc(o.supplier_order_id||'-')+' · Qty '+esc(o.quantity||1)+' · Biaya '+providerUnit(o.amount_usdt||0)+(o.error_message?'<br><b>Error:</b> '+esc(o.error_message):'')+(uncertain?'<br><b>Perhatian:</b> cek riwayat AIVerseHub sebelum retry agar tidak membeli dua kali.':'')+retry+'</div>';
+    }).join('')||'<div class="empty">Belum ada order AIVerseHub.</div>'; }
+    document.querySelectorAll('[data-aiverse-retry]').forEach(function(btn){btn.onclick=async function(){
+      var force=String(btn.dataset.aiverseForce||'0')==='1';
+      if(force && !window.confirm('Pastikan Anda sudah mengecek riwayat AIVerseHub dan order ini BELUM terpotong/terbuat. Lanjutkan paksa retry?')) return;
+      btn.disabled=true; var old=btn.textContent; btn.textContent='Retry...';
+      try{await api('supplier-retry',{order_ref:btn.dataset.aiverseRetry,force_aiverse_retry:force}); toast('Retry AIVerseHub berhasil.'); await load(); await loadSupplier(true);}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent=old;}
+    };});
+  }
+
+
   async function loadSupplier(force){
-    if(state.supplierLoaded && !force){ renderSupplier(); return; }
-    var st=await apiSafe('prodseller-status',{configured:false});
-    state.supplierStatus=st||{configured:false};
-    state.resellerSuppliers=await apiSafe('reseller-suppliers',[]);
-    state.supplierOrders=await apiSafe('supplier-orders',[]);
-    state.supplierProducts=state.supplierStatus.configured?await apiSafe('prodseller-products',[]):[];
+    if(state.supplierLoaded && !force){ renderSupplier(); renderAiverse(); return; }
+    var base=await Promise.all([apiSafe('prodseller-status',{configured:false}),apiSafe('aiversehub-status',{configured:false}),apiSafe('reseller-suppliers',[]),apiSafe('supplier-orders',[])]);
+    state.supplierStatus=base[0]||{configured:false};
+    state.aiverseStatus=base[1]||{configured:false};
+    state.resellerSuppliers=base[2]||[];
+    state.supplierOrders=base[3]||[];
+    var catalogs=await Promise.all([state.supplierStatus.configured?apiSafe('prodseller-products',[]):Promise.resolve([]),state.aiverseStatus.configured?apiSafe('aiversehub-products',[]):Promise.resolve([])]);
+    state.supplierProducts=catalogs[0]||[];
+    state.aiverseProducts=catalogs[1]||[];
     state.supplierLoaded=true;
     renderSupplier();
+    renderAiverse();
   }
 
 
@@ -1467,7 +1560,7 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   function productMediaHtml(p){ if(p.image_url){ if(String(p.media_type||'image').toLowerCase()==='video') return '<video class="productImg" src="'+esc(p.image_url)+'" muted playsinline preload="metadata"></video>'; return '<img class="productImg" src="'+esc(p.image_url)+'" alt="">'; } return '<div class="productFallback" style="background:'+productColor(p)+'">'+esc(productInitial(p))+'</div>'; }
   function productVariants(p){ return Array.isArray(p&&p.variants) ? p.variants.filter(function(v){ return (v.name||v.nama||v.sku||v.kode) && Number(v.price||v.harga||0)>0; }) : []; }
   function supplierSourceOf(x){return String(x&&x.supplier_source||'').trim().toLowerCase();}
-  function isExternalSupplierLink(x){var src=supplierSourceOf(x);return (src==='prodseller'||src==='telegram_workflow')&&String(x&&x.supplier_product_id||'').trim();}
+  function isExternalSupplierLink(x){var src=supplierSourceOf(x);return (src==='prodseller'||src==='aiversehub'||src==='telegram_workflow')&&String(x&&x.supplier_product_id||'').trim();}
   function isWorkflowSupplierLink(x){return supplierSourceOf(x)==='telegram_workflow'&&String(x&&x.supplier_product_id||'').trim();}
   function activeProductVariants(p){ return productVariants(p).filter(function(v){ return variantActive(v); }); }
   function productDisplayPrice(p){
@@ -2116,6 +2209,9 @@ akun2:password2"></textarea><p class="help">Dipakai hanya oleh varian yang memil
   var supplierSettingsForm=document.getElementById('supplierSettingsForm'); if(supplierSettingsForm) supplierSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.prodseller_usdt_to_idr=Math.max(1,Number(d.prodseller_usdt_to_idr||16500)); d.prodseller_markup_percent=Math.max(0,Number(d.prodseller_markup_percent||25)); await post('save-settings',d); state.supplierLoaded=false; await loadSupplier(true);};
   var refreshSupplier=document.getElementById('refreshSupplier'); if(refreshSupplier) refreshSupplier.onclick=async function(){ refreshSupplier.disabled=true; var old=refreshSupplier.textContent; refreshSupplier.textContent='Memuat...'; try{ state.supplierLoaded=false; await loadSupplier(true); toast('Data ProdSeller diperbarui.'); }finally{ refreshSupplier.disabled=false; refreshSupplier.textContent=old; } };
   var supplierSearch=document.getElementById('supplierSearch'); if(supplierSearch) supplierSearch.oninput=renderSupplier;
+  var aiverseSettingsForm=document.getElementById('aiverseSettingsForm'); if(aiverseSettingsForm) aiverseSettingsForm.onsubmit=async function(e){e.preventDefault(); var d=formDataRaw(e.target); d.aiversehub_unit_to_idr=Math.max(0.000001,Number(d.aiversehub_unit_to_idr||1)); d.aiversehub_markup_percent=Math.max(0,Number(d.aiversehub_markup_percent||25)); await post('save-settings',d); state.supplierLoaded=false; await loadSupplier(true);};
+  var refreshAiverse=document.getElementById('refreshAiverse'); if(refreshAiverse) refreshAiverse.onclick=async function(){ refreshAiverse.disabled=true; var old=refreshAiverse.textContent; refreshAiverse.textContent='Memuat...'; try{ state.supplierLoaded=false; await loadSupplier(true); toast('Data AIVerseHub diperbarui.'); }finally{ refreshAiverse.disabled=false; refreshAiverse.textContent=old; } };
+  var aiverseSearch=document.getElementById('aiverseSearch'); if(aiverseSearch) aiverseSearch.oninput=renderAiverse;
   var addResellerSupplier=document.getElementById('addResellerSupplier'); if(addResellerSupplier) addResellerSupplier.onclick=function(){openSupplierEdit(null);};
   function workflowSelectedMessageRange(){
     var current=state.workflowDetail&&state.workflowDetail.workflow;

@@ -1,0 +1,31 @@
+AIVerseHub Reseller Integration - Validation Report
+Date: 2026-09-10
+Base package: Link Auto Order v85.2.1
+
+AIVerseHub-specific tests
+- tests/v85.3-aiversehub-reseller.test.js: 6/6 PASS
+  - server-only API key config
+  - official endpoint/header wiring
+  - create order payload + product-code normalization
+  - balance/stock availability calculation
+  - dashboard import/status/retry wiring
+  - checkout + fulfillment recognition
+
+Supplier/workflow regression tests
+- v76-prodseller-reseller.test.js
+- v77-supplier-stock-popup-po-cleanup.test.js
+- v78-prodseller-variant-link.test.js
+- v79-bot-pagination-stock-color-performance.test.js
+- v82.3-workflow-editor-supplier-balance.test.js
+Result: 30/30 PASS
+
+Additional static/UI checks
+- 21 assertions PASS in selected newer suites.
+- 2 runtime tests could not start because the uploaded source ZIP does not include node_modules/axios.
+  Error: MODULE_NOT_FOUND: axios
+- npm dependency installation was unavailable in this sandbox, so a complete dependency-backed npm test was not claimed.
+
+Other checks
+- All modified JavaScript files pass `node --check`.
+- Secret scan found no hard-coded AIVerseHub API key.
+- ProdSeller remains supported as a separate supplier source.

@@ -1172,7 +1172,10 @@ async function getShopSettings() {
     autogopay_payment_method: 'gopay',
     prodseller_usdt_to_idr: '16500',
     prodseller_markup_percent: '25',
-    prodseller_default_category: 'Produk Digital'
+    prodseller_default_category: 'Produk Digital',
+    aiversehub_unit_to_idr: '1',
+    aiversehub_markup_percent: '25',
+    aiversehub_default_category: 'Produk Digital'
   };
   const { data, error } = await sb().from('shop_settings').select('key,value');
   if (error) {
@@ -1231,7 +1234,10 @@ async function saveShopSettings(input = {}) {
     'autogopay_payment_method',
     'prodseller_usdt_to_idr',
     'prodseller_markup_percent',
-    'prodseller_default_category'
+    'prodseller_default_category',
+    'aiversehub_unit_to_idr',
+    'aiversehub_markup_percent',
+    'aiversehub_default_category'
   ];
   const rows = allowed
     .filter((key) => input[key] !== undefined)
