@@ -123,7 +123,7 @@ test('v63 seluruh submenu Pengaturan membuka halaman terpisah', () => {
   assert.match(reseller, /class="settingsSubBtn" data-tab="storeSettings"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="bannerSettings"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="startSettings"/);
-  assert.match(reseller, /class="settingsSubBtn" data-tab="license"/);
+  assert.doesNotMatch(reseller, /class="settingsSubBtn" data-tab="license"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="deepStats"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="backup"/);
   assert.match(reseller, /class="settingsSubBtn" data-tab="maintenance"/);

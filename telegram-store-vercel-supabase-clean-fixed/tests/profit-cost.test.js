@@ -32,7 +32,7 @@ test('alat toko menjadi submenu langsung di Pengaturan tanpa submenu bertingkat'
   const menuStart = reseller.indexOf('class="settingsSubNav"');
   const menuEnd = reseller.indexOf('</div>', menuStart);
   const menu = reseller.slice(menuStart, menuEnd);
-  assert.match(menu, /data-tab="license"/);
+  assert.doesNotMatch(menu, /data-tab="license"/);
   assert.match(menu, /data-tab="deepStats"/);
   assert.match(menu, /data-tab="backup"/);
   assert.match(menu, /data-tab="maintenance"/);

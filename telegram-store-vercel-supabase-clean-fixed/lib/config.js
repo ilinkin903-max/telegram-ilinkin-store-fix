@@ -55,12 +55,6 @@ const config = {
   paymentPollIntervalSeconds: Math.max(5, Number(required('PAYMENT_POLL_INTERVAL_SECONDS', '30')) || 30),
   paymentPollMaxAttempts: Math.max(1, Number(required('PAYMENT_POLL_MAX_ATTEMPTS', '30')) || 30),
   qrDownloadSecret: required('QR_DOWNLOAD_SECRET', required('WEBHOOK_SECRET', '')),
-  licenseManagerUrl: required('LICENSE_MANAGER_URL', required('RENTAL_MANAGER_URL', '')),
-  licenseApiSecret: required('LICENSE_API_SECRET', ''),
-  licenseBotUsername: required('LICENSE_BOT_USERNAME', required('BOT_USERNAME', '')),
-  licenseCode: required('LICENSE_CODE', ''),
-  licenseCheckEnabled: required('LICENSE_CHECK_ENABLED', ''),
-  licenseFailClosed: required('LICENSE_FAIL_CLOSED', 'false'),
   miniAppDevMode: process.env.MINIAPP_DEV_MODE === 'true'
 };
 

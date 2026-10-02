@@ -7,7 +7,6 @@ const aiverseHub = require('../lib/aiverseHubService');
 const apiSuppliers = require('../lib/apiSupplierRegistry');
 const workflowUserbot = require('../lib/userbotWorkflowService');
 const crypto = require('crypto');
-const license = require('../lib/license');
 const { splitStock } = require('../lib/utils');
 const { config, getStorefrontUrl } = require('../lib/config');
 
@@ -790,7 +789,6 @@ module.exports = async function handler(req, res) {
     const owner = assertOwnerMiniApp(req);
     const action = req.query?.action || '';
 
-    if (req.method === 'GET' && action === 'license-status') return json(res, 200, { ok: true, data: await license.checkLicense({ force: true }) });
     if (req.method === 'GET' && action === 'stats') return json(res, 200, { ok: true, data: await db.getStats() });
     if (req.method === 'GET' && action === 'dashboard-live') {
       const stats = await db.getLiveSalesStats();

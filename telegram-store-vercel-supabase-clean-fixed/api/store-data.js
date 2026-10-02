@@ -1,6 +1,5 @@
 const { getMiniAppUser } = require('../lib/miniappAuth');
 const store = require('../lib/storeService');
-const license = require('../lib/license');
 
 function json(res, status, payload) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -19,9 +18,10 @@ module.exports = async function handler(req, res) {
     const user = getMiniAppUser(req);
 
     if (req.method === 'GET' && action === 'catalog') {
-      const [catalog, licenseState] = await Promise.all([store.getCatalog(user), license.checkLicense()]);
-      catalog.store_active = licenseState.active !== false;
-      catalog.store_status = licenseState.status || 'active';
+      const catalog = await store.getCatalog(user);
+      // Field ini dipertahankan untuk kompatibilitas frontend lama, tetapi tidak lagi terikat lisensi.
+      catalog.store_active = true;
+      catalog.store_status = 'active';
       return json(res, 200, { ok: true, data: catalog });
     }
 
@@ -59,13 +59,6 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'checkout') {
-      const licenseState = await license.checkLicense();
-      if (licenseState.active === false) {
-        const error = new Error('Toko sedang tidak aktif. Silakan hubungi admin.');
-        error.statusCode = 503;
-        error.code = 'STORE_INACTIVE';
-        throw error;
-      }
       const paymentMethod = String(body.payment_method || 'qris').trim().toLowerCase();
       const createCheckout = paymentMethod === 'wallet' ? store.createWalletPayment : store.createPayment;
       const data = await createCheckout({

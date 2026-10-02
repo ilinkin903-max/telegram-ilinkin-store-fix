@@ -11,7 +11,6 @@ const aiverseHub = require('./aiverseHubService');
 const apiSuppliers = require('./apiSupplierRegistry');
 const walletNotifications = require('./walletNotifications');
 const workflowUserbot = require('./userbotWorkflowService');
-const license = require('./license');
 const runtimeCache = require('./runtimeCache');
 const { formatRupiah, formatWIB, randomFee, randomRef, splitStock } = require('./utils');
 
@@ -230,33 +229,6 @@ async function markBroadcastDone(claimKey, result = {}) {
   await db.markClaimDone(claimKey, result).catch((e) => console.error('Gagal menandai broadcast selesai:', e.message));
 }
 
-async function getRentalLicense(force = false) {
-  return license.checkLicense({ force }).catch((error) => ({
-    enabled: true,
-    active: false,
-    status: 'check_error',
-    reason: error.message || 'Gagal cek lisensi.'
-  }));
-}
-
-async function sendLicenseStatus(chatId, force = true) {
-  const info = await getRentalLicense(force);
-  return tg.sendMessage(chatId, license.licenseText(info));
-}
-
-async function ensureLicenseActive(chatId, options = {}) {
-  const info = await getRentalLicense(Boolean(options.force));
-  if (!info.enabled || info.active) return true;
-  const text = license.blockedText(info);
-  if (options.query && options.query.message && options.query.message.message_id) {
-    return editMessage(options.query, text).then(() => false).catch(async () => {
-      await tg.sendMessage(chatId, text);
-      return false;
-    });
-  }
-  await tg.sendMessage(chatId, text);
-  return false;
-}
 
 function parseCommandBody(text, command) {
   return String(text || '').replace(new RegExp(`^\\/${command}(?:@\\w+)?\\s*`, 'i'), '').trim();
@@ -1530,7 +1502,7 @@ async function sendHistory(chatId, userId, query = null) {
 
 async function sendHelp(chatId, from) {
   const ownerLine = isOwner(from.id)
-    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/dashboard - Buka Dashboard Owner\n/reseller - Alias Dashboard Owner\n/debugowner - Cek konfigurasi owner\n/lisensi - Cek masa aktif bot\n/rekap - Rekap penjualan bulanan'
+    ? '\n\n*Owner/Admin:*\n/ownermenu - Buka menu owner\n/dashboard - Buka Dashboard Owner\n/reseller - Alias Dashboard Owner\n/debugowner - Cek konfigurasi owner\n/rekap - Rekap penjualan bulanan'
     : '';
   const text = `❓ *BANTUAN BOT*\n` +
     `=======================\n` +
@@ -1539,7 +1511,7 @@ async function sendHelp(chatId, from) {
     `/produk - Lihat daftar produk\n` +
     `/redeem KODE - Tukarkan kode dengan produk\n` +
     `/cekorder - Cek pesanan/riwayat transaksi\n` +
-    `/help - Tampilkan bantuan\n/lisensi - Cek masa aktif bot\n\n` +
+    `/help - Tampilkan bantuan\n\n` +
     `*Cara Order:*\n` +
     `1. Ketik /start atau /produk\n` +
     `2. Pilih produk/varian\n` +
@@ -1681,7 +1653,6 @@ async function sendOwnerMenu(chatId) {
     `/rekap *( Rekap Bulanan )*\n` +
     `/dashboard *( Dashboard Owner Mini App )*\n` +
     `/reseller *( Alias Dashboard Owner )*\n` +
-    `/lisensi *( Cek masa aktif bot )*\n` +
     `=======================\n\n` +
     `*Format cepat:*\n` +
     `/addproduk Nama|Kode|Harga|Deskripsi|SnK\n` +
@@ -1735,32 +1706,18 @@ File ID: \`${escapeMarkdownText(msg.sticker.file_id)}\``, { parse_mode: 'Markdow
   const lower = text.toLowerCase();
 
   if (lower.startsWith('/getid')) return tg.sendMessage(chatId, `ID Telegram kamu: ${from.id}`);
-  if (lower.startsWith('/lisensi') || lower.startsWith('/license') || lower.startsWith('/masaaktif')) {
-    if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
-    return sendLicenseStatus(chatId, true);
-  }
   if (lower.startsWith('/debugowner')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     const miniAppUrl = getMiniAppUrl(req) || '-';
-    const resolvedUsername = await license.resolveBotUsername().catch(() => config.licenseBotUsername || config.botUsername || '-');
-    const lic = await getRentalLicense(true);
     return tg.sendMessage(chatId, `DEBUG OWNER
 User ID: ${from.id}
 OWNER_ID aktif: ${config.ownerId}
 OWNER_IDS aktif: ${(config.ownerIds || []).join(', ') || '-'}
 Is owner: ${isOwner(from.id) ? 'YA' : 'TIDAK'}
 BOT_USERNAME env: ${config.botUsername || '-'}
-LICENSE_BOT_USERNAME env: ${config.licenseBotUsername || '-'}
-BOT_USERNAME nyata dari Telegram: ${resolvedUsername || '-'}
-MINIAPP_URL: ${miniAppUrl}
-LICENSE_MANAGER_URL: ${config.licenseManagerUrl || '-'}
-LICENSE_STATUS: ${lic.status || '-'}
-LICENSE_ACTIVE: ${lic.active ? 'YA' : 'TIDAK'}
-LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
+MINIAPP_URL: ${miniAppUrl}`);
   }
 
-  // Command owner/admin tetap harus bisa dibuka walaupun lisensi belum aktif,
-  // supaya owner bisa debug, buka panel, dan memperbaiki konfigurasi.
   if (lower.startsWith('/ownermenu')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
     return sendOwnerMenu(chatId);
@@ -1776,7 +1733,6 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   }
 
   if (lower.startsWith('/start') || lower.startsWith('/menu')) {
-    if (!isOwner(from.id) && !(await ensureLicenseActive(chatId))) return;
     const settings = await cachedSettings().catch(() => ({}));
     const refCode = lower.startsWith('/start') ? startReferralCode(text) : '';
     const joinState = await requiredChannelState(from.id, settings);
@@ -1797,7 +1753,6 @@ LICENSE_EXPIRES: ${lic.expires_at || '-'}`);
   if (lower.startsWith('/help') || lower.startsWith('/bantuan')) return sendHelp(chatId, from);
   if (lower.startsWith('/cekorder') || lower.startsWith('/cekpesanan') || lower.startsWith('/riwayat')) return sendCheckOrder(chatId, from.id);
 
-  if (!(await ensureLicenseActive(chatId))) return;
 
   if (lower.startsWith('/polling')) {
     if (!isOwner(from.id)) return tg.sendMessage(chatId, ownerOnlyMessage());
@@ -2561,7 +2516,6 @@ async function handleCallbackQuery(query, req) {
     return sendPollingList(query.message.chat.id);
   }
 
-  if (!(await ensureLicenseActive(query.message.chat.id, { query }))) return;
 
   if (cmd === 'checkjoin' || cmd.startsWith('checkjoin:')) {
     const settings = await cachedSettings().catch(() => ({}));

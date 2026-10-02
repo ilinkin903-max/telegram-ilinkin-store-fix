@@ -153,58 +153,6 @@ test('request ProdSeller identik digabung dan timeout katalog diteruskan', async
   }
 });
 
-test('pengecekan lisensi paralel digabung menjadi satu rangkaian request', async () => {
-  const licensePath = require.resolve('../lib/license');
-  const axiosPath = require.resolve('axios');
-  const configPath = require.resolve('../lib/config');
-  const previousLicense = require.cache[licensePath];
-  const previousAxios = require.cache[axiosPath];
-  const previousConfig = require.cache[configPath];
-  let calls = 0;
-  const axiosMock = {
-    get: async (url) => {
-      calls += 1;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      if (String(url).includes('api.telegram.org')) {
-        return { data: { ok: true, result: { username: 'BotCepat' } } };
-      }
-      return { data: { active: true, status: 'active', bot_username: 'BotCepat' } };
-    }
-  };
-
-  require.cache[axiosPath] = { id: axiosPath, filename: axiosPath, loaded: true, exports: axiosMock };
-  require.cache[configPath] = {
-    id: configPath,
-    filename: configPath,
-    loaded: true,
-    exports: { config: {
-      licenseCheckEnabled: 'true',
-      licenseManagerUrl: 'https://license.test',
-      licenseApiSecret: 'secret',
-      licenseCode: '',
-      licenseFailClosed: 'false',
-      licenseBotUsername: 'BotCepat',
-      botUsername: 'BotCepat',
-      botToken: 'telegram-token'
-    } }
-  };
-  delete require.cache[licensePath];
-
-  try {
-    const license = require(licensePath);
-    const [first, second] = await Promise.all([license.checkLicense(), license.checkLicense()]);
-    assert.equal(first.active, true);
-    assert.equal(second.active, true);
-    assert.equal(calls, 2, 'hanya satu getMe dan satu license-check yang boleh berjalan');
-  } finally {
-    delete require.cache[licensePath];
-    if (previousLicense) require.cache[licensePath] = previousLicense;
-    if (previousAxios) require.cache[axiosPath] = previousAxios;
-    else delete require.cache[axiosPath];
-    if (previousConfig) require.cache[configPath] = previousConfig;
-    else delete require.cache[configPath];
-  }
-});
 
 test('metadata rilis terbaru konsisten', () => {
   const pkg = JSON.parse(read('package.json'));
